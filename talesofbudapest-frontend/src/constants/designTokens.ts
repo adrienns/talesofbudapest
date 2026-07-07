@@ -1,0 +1,30 @@
+export const colors = {
+  primary: '#111318',
+  accent: '#C04E1F',
+  accentDeep: '#8B3414',
+  accentGlow: 'rgba(192, 78, 31, 0.5)',
+  sunsetStart: '#FF6B35',
+  sunsetEnd: '#C04E1F',
+  background: '#F4F6F8',
+  surface: '#FFFFFF',
+  surfaceDim: '#E8ECF0',
+  onSurface: '#111318',
+  onPrimary: '#FFFFFF',
+  outlineVariant: 'color-mix(in srgb, #111318 12%, transparent)',
+  accentPulse: 'rgba(192, 78, 31, 0.4)',
+  accentPulseSelected: 'rgba(255, 107, 53, 0.55)',
+  glass: 'rgba(255, 255, 255, 0.68)',
+  glassStrong: 'rgba(255, 255, 255, 0.78)',
+  glassField: 'rgba(255, 255, 255, 0.52)',
+  glassBorder: 'rgba(255, 255, 255, 0.82)',
+} as const
+
+export const typography = {
+  fontSans: 'Plus Jakarta Sans, ui-sans-serif, system-ui, sans-serif',
+  headline: '1.625rem',
+  headlineLg: '2rem',
+  body: '0.9375rem',
+  label: '0.6875rem',
+  lineHeightBody: 1.5,
+  letterSpacingLabel: '0.08em',
+} as const
