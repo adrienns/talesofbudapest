@@ -1,0 +1,24 @@
+{
+  "name": "talesofbudapest",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monorepo for Tales of Budapest audio tour app",
+  "workspaces": [
+    "talesofbudapest-backend",
+    "talesofbudapest-frontend"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev --workspace=talesofbudapest-backend",
+    "dev:frontend": "npm run dev --workspace=talesofbudapest-frontend",
+    "seed": "npm run seed --workspace=talesofbudapest-backend",
+    "generate:story": "npm run generate:story --workspace=talesofbudapest-backend",
+    "generate:audio": "npm run generate:audio --workspace=talesofbudapest-backend",
+    "generate:audio:all": "npm run generate:audio:all --workspace=talesofbudapest-backend",
+    "db:migrate": "npm run db:migrate --workspace=talesofbudapest-backend",
+    "setup": "npm run setup --workspace=talesofbudapest-backend"
+  },
+  "license": "ISC",
+  "devDependencies": {
+    "supabase": "^2.109.0"
+  }
+}
