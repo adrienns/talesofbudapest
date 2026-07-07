@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+*.mp3
+.DS_Store
+*.local
+infra/supabase-upstream/
+infra/data/
+infra/backups/
+infra/supabase-upstream/docker/.env
+rag/.venv/
