@@ -1,0 +1,18 @@
+@theme {
+  --color-primary: var(--color-primary);
+  --color-accent: var(--color-accent);
+  --color-background: var(--color-background);
+  --color-surface: var(--color-surface);
+  --color-surface-dim: var(--color-surface-dim);
+  --color-on-surface: var(--color-on-surface);
+  --color-outline-variant: var(--color-outline-variant);
+  --color-on-primary: var(--color-on-primary);
+
+  --font-sans: var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-source-serif), ui-serif, Georgia, serif;
+
+  --text-headline: var(--font-size-headline);
+  --text-headline-lg: var(--font-size-headline-lg);
+  --text-body: var(--font-size-body);
+  --text-label: var(--font-size-label);
+}

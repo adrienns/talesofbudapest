@@ -1,0 +1,39 @@
+@layer base {
+  body {
+    @apply bg-surface text-on-surface font-sans text-body leading-normal antialiased;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply font-semibold text-on-surface tracking-tight;
+  }
+}
+
+@layer utilities {
+  .text-headline {
+    font-size: var(--font-size-headline);
+    line-height: 1.2;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  .text-headline-lg {
+    font-size: var(--font-size-headline-lg);
+    line-height: 1.15;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+  }
+
+  .text-body {
+    font-size: var(--font-size-body);
+    line-height: var(--line-height-body);
+  }
+
+  .text-label {
+    font-size: var(--font-size-label);
+    letter-spacing: var(--letter-spacing-label);
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+}

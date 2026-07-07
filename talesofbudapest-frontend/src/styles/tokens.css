@@ -1,0 +1,51 @@
+:root {
+  --color-primary: #111318;
+  --color-accent: #a64d1f;
+  --color-accent-deep: #7a3816;
+  --color-accent-glow: rgba(192, 78, 31, 0.5);
+  --color-sunset-start: #ff6b35;
+  --color-sunset-end: #c04e1f;
+  --color-surface: #ffffff;
+  --color-background: #f4f6f8;
+  --color-ai-chat-bg: #faf7f2;
+  --color-surface-dim: #e8ecf0;
+  --color-on-surface: #111318;
+  --color-outline-variant: color-mix(in srgb, #111318 12%, transparent);
+  --color-on-primary: #ffffff;
+  --color-accent-pulse: rgba(192, 78, 31, 0.4);
+  --color-accent-pulse-selected: rgba(255, 107, 53, 0.55);
+  --color-rose-pink: #C4728A;
+  --color-mustard-gold:#D5B45D;
+  --color-soft-purple:#8275D8;
+  --color-teal:#4F7E84;
+  --color-orange: #C47A57;
+  --color-blue:#3A6073;
+
+
+
+  /* Glassmorphism */
+  --glass-bg: rgba(255, 255, 255, 0.68);
+  --glass-bg-strong: rgba(255, 255, 255, 0.78);
+  --glass-field-bg: rgba(255, 255, 255, 0.52);
+  --glass-border: rgba(255, 255, 255, 0.82);
+  --glass-border-subtle: rgba(255, 255, 255, 0.55);
+  --glass-blur: 24px;
+  --glass-blur-strong: 32px;
+  --glass-saturate: 180%;
+  --glass-shadow: 0 8px 40px rgba(17, 19, 24, 0.1);
+  --glass-shadow-drawer: 0 -12px 48px rgba(17, 19, 24, 0.12);
+  --glass-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  --glass-radius-drawer: 1.75rem;
+  --glass-radius-field: 1rem;
+
+  /* Legacy aliases */
+  --color-glass: var(--glass-bg);
+  --color-glass-border: var(--glass-border);
+
+  --font-size-headline: 1.625rem;
+  --font-size-headline-lg: 2rem;
+  --font-size-body: 0.9375rem;
+  --font-size-label: 0.6875rem;
+  --line-height-body: 1.5;
+  --letter-spacing-label: 0.08em;
+}
