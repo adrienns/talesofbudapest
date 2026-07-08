@@ -19,6 +19,9 @@
   --color-soft-purple:#8275D8;
   --color-teal:#4F7E84;
   --color-orange: #C47A57;
+  --color-marker-pin: #b07a65;
+  --marker-glass-bg: color-mix(in srgb, var(--color-marker-pin) 22%, var(--glass-bg));
+  --marker-glass-border: color-mix(in srgb, var(--color-marker-pin) 38%, var(--glass-border));
   --color-blue:#3A6073;
 
 

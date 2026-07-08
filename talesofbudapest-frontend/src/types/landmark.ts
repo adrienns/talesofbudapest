@@ -12,4 +12,5 @@ export type Landmark = {
   audio_url: string | null
   image_url: string | null
   images: LandmarkImage[]
+  locale?: 'en' | 'hu'
 }

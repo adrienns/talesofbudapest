@@ -26,6 +26,7 @@ export type NarrativeContext = {
   hour?: number
   userLat?: number | null
   userLng?: number | null
+  locale?: 'en' | 'hu'
 }
 
 export type NarrativeFlowState = 'idle' | 'eliciting' | 'generating' | 'ready' | 'error'
