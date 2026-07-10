@@ -1,0 +1,21 @@
+{
+  "source": "MEK / OSZK",
+  "fetchedAt": "2026-07-10T14:40:52.332Z",
+  "files": [
+    {
+      "mekId": "MEK-04093",
+      "title": "Magyar zsidó lexikon (1929) — A címszavak",
+      "sourceUrl": "https://mek.oszk.hu/04000/04093/",
+      "originalUrl": "https://mek.oszk.hu/04000/04093/pdf/a.pdf",
+      "localPath": "mek/raw/mek-04093_letter-a.pdf",
+      "sha256": "2f402bd22419c668899156fc883ee2d5a4f9989f011ee03dbc60c3fbabb3afb5",
+      "bytes": 11749340,
+      "fetchedAt": "2026-07-10T14:40:50.302Z",
+      "license": {
+        "identifier": "Public-Domain",
+        "attribution": "Újvári Péter (ed.), Magyar zsidó lexikon, 1929 / MEK-04093 / OSZK",
+        "evidenceUrl": "https://mek.oszk.hu/04000/04093/cedula.html"
+      }
+    }
+  ]
+}

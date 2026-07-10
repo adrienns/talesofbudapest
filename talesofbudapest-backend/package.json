@@ -10,7 +10,10 @@
     "generate:audio": "node generateAudio.js",
     "generate:audio:all": "node generateAudio.js --all",
     "db:migrate": "node migrate.js",
-    "setup": "node setup.js"
+    "setup": "node setup.js",
+    "extract:mek": "node cli/extract-mek.js",
+    "extract:mek:deep": "node cli/extract-mek-deep.js",
+    "load:mek:kg": "node cli/load-mek-kg-supabase.js"
   },
   "keywords": [],
   "author": "",

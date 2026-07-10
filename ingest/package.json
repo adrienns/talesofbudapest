@@ -1,0 +1,29 @@
+{
+  "name": "@talesofbudapest/ingest",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "scrape": "tsx src/cli/scrape-budapest100.ts",
+    "load": "tsx src/cli/load-all-landmarks.ts",
+    "ingest:wikipedia": "tsx src/cli/ingest-wikipedia.ts",
+    "ingest:muemlekem": "tsx src/cli/ingest-muemlekem.ts",
+    "fetch:mek": "tsx src/cli/fetch-mek.ts",
+    "poll:open-wikidata": "tsx src/cli/poll-open-wikidata.ts",
+    "poll:open-commons": "tsx src/cli/poll-open-commons.ts",
+    "backfill:importance": "tsx src/cli/backfill-importance.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "axios": "^1.13.2",
+    "cheerio": "^1.1.2",
+    "dotenv": "^16.4.7",
+    "pg": "^8.14.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.0",
+    "@types/pg": "^8.11.11",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

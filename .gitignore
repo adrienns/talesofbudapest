@@ -9,3 +9,14 @@ infra/data/
 infra/backups/
 infra/supabase-upstream/docker/.env
 rag/.venv/
+# Generated poll snapshots; retain the directory placeholder only.
+ingest/output/*.json
+ingest/output/**/*.json
+
+# Local archival originals and derived extraction material can be regenerated
+# from the versioned source manifests.  Keep manifests in Git so every corpus
+# entry retains its provenance, checksum, licence, and original URL.
+ingest/corpus/**/raw/
+ingest/corpus/**/text/
+ingest/corpus/**/extractions/
+ingest/corpus/**/experiments/
