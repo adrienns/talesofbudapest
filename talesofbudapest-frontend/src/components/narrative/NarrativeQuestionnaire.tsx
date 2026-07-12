@@ -1,9 +1,10 @@
 'use client'
 
-import { ArrowLeft, ArrowUp, Check, Clock3, Footprints, MapPin, Minus, Plus, X } from 'lucide-react'
+import { ArrowLeft, ArrowUp, Check, Clock3, Footprints, MapPin, Minus, Plus } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useTranslations } from 'next-intl'
 import { QuickStartTourCarousel } from '@/components/narrative/QuickStartTourCarousel'
+import { BackButton } from '@/components/ui/BackButton'
 import {
   CURATED_STARTERS,
   MAX_TOPICS,
@@ -53,16 +54,22 @@ const pillStyle = (index: number): CSSProperties => {
 
 const QuestionnaireWaveSeparator = () => (
   <div className="q-wave-container" aria-hidden="true">
-    <svg viewBox="0 0 1440 120" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+    <svg viewBox="0 0 1440 96" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+      <defs>
+        <filter id="q-wave-shadow" x="-2%" y="-20%" width="104%" height="140%">
+          <feDropShadow dx="0" dy="3" stdDeviation="2.5" floodColor="#0D47A1" floodOpacity="0.22" />
+        </filter>
+      </defs>
       <path
-        d="M0 0H1440V40C1320 85 1080 85 960 40C840 -5 600 -5 480 40C360 85 120 85 0 40V0Z"
+        d="M0 0H1440V42C1350 38 1170 74 1080 82C990 90 450 10 360 10C270 10 180 52 0 52V0Z"
         fill="#E1F3FD"
       />
       <path
-        d="M0 40C120 85 360 85 480 40C600 -5 840 -5 960 40C1080 85 1320 85 1440 40"
+        d="M0 52C180 52 270 10 360 10C450 10 990 90 1080 82C1170 74 1350 38 1440 42"
         stroke="#0D47A1"
-        strokeWidth={6}
+        strokeWidth={5}
         strokeLinecap="round"
+        filter="url(#q-wave-shadow)"
       />
     </svg>
   </div>
@@ -211,14 +218,7 @@ export const NarrativeQuestionnaire = ({
           ))}
         </div>
 
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label={t('close')}
-          className="flex h-10 w-10 items-center justify-center rounded-full text-on-surface transition active:scale-95"
-        >
-          <X className="h-6 w-6" strokeWidth={2} aria-hidden="true" />
-        </button>
+        <BackButton onClick={onClose} ariaLabel={t('close')} />
       </header>
 
       <div className="flex-1 overflow-y-auto px-5 pt-6">

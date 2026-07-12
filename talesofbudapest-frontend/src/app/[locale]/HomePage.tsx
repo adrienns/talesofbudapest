@@ -11,7 +11,7 @@ import { NarrativeGeneratingOverlay } from '@/components/narrative/NarrativeGene
 import { ResumeTourBanner } from '@/components/narrative/ResumeTourBanner'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LoadingScreen } from '@/components/ui/LoadingScreen'
-import { MapFloatingBackButton } from '@/components/ui/MapFloatingBackButton'
+import { BackButton } from '@/components/ui/BackButton'
 import { PromptBar } from '@/components/ui/PromptBar'
 import { useConfirmNarrative } from '@/features/narrative/hooks/useConfirmNarrative'
 import { useGenerateNarrative } from '@/features/narrative/hooks/useGenerateNarrative'
@@ -428,7 +428,7 @@ const HomePageContent = () => {
 
       {showChrome && playbackItem && (
         <div className="pointer-events-none absolute inset-x-0 top-0 z-[35] flex justify-start px-4 pt-[max(0.875rem,env(safe-area-inset-top))]">
-          <MapFloatingBackButton
+          <BackButton
             className="pointer-events-auto"
             onClick={handlePlaybackBack}
           />
