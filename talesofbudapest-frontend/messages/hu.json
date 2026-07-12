@@ -1,0 +1,145 @@
+{
+  "metadata": {
+    "title": "Budapest meséi",
+    "description": "MI-alapú helyszín hangos túrák Budapesten"
+  },
+  "nav": {
+    "home": "Kezdőlap",
+    "narrative": "Narratíva",
+    "archives": "Archívum",
+    "settings": "Beállítások",
+    "mainNavigation": "Fő navigáció",
+    "openAiGuide": "MI idegenvezető megnyitása"
+  },
+  "player": {
+    "nowPlaying": "Most szól",
+    "chapter": "{number}. FEJEZET",
+    "customNarrative": "EGYEDI NARRATÍVA",
+    "generatingAudioTour": "Hangos túra generálása",
+    "pause": "Szünet",
+    "play": "Lejátszás",
+    "previousChapter": "Előző fejezet",
+    "nextChapter": "Következő fejezet",
+    "playbackProgress": "Lejátszási folyamat",
+    "tapToGenerate": "Koppints a lejátszásra a hangos túra generálásához",
+    "audioComingSoon": "Hangos túra hamarosan",
+    "generatingYourTour": "Hangos túra generálása…",
+    "narrativeArchive": "NARRATÍVA ARCHÍVUM",
+    "beginExperience": "Koppints a lejátszásra az élmény indításához",
+    "openFullScreen": "Teljes képernyő megnyitása",
+    "closeFullScreen": "Teljes képernyő bezárása",
+    "transcript": "Átirat",
+    "transcriptUnavailable": "Az átirat itt jelenik meg, miután a hangos túra elkészült.",
+    "share": "Megosztás",
+    "download": "Hang letöltése",
+    "thinSourceNote": "Kevés történelmi forrás — abból szőttük ezt a megállót, amit ismerünk.",
+    "swipeUpForMore": "Húzd fel az átiratért és részletekért",
+    "walkTime": "~{minutes} perc séta a következő megállóig",
+    "atThisStop": "Ezen a megállón",
+    "collapseSheet": "Lejátszó összecsukása",
+    "distanceToNext": "{distance} km a következő megállóig",
+    "goBack": "Vissza"
+  },
+  "home": {
+    "loadingLandmarks": "Látnivalók betöltése…",
+    "loadingMap": "Térkép betöltése…",
+    "failedToLoadLandmarks": "Nem sikerült betölteni a látnivalókat"
+  },
+  "chronicle": {
+    "title": "Krónika",
+    "loading": "Krónika betöltése",
+    "empty": "Ennek a helynek a történetét még kutatjuk.",
+    "undated": "Múlt",
+    "people": "A helyhez kötődő emberek",
+    "connectedPerson": "Ehhez a helyhez kötődik",
+    "pageShort": "o."
+  },
+  "prompt": {
+    "placeholder": "Szőj új történelmi narratívát…",
+    "startVoicePrompt": "Hangalapú prompt indítása"
+  },
+  "narrative": {
+    "greetings": [
+      "Milyen narratívát szőjünk?",
+      "Milyen titkokat fedünk fel?",
+      "Hol kezdjük ma a történetünket?"
+    ],
+    "planningMessages": [
+      "A legjobb megállók felkutatása…",
+      "Bejárható útvonal tervezése…",
+      "Történetek illesztése az érdeklődésedhez…"
+    ],
+    "generatingMessages": [
+      "Egyedi narratíva szőése…",
+      "Neurális hangfolyam készítése…",
+      "Lépések nyomában a történelemben…",
+      "A mester történész megidézése…"
+    ],
+    "tryAgain": "Újra",
+    "cancel": "Mégse"
+  },
+  "questionnaire": {
+    "title": "Tervezd meg a túrád",
+    "previousQuestion": "Előző kérdés",
+    "close": "Bezárás",
+    "quickStart": "Gyors indítás",
+    "styleQuestion": "Hogyan szereted a történelmet?",
+    "styleHelper": "Ez határozza meg a túra tempóját és mélységét.",
+    "topicsQuestion": "Mi vonz igazán?",
+    "topicsHelper": "Válassz legfeljebb {max}-t — mi méretezzük hozzá a túrát.",
+    "idealTime": "ideális idő",
+    "continue": "Tovább",
+    "recapTitle": "Az utad készen áll.",
+    "shorterTour": "Rövidebb túra",
+    "longerTour": "Hosszabb túra",
+    "startNearMe": "Induljunk innen",
+    "startTour": "Túra indítása",
+    "intentPlaceholder": "✨ Már tudom, mit szeretnék…",
+    "intentAriaLabel": "Írd le a saját túrádat",
+    "intentSubmit": "Indítás ezzel az ötlettel"
+  },
+  "preview": {
+    "title": "Útvonal előnézete",
+    "close": "Előnézet bezárása",
+    "swapStop": "Megálló cseréje",
+    "confirm": "Megfelel — meséld el ezt a túrát"
+  },
+  "resume": {
+    "continueTitle": "Folytatod: „{title}”?",
+    "continueSubtitle": "A(z) {chapter}. fejezetnél tartottál a(z) {total}-ból.",
+    "resume": "Folytatás",
+    "dismiss": "Most nem"
+  },
+  "archives": {
+    "label": "Archívum",
+    "title": "Mentett narratívák",
+    "subtitle": "Egyedi séta történeteid, készen az újrálátogatásra.",
+    "loading": "Archívum betöltése…",
+    "empty": "Még nincs narratíva. Koppints a prompt sávra a térképen az első történethez.",
+    "chapters": "{count} fejezet"
+  },
+  "settings": {
+    "label": "Beállítások",
+    "title": "Preferenciák",
+    "language": "Nyelv",
+    "languageDescription": "Válaszd ki az alkalmazás nyelvét és a látnivalók feliratait.",
+    "english": "English",
+    "hungarian": "Magyar",
+    "map": "Térkép",
+    "mapDescription": "Szabályozd, mennyi helyszín jelenjen meg egyszerre.",
+    "showAllBuildings": "Mutasd az összes épületet",
+    "showAllBuildingsDescription": "Bekapcsolva a városnézetben is megjelennek a hétköznapi házak, csoportosítva.",
+    "tourStyle": "Túrastílus",
+    "tourStyleDescription": "Így hangzanak a helyszíni hangos túrák, amikor a térképen lejátszást indítasz.",
+    "styleEasy": "Könnyed és vizuális",
+    "styleStoryteller": "A mesélő",
+    "styleDeepDive": "Történész mélymerülés"
+  },
+  "map": {
+    "zoomHint": "Közelíts rá a többi helyszínhez",
+    "dismissHint": "Elrejtés"
+  },
+  "errors": {
+    "failedToGenerateAudio": "Nem sikerült generálni a hangos túrát"
+  }
+}

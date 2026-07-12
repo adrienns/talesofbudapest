@@ -1,0 +1,145 @@
+{
+  "metadata": {
+    "title": "Tales of Budapest",
+    "description": "AI-powered location audio tours through Budapest"
+  },
+  "nav": {
+    "home": "Home",
+    "narrative": "Narrative",
+    "archives": "Archives",
+    "settings": "Settings",
+    "mainNavigation": "Main navigation",
+    "openAiGuide": "Open AI guide"
+  },
+  "player": {
+    "nowPlaying": "Now playing",
+    "chapter": "CH. {number}",
+    "customNarrative": "CUSTOM NARRATIVE",
+    "generatingAudioTour": "Generating audio tour",
+    "pause": "Pause",
+    "play": "Play",
+    "previousChapter": "Previous chapter",
+    "nextChapter": "Next chapter",
+    "playbackProgress": "Playback progress",
+    "tapToGenerate": "Tap play to generate your audio tour",
+    "audioComingSoon": "Audio tour coming soon",
+    "generatingYourTour": "Generating your audio tour…",
+    "narrativeArchive": "NARRATIVE ARCHIVE",
+    "beginExperience": "Tap play to begin your experience",
+    "openFullScreen": "Open full screen",
+    "closeFullScreen": "Close full screen",
+    "transcript": "Transcript",
+    "transcriptUnavailable": "The transcript will appear here once the audio tour has been generated.",
+    "share": "Share",
+    "download": "Download audio",
+    "thinSourceNote": "Limited historical sources — we've woven what's known into this stop.",
+    "swipeUpForMore": "Swipe up for transcript and details",
+    "walkTime": "~{minutes} min walk to next stop",
+    "atThisStop": "At this stop",
+    "collapseSheet": "Collapse player",
+    "distanceToNext": "{distance} km to next stop",
+    "goBack": "Go back"
+  },
+  "home": {
+    "loadingLandmarks": "Loading landmarks…",
+    "loadingMap": "Loading map…",
+    "failedToLoadLandmarks": "Failed to load landmarks"
+  },
+  "chronicle": {
+    "title": "Chronicle",
+    "loading": "Loading chronicle",
+    "empty": "This place's story is still being researched.",
+    "undated": "Past",
+    "people": "People connected to this place",
+    "connectedPerson": "Connected to this place",
+    "pageShort": "p."
+  },
+  "prompt": {
+    "placeholder": "Weave a new historical narrative…",
+    "startVoicePrompt": "Start voice prompt"
+  },
+  "narrative": {
+    "greetings": [
+      "What narrative shall we weave?",
+      "What secrets shall we uncover?",
+      "Where shall our story begin today?"
+    ],
+    "planningMessages": [
+      "Scouting the best stops for you…",
+      "Tracing a walkable route…",
+      "Matching stories to your interests…"
+    ],
+    "generatingMessages": [
+      "Weaving your custom narrative…",
+      "Baking neural voice stream…",
+      "Tracing footsteps through history…",
+      "Summoning the master historian…"
+    ],
+    "tryAgain": "Try again",
+    "cancel": "Cancel"
+  },
+  "questionnaire": {
+    "title": "Plan your tour",
+    "previousQuestion": "Previous question",
+    "close": "Close",
+    "quickStart": "Quick start",
+    "styleQuestion": "How do you like your history?",
+    "styleHelper": "This sets the pace and depth of your tour.",
+    "topicsQuestion": "What pulls you in?",
+    "topicsHelper": "Pick up to {max} — we'll size the tour for you.",
+    "idealTime": "ideal time",
+    "continue": "Continue",
+    "recapTitle": "Your journey is ready.",
+    "shorterTour": "Shorter tour",
+    "longerTour": "Longer tour",
+    "startNearMe": "Start near me",
+    "startTour": "Start the tour",
+    "intentPlaceholder": "✨ I already know what I want…",
+    "intentAriaLabel": "Describe your own tour",
+    "intentSubmit": "Start with this idea"
+  },
+  "preview": {
+    "title": "Preview your route",
+    "close": "Close preview",
+    "swapStop": "Swap this stop",
+    "confirm": "Looks good — narrate this tour"
+  },
+  "resume": {
+    "continueTitle": "Continue \"{title}\"?",
+    "continueSubtitle": "You left off at chapter {chapter} of {total}.",
+    "resume": "Resume",
+    "dismiss": "Not now"
+  },
+  "archives": {
+    "label": "Archives",
+    "title": "Saved narratives",
+    "subtitle": "Your custom walking stories, ready to revisit.",
+    "loading": "Loading archives…",
+    "empty": "No narratives yet. Tap the prompt bar on the map to weave your first story.",
+    "chapters": "{count} chapters"
+  },
+  "settings": {
+    "label": "Settings",
+    "title": "Preferences",
+    "language": "Language",
+    "languageDescription": "Choose your app language and landmark labels.",
+    "english": "English",
+    "hungarian": "Magyar",
+    "map": "Map",
+    "mapDescription": "Control how many landmarks appear at once.",
+    "showAllBuildings": "Show all buildings",
+    "showAllBuildingsDescription": "When on, ordinary houses appear at city zoom, grouped into clusters.",
+    "tourStyle": "Tour style",
+    "tourStyleDescription": "How landmark audio tours are paced and narrated when you tap play on the map.",
+    "styleEasy": "Easy & Visual",
+    "styleStoryteller": "The Storyteller",
+    "styleDeepDive": "Historian Deep Dive"
+  },
+  "map": {
+    "zoomHint": "Zoom in to see more landmarks",
+    "dismissHint": "Dismiss"
+  },
+  "errors": {
+    "failedToGenerateAudio": "Failed to generate audio tour"
+  }
+}
