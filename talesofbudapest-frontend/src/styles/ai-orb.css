@@ -1,0 +1,116 @@
+@keyframes ai-chat-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ai-orb {
+  position: relative;
+}
+
+.ai-orb--lg {
+  width: 9.5rem;
+  height: 9.5rem;
+}
+
+.ai-orb--md {
+  width: 4rem;
+  height: 4rem;
+}
+
+.ai-orb--sm {
+  width: 2.25rem;
+  height: 2.25rem;
+}
+
+.ai-orb__glow {
+  position: absolute;
+  inset: -28%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 140, 60, 0.38) 0%, transparent 68%);
+  animation: ai-orb-glow 4.5s ease-in-out infinite;
+}
+
+.ai-orb__sphere {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  animation: ai-orb-breathe 4.5s ease-in-out infinite;
+  box-shadow:
+    0 16px 48px rgba(166, 77, 31, 0.28),
+    inset 0 -10px 28px rgba(90, 40, 15, 0.22);
+}
+
+.ai-orb__gradient {
+  position: absolute;
+  inset: -55%;
+  background: conic-gradient(
+    from 0deg,
+    #f5e6c8,
+    #e8a052,
+    #c04e1f,
+    #8b3414,
+    #d4a574,
+    #f0c890,
+    #f5e6c8
+  );
+  animation: ai-orb-spin 10s linear infinite;
+}
+
+.ai-orb__shine {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.5) 0%, transparent 42%);
+}
+
+@keyframes ai-orb-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.045);
+  }
+}
+
+@keyframes ai-orb-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.95;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes ai-orb-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-orb__sphere,
+  .ai-orb__glow,
+  .ai-orb__gradient {
+    animation: none;
+  }
+}
