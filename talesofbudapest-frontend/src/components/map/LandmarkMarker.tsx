@@ -1,41 +1,42 @@
 'use client'
 
-import { Marker, Popup } from 'react-leaflet'
-import { createLandmarkIcon } from '@/components/map/createLandmarkIcon'
-import type { Landmark } from '@/types'
+import { memo, useMemo } from 'react'
+import { Marker } from 'react-leaflet'
+import {
+  createLandmarkDotIcon,
+  createLandmarkIcon,
+} from '@/components/map/createLandmarkIcon'
+import type { MapPin } from '@/types/landmark'
 
 type LandmarkMarkerProps = {
-  landmark: Landmark
+  landmark: MapPin
   isSelected: boolean
-  onSelect: (landmark: Landmark) => void
+  variant: 'dot' | 'photo'
+  onSelect: (landmark: MapPin) => void
 }
 
-export const LandmarkMarker = ({
+export const LandmarkMarker = memo(function LandmarkMarker({
   landmark,
   isSelected,
+  variant,
   onSelect,
-}: LandmarkMarkerProps) => (
-  <Marker
-    position={[landmark.lat, landmark.lng]}
-    icon={createLandmarkIcon(isSelected)}
-    eventHandlers={{
-      click: () => onSelect(landmark),
-    }}
-  >
-    {landmark.image_url && (
-      <Popup className="landmark-popup" closeButton={false}>
-        <div className="w-40 overflow-hidden rounded-lg">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={landmark.image_url}
-            alt={landmark.name}
-            className="h-24 w-full object-cover grayscale"
-          />
-          <p className="mt-2 text-sm font-semibold leading-tight text-on-surface">
-            {landmark.name}
-          </p>
-        </div>
-      </Popup>
-    )}
-  </Marker>
-)
+}: LandmarkMarkerProps) {
+  const icon = useMemo(() => {
+    if (variant === 'dot') {
+      return createLandmarkDotIcon(isSelected)
+    }
+
+    return createLandmarkIcon(landmark, isSelected)
+  }, [landmark, isSelected, variant])
+
+  return (
+    <Marker
+      position={[landmark.lat, landmark.lng]}
+      icon={icon}
+      zIndexOffset={isSelected ? 1000 : variant === 'photo' ? 200 : 0}
+      eventHandlers={{
+        click: () => onSelect(landmark),
+      }}
+    />
+  )
+})
