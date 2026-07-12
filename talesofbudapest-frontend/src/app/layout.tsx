@@ -1,5 +1,6 @@
-import type { Metadata, Viewport } from 'next'
+import type { Viewport } from 'next'
 import { Plus_Jakarta_Sans, Source_Serif_4 } from 'next/font/google'
+import { Providers } from '@/app/providers'
 import { colors } from '@/constants/designTokens'
 import './globals.css'
 
@@ -15,24 +16,14 @@ const sourceSerif = Source_Serif_4({
   display: 'swap',
 })
 
-export const metadata: Metadata = {
-  title: 'Tales of Budapest',
-  description: 'AI-powered location audio tours through Budapest',
-}
-
 export const viewport: Viewport = {
-  width: 'device-width',
-  initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
-  viewportFit: 'cover',
   themeColor: colors.primary,
 }
 
 const RootLayout = ({ children }: { children: React.ReactNode }) => (
-  <html lang="en" className={`${plusJakarta.variable} ${sourceSerif.variable}`}>
+  <html lang="en" className={`${plusJakarta.variable} ${sourceSerif.variable}`} suppressHydrationWarning>
     <body className="min-h-[100dvh] bg-background font-sans text-on-surface antialiased">
-      {children}
+      <Providers>{children}</Providers>
     </body>
   </html>
 )
