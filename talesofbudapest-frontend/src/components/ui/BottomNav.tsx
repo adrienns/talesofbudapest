@@ -4,6 +4,7 @@ import { BookOpen, Home, Library, Settings } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { NAV_TAB_IDS } from '@/constants/navigation'
+import { terracottaGlowClass } from '@/components/ui/TerracottaButton'
 import type { BottomNavProps, NavTabId } from '@/types/navigation'
 
 const NAV_ICONS: Record<NavTabId, LucideIcon> = {
@@ -52,7 +53,7 @@ export const BottomNav = ({
               aria-current={isActive ? 'page' : undefined}
               onClick={() => onTabChange(id)}
               className={`bottom-nav-btn flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all duration-200 active:scale-95 ${
-                isActive ? 'terracotta-glow-btn' : 'bottom-nav-btn--inactive'
+                isActive ? terracottaGlowClass : 'bottom-nav-btn--inactive'
               }`}
             >
               <Icon className="h-5 w-5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
@@ -65,9 +66,12 @@ export const BottomNav = ({
             type="button"
             onClick={onAiGuideClick}
             aria-label={t('openAiGuide')}
-            className="bottom-nav-ai-btn flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition active:scale-95"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary shadow-[0_4px_14px_rgba(17,19,24,0.28)] transition active:scale-95"
           >
-            <span className="bottom-nav-ai-n" aria-hidden="true">
+            <span
+              className="font-sans text-lg font-bold leading-none tracking-tight text-white [text-shadow:0_0_12px_rgba(255,255,255,0.45),1px_1px_0_rgba(255,255,255,0.15)]"
+              aria-hidden="true"
+            >
               N
             </span>
           </button>

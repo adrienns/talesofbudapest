@@ -117,7 +117,7 @@ export const SwipeableTourSheet = ({
             }}
             onDoubleClick={() => onSnapChange(snap === 'collapsed' ? 'expanded' : 'collapsed')}
           >
-            <div className="glass-drawer-handle mb-3" aria-hidden="true" />
+            <div className="mb-3 h-1 w-[3.125rem] rounded-sm bg-on-surface/80" aria-hidden="true" />
           </div>
 
           <div className="min-h-0 flex-1 overflow-hidden">
