@@ -36,9 +36,16 @@
   --glass-blur-strong: 32px;
   --glass-saturate: 180%;
   --glass-shadow: 0 8px 40px rgba(17, 19, 24, 0.1);
-  --glass-shadow-drawer: 0 -12px 48px rgba(17, 19, 24, 0.12);
+  --glass-shadow-drawer: 0 -8px 32px rgba(0, 0, 0, 0.05);
   --glass-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.95);
-  --glass-radius-drawer: 1.75rem;
+  --glass-inset-highlight-drawer: inset 0 1px 2px rgba(255, 255, 255, 0.4);
+  --glass-radius-drawer: 2.5rem;
+
+  /* Drawer — frosted panel over the map */
+  --glass-bg-drawer: rgba(255, 255, 255, 0.45);
+  --glass-border-drawer: rgba(255, 255, 255, 0.6);
+  --glass-blur-drawer: 20px;
+  --glass-saturate-drawer: 165%;
   --glass-radius-field: 1rem;
 
   /* Legacy aliases */
