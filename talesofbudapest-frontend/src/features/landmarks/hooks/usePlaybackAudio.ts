@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
-import { useAudioPlayer } from '@/hooks/useAudioPlayer'
+import { useAudioPlayer } from '@/features/landmarks/hooks/useAudioPlayer'
 import { requestLandmarkAudio } from '@/services/landmarkAudioService'
 import { useTourPreferencesStore } from '@/stores/tourPreferencesStore'
 import type { AppLocale } from '@/types/locale'
