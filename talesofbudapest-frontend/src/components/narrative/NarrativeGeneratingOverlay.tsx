@@ -1,10 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { GENERATING_MESSAGES } from '@/constants/narrative'
+import { useEffect, useMemo, useState } from 'react'
+import { useTranslations } from 'next-intl'
 
 type NarrativeGeneratingOverlayProps = {
   isVisible: boolean
+  /** 'planning' shows the (faster) route-planning message set. */
+  mode?: 'planning' | 'generating'
   error?: string | null
   onRetry?: () => void
   onDismiss?: () => void
@@ -12,10 +14,16 @@ type NarrativeGeneratingOverlayProps = {
 
 export const NarrativeGeneratingOverlay = ({
   isVisible,
+  mode = 'generating',
   error,
   onRetry,
   onDismiss,
 }: NarrativeGeneratingOverlayProps) => {
+  const t = useTranslations('narrative')
+  const generatingMessages = useMemo(
+    () => t.raw(mode === 'planning' ? 'planningMessages' : 'generatingMessages') as string[],
+    [mode, t],
+  )
   const [messageIndex, setMessageIndex] = useState(0)
 
   useEffect(() => {
@@ -24,11 +32,11 @@ export const NarrativeGeneratingOverlay = ({
     }
 
     const interval = window.setInterval(() => {
-      setMessageIndex((current) => (current + 1) % GENERATING_MESSAGES.length)
+      setMessageIndex((current) => (current + 1) % generatingMessages.length)
     }, 2800)
 
     return () => window.clearInterval(interval)
-  }, [error, isVisible])
+  }, [error, generatingMessages.length, isVisible])
 
   if (!isVisible) {
     return null
@@ -47,7 +55,7 @@ export const NarrativeGeneratingOverlay = ({
                   onClick={onRetry}
                   className="rounded-xl bg-gradient-to-r from-[var(--color-sunset-start)] to-[var(--color-accent)] px-5 py-3 text-body font-semibold text-on-primary shadow-[0_0_20px_var(--color-accent-glow)]"
                 >
-                  Try again
+                  {t('tryAgain')}
                 </button>
               )}
               {onDismiss && (
@@ -56,7 +64,7 @@ export const NarrativeGeneratingOverlay = ({
                   onClick={onDismiss}
                   className="rounded-xl border border-on-primary/30 px-5 py-3 text-body text-on-primary/80"
                 >
-                  Cancel
+                  {t('cancel')}
                 </button>
               )}
             </div>
@@ -74,7 +82,7 @@ export const NarrativeGeneratingOverlay = ({
               ))}
             </div>
             <p className="text-headline text-on-primary">
-              {GENERATING_MESSAGES[messageIndex]}
+              {generatingMessages[messageIndex]}
             </p>
           </>
         )}

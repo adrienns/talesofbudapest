@@ -1,9 +1,22 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { LAST_NARRATIVE_STORAGE_KEY } from '@/constants/narrative'
+import { LAST_NARRATIVE_STORAGE_KEY, lastNarrativeChapterKey } from '@/constants/narrative'
 import { useNarrativeStore } from '@/stores/narrativeStore'
 import type { NarrativeRoute, NarrativeSummary } from '@/types/narrative'
+
+export type LastNarrativePeek = {
+  id: string
+  title: string
+  chapterIndex: number
+  chapterCount: number
+}
+
+const readStoredChapterIndex = (narrativeId: string): number => {
+  const raw = localStorage.getItem(lastNarrativeChapterKey(narrativeId))
+  const parsed = raw ? Number(raw) : 0
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
+}
 
 export const useNarratives = () => {
   const [narratives, setNarratives] = useState<NarrativeSummary[]>([])
@@ -32,7 +45,7 @@ export const useNarratives = () => {
   }, [])
 
   const loadNarrativeById = useCallback(
-    async (id: string) => {
+    async (id: string, initialChapterIndex = 0) => {
       const response = await fetch(`/api/narratives/${id}`)
       const payload = await response.json()
 
@@ -46,7 +59,8 @@ export const useNarratives = () => {
         chapters: payload.chapters,
       }
 
-      setActiveRoute(route)
+      const safeIndex = Math.min(Math.max(initialChapterIndex, 0), route.chapters.length - 1)
+      setActiveRoute(route, safeIndex)
       setFlowState('ready')
       localStorage.setItem(LAST_NARRATIVE_STORAGE_KEY, route.id)
 
@@ -55,19 +69,39 @@ export const useNarratives = () => {
     [setActiveRoute, setFlowState],
   )
 
-  const restoreLastNarrative = useCallback(async () => {
+  /** Checks for an abandoned tour without loading it — powers the resume banner. */
+  const peekLastNarrative = useCallback(async (): Promise<LastNarrativePeek | null> => {
     const lastId = localStorage.getItem(LAST_NARRATIVE_STORAGE_KEY)
     if (!lastId) {
       return null
     }
 
     try {
-      return await loadNarrativeById(lastId)
+      const response = await fetch(`/api/narratives/${lastId}`)
+      const payload = await response.json()
+
+      if (!response.ok || !payload?.chapters?.length) {
+        throw new Error('Narrative unavailable')
+      }
+
+      const chapterCount = payload.chapters.length
+      const chapterIndex = Math.min(readStoredChapterIndex(lastId), chapterCount - 1)
+
+      return { id: lastId, title: payload.title, chapterIndex, chapterCount }
     } catch {
       localStorage.removeItem(LAST_NARRATIVE_STORAGE_KEY)
       return null
     }
-  }, [loadNarrativeById])
+  }, [])
+
+  const resumeLastNarrative = useCallback(
+    (peek: LastNarrativePeek) => loadNarrativeById(peek.id, peek.chapterIndex),
+    [loadNarrativeById],
+  )
+
+  const dismissLastNarrative = useCallback(() => {
+    localStorage.removeItem(LAST_NARRATIVE_STORAGE_KEY)
+  }, [])
 
   useEffect(() => {
     fetchNarratives()
@@ -79,6 +113,8 @@ export const useNarratives = () => {
     error,
     fetchNarratives,
     loadNarrativeById,
-    restoreLastNarrative,
+    peekLastNarrative,
+    resumeLastNarrative,
+    dismissLastNarrative,
   }
 }
