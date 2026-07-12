@@ -1,10 +1,9 @@
-import type { Landmark } from './landmark'
+import type { MapPin } from './landmark'
 import type { NarrativeChapter, NarrativeRoute } from './narrative'
 
 export type MapViewProps = {
-  landmarks: Landmark[]
   selectedLandmarkId: string | null
-  onLandmarkSelect: (landmark: Landmark) => void
+  onLandmarkSelect: (landmark: MapPin) => void
   activeRoute?: NarrativeRoute | null
   selectedChapterId?: string | null
   onChapterSelect?: (chapter: NarrativeChapter) => void
