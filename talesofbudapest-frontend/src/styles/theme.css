@@ -15,4 +15,6 @@
   --text-headline-lg: var(--font-size-headline-lg);
   --text-body: var(--font-size-body);
   --text-label: var(--font-size-label);
+
+  --animate-ai-chat-enter: ai-chat-enter 0.35s ease-out both;
 }

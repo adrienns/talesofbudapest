@@ -1,0 +1,21 @@
+.bottom-nav-capsule {
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.62);
+  backdrop-filter: blur(32px) saturate(180%);
+  -webkit-backdrop-filter: blur(32px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow:
+    0 4px 24px rgba(17, 19, 24, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+.bottom-nav-btn--inactive {
+  background: #ffffff;
+  color: #5c5c5c;
+  box-shadow: 0 2px 8px rgba(17, 19, 24, 0.1);
+}
+
+.bottom-nav-btn--inactive:hover {
+  color: #3d3d3d;
+  box-shadow: 0 3px 12px rgba(17, 19, 24, 0.14);
+}

@@ -1,0 +1,263 @@
+/* Leaflet divIcon markers — HTML is built in createLandmarkIcon.ts */
+
+.landmark-photo-marker-icon {
+  background: transparent !important;
+  border: none !important;
+  overflow: visible !important;
+}
+
+.leaflet-div-icon.landmark-photo-marker-icon {
+  width: auto !important;
+  height: auto !important;
+}
+
+.landmark-photo-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100px;
+  pointer-events: auto;
+}
+
+.photo-marker-shell {
+  filter: drop-shadow(0 8px 20px rgba(17, 19, 24, 0.14));
+  transition: filter 0.2s ease;
+}
+
+.photo-marker,
+.photo-marker * {
+  box-sizing: border-box;
+}
+
+.photo-marker {
+  position: relative;
+  width: 4rem;
+  height: 4rem;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.photo-marker__circle {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  border: 1px solid var(--marker-glass-border);
+  background: var(--marker-glass-bg);
+  backdrop-filter: blur(14px) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(14px) saturate(var(--glass-saturate));
+  overflow: hidden;
+  box-shadow:
+    0 8px 24px rgba(17, 19, 24, 0.12),
+    var(--glass-inset-highlight);
+}
+
+.landmark-photo-marker-icon img.photo-marker__image {
+  max-width: none !important;
+  max-height: none !important;
+}
+
+.photo-marker__media {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: calc(100% - 8px);
+  height: calc(100% - 8px);
+  border-radius: 9999px;
+  overflow: hidden;
+  background-color: color-mix(in srgb, var(--color-marker-pin) 35%, transparent);
+}
+
+.photo-marker__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  border-radius: 9999px;
+}
+
+.photo-marker__initial {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-marker-pin) 28%, rgba(255, 255, 255, 0.42));
+  backdrop-filter: blur(10px) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(10px) saturate(var(--glass-saturate));
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-marker-pin);
+  line-height: 1;
+}
+
+.photo-marker--fallback .photo-marker__image {
+  display: none;
+}
+
+.photo-marker--fallback .photo-marker__initial {
+  display: flex;
+}
+
+.photo-marker__pointer {
+  position: absolute;
+  bottom: -0.7rem;
+  left: 50%;
+  z-index: 0;
+  width: 22px;
+  height: 14px;
+  transform: translateX(-50%);
+  background: var(--marker-glass-bg);
+  backdrop-filter: blur(14px) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(14px) saturate(var(--glass-saturate));
+  clip-path: polygon(50% 100%, 0 0, 100% 0);
+  border-bottom: 1px solid transparent;
+  box-shadow: 0 4px 10px rgba(17, 19, 24, 0.1);
+}
+
+.photo-marker__pointer::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  clip-path: polygon(50% 100%, 0 0, 100% 0);
+  border: 1px solid var(--marker-glass-border);
+  border-top: none;
+  pointer-events: none;
+}
+
+.photo-marker--selected {
+  transform: scale(1.05);
+}
+
+.landmark-photo-marker--selected .photo-marker-shell {
+  filter:
+    drop-shadow(0 10px 22px rgba(17, 19, 24, 0.18))
+    drop-shadow(0 0 0 2px rgba(176, 122, 101, 0.28));
+}
+
+.landmark-photo-marker--selected .photo-marker__circle {
+  border-color: color-mix(in srgb, var(--color-marker-pin) 55%, var(--glass-border));
+  background: color-mix(in srgb, var(--color-marker-pin) 30%, var(--glass-bg-strong));
+}
+
+.landmark-photo-marker__label {
+  margin-top: 8px;
+  max-width: 100px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--color-on-surface);
+  text-shadow:
+    0 1px 2px rgba(255, 255, 255, 0.95),
+    0 0 8px rgba(255, 255, 255, 0.85);
+  pointer-events: none;
+}
+
+@keyframes landmark-pulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.leaflet-div-icon.landmark-dot-marker-icon {
+  width: 16px !important;
+  height: 16px !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+.landmark-dot-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+.landmark-dot-marker__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  border: 2px solid var(--color-surface, #fff);
+  background: var(--color-accent, #ff6b35);
+  box-shadow: 0 2px 8px rgba(17, 19, 24, 0.2);
+}
+
+.landmark-dot-marker--selected .landmark-dot-marker__dot {
+  width: 12px;
+  height: 12px;
+  background: var(--color-accent, #ff6b35);
+  box-shadow: 0 0 0 4px rgba(255, 107, 53, 0.25);
+}
+
+.leaflet-div-icon.landmark-cluster-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.landmark-cluster {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  border: 2px solid var(--color-surface, #fff);
+  background: color-mix(in srgb, var(--color-accent, #ff6b35) 88%, #111318);
+  color: var(--color-surface, #fff);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  box-shadow: 0 8px 20px rgba(17, 19, 24, 0.18);
+}
+
+.chapter-pin {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chapter-pin__label {
+  position: relative;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: var(--color-accent);
+  border: 2px solid var(--color-surface);
+  color: var(--color-on-primary);
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-primary) 35%, transparent);
+}
+
+.chapter-pin--selected .chapter-pin__label {
+  transform: scale(1.12);
+  background: var(--color-primary);
+}
+
+.chapter-pin__pulse {
+  position: absolute;
+  inset: 2px;
+  border-radius: 9999px;
+  background: var(--color-accent-pulse, rgba(166, 77, 31, 0.35));
+  animation: landmark-pulse 2s ease-out infinite;
+}
+
+.leaflet-container {
+  font-family: inherit;
+}

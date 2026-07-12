@@ -29,9 +29,7 @@
   /* Glassmorphism */
   --glass-bg: rgba(255, 255, 255, 0.68);
   --glass-bg-strong: rgba(255, 255, 255, 0.78);
-  --glass-field-bg: rgba(255, 255, 255, 0.52);
   --glass-border: rgba(255, 255, 255, 0.82);
-  --glass-border-subtle: rgba(255, 255, 255, 0.55);
   --glass-blur: 24px;
   --glass-blur-strong: 32px;
   --glass-saturate: 180%;
@@ -46,7 +44,6 @@
   --glass-border-drawer: rgba(255, 255, 255, 0.6);
   --glass-blur-drawer: 20px;
   --glass-saturate-drawer: 165%;
-  --glass-radius-field: 1rem;
 
   /* Legacy aliases */
   --color-glass: var(--glass-bg);

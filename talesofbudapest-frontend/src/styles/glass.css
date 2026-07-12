@@ -1,0 +1,47 @@
+@utility glass-surface {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    var(--glass-shadow),
+    var(--glass-inset-highlight);
+}
+
+@utility glass-drawer {
+  background: var(--glass-bg-drawer);
+  backdrop-filter: blur(var(--glass-blur-drawer)) saturate(var(--glass-saturate-drawer));
+  -webkit-backdrop-filter: blur(var(--glass-blur-drawer)) saturate(var(--glass-saturate-drawer));
+  border: 1px solid var(--glass-border-drawer);
+  border-bottom: none;
+  box-shadow:
+    var(--glass-shadow-drawer),
+    var(--glass-inset-highlight-drawer);
+}
+
+@utility prompt-bar-glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    0 4px 24px rgba(17, 19, 24, 0.08),
+    var(--glass-inset-highlight);
+}
+
+@utility q-duration-chip {
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(14px) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(14px) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+@utility scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
