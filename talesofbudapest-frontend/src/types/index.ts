@@ -1,4 +1,4 @@
-export type { Landmark, LandmarkImage } from './landmark'
+export type { Landmark, LandmarkImage, MapPin } from './landmark'
 export type { LocationRow } from './location'
 export type {
   NarrativeChapter,
@@ -8,9 +8,16 @@ export type {
   NarrativeFlowState,
   PlaybackItem,
 } from './narrative'
-export type { AudioPlayerAdapter, PlayerControlsProps, MiniPlayerControlsProps } from './audio'
+export type { AudioPlayerAdapter, PlaybackTransportProps } from './audio'
 export type { MapViewProps, MapCenter } from './map'
 export type { SearchBarProps } from './search'
-export type { BottomDrawerProps } from './drawer'
 export type { BottomNavProps, NavTabId } from './navigation'
 export type { LandmarksState, LandmarkSelectionState, AudioPlayerState } from './stores'
+export type {
+  ChronicleCitation,
+  ChronicleEvent,
+  ChronicleFact,
+  ChroniclePerson,
+  ChronicleRelation,
+  LocationChronicle,
+} from './chronicle'

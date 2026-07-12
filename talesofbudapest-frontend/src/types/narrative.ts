@@ -6,6 +6,7 @@ export type NarrativeChapter = {
   lng: number
   audioUrl: string | null
   imageUrl: string | null
+  landmarkId?: string | null
 }
 
 export type NarrativeRoute = {
@@ -27,9 +28,41 @@ export type NarrativeContext = {
   userLat?: number | null
   userLng?: number | null
   locale?: 'en' | 'hu'
+  /** Questionnaire picks — forwarded verbatim into the LLM prompt context. */
+  timeBudgetMinutes?: number
+  styleId?: string
+  topicIds?: string[]
+  /** User asked the tour to start from their current location. */
+  nearMe?: boolean
 }
 
-export type NarrativeFlowState = 'idle' | 'eliciting' | 'generating' | 'ready' | 'error'
+/** A single planned stop before audio has been synthesized. */
+export type DraftChapter = {
+  chapterIndex: number
+  title: string
+  lat: number
+  lng: number
+  script: string
+  landmarkId: string | null
+  imageUrl: string | null
+}
+
+/** The output of `/api/narratives/plan` — previewable, not yet persisted or narrated. */
+export type DraftNarrative = {
+  title: string
+  userPrompt: string
+  context: NarrativeContext
+  chapters: DraftChapter[]
+}
+
+export type NarrativeFlowState =
+  | 'idle'
+  | 'eliciting'
+  | 'planning'
+  | 'previewing'
+  | 'generating'
+  | 'ready'
+  | 'error'
 
 export type PlaybackItem = {
   id: string
@@ -39,6 +72,7 @@ export type PlaybackItem = {
   audioUrl: string | null
   imageUrl: string | null
   imageAlt?: string
+  script?: string | null
   lat: number
   lng: number
 }

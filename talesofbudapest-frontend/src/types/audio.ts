@@ -10,25 +10,15 @@ export type AudioPlayerAdapter = {
   destroy(): void
 }
 
-export type PlayerControlsProps = {
+export type PlaybackTransportProps = {
   isPlaying: boolean
   currentTime: number
   duration: number
   hasAudio: boolean
-  onPlayPause: () => void
-  onSeek: (time: number) => void
-}
-
-export type MiniPlayerControlsProps = {
-  title: string
-  subtitle?: string
-  chapterLabel?: string
-  imageUrl?: string | null
-  imageAlt?: string
-  isPlaying: boolean
-  currentTime: number
-  duration: number
-  hasAudio: boolean
+  isGenerating?: boolean
+  canRequestAudio?: boolean
+  generateError?: string | null
+  historyDepth?: string | null
   onPlayPause: () => void
   onSeek: (time: number) => void
   onSkipBack?: () => void
