@@ -1,64 +1,56 @@
 import { supabase } from './supabaseClient.js';
-import { createChatCompletion, getOpenRouterApiKey } from './lib/openRouterClient.js';
-import { synthesizeSpeech, uploadAudio } from './lib/ttsClient.js';
+import { generateLandmarkAudio } from './lib/landmarkAudioPipeline.js';
+import { getOpenRouterApiKey } from './lib/openRouterClient.js';
+import { DEFAULT_TOUR_STYLE_ID, isTourStyleId } from './lib/tourStyles.js';
+import { DEFAULT_LOCALE } from './lib/locale.js';
 import dotenv from 'dotenv';
-import fs from 'fs';
-import path from 'path';
 
 dotenv.config();
 
-const STORAGE_BUCKET = 'audio-tours';
+const fetchTranslation = async (locationId, locale) => {
+  const { data, error } = await supabase
+    .from('location_translations')
+    .select('*')
+    .eq('location_id', locationId)
+    .eq('locale', locale)
+    .maybeSingle();
 
-const SYSTEM_PROMPT =
-  'You are an atmospheric AI audio tour guide. Tell dramatic stories under 45 seconds using vivid sensory details. Start directly with the narrative hook.';
+  if (error) {
+    throw new Error(error.message);
+  }
 
-const generateScript = async (location) => {
-  const scriptCompletion = await createChatCompletion({
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      {
-        role: 'user',
-        content: `Write a short script for someone standing right in front of this landmark:\nName: ${location.name}\nVibe: ${location.story_prompt}`,
-      },
-    ],
-  });
-
-  return scriptCompletion.choices[0]?.message?.content;
+  return data;
 };
 
-const buildAudioTourForLocation = async (location) => {
+const buildAudioTourForLocation = async (location, { force, styleId, locale }) => {
   console.log(`\n--- ${location.name} (id: ${location.id}) ---`);
-  console.log('Generating tour script via OpenRouter...');
 
-  const cleanScript = await generateScript(location);
-  if (!cleanScript) {
-    throw new Error('OpenRouter returned an empty script');
+  const translation = await fetchTranslation(location.id, locale);
+
+  if (translation?.audio_url && !force) {
+    console.log(`Already has translation audio: ${translation.audio_url}`);
   }
 
-  console.log(`Script complete:\n"${cleanScript}"\n`);
-  console.log('Synthesizing speech via OpenRouter (Kokoro)...');
+  console.log(`Generating tour (locale=${locale}, style=${styleId}${force ? ', force' : ''})...`);
+  const result = await generateLandmarkAudio({
+    supabase,
+    location,
+    locale,
+    translation,
+    styleId,
+    force,
+  });
 
-  const buffer = await synthesizeSpeech(cleanScript);
-  const fileName = `${location.id}-tour.mp3`;
-  const slug = location.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-  const outputFile = path.join(process.cwd(), `${slug || location.id}-tour.mp3`);
-
-  fs.writeFileSync(outputFile, buffer);
-  console.log(`Saved local copy to: ${outputFile}`);
-
-  console.log(`Uploading to Supabase Storage bucket "${STORAGE_BUCKET}"...`);
-  const publicUrl = await uploadAudio(supabase, fileName, buffer);
-
-  const { error: updateError } = await supabase
-    .from('locations')
-    .update({ audio_url: publicUrl })
-    .eq('id', location.id);
-
-  if (updateError) {
-    throw new Error(`Failed to update audio_url: ${updateError.message}`);
+  if (result.cached) {
+    console.log(`Using cached variant: ${result.audioUrl}`);
+    return;
   }
 
-  console.log(`Success! audio_url saved: ${publicUrl}`);
+  if (result.script) {
+    console.log(`Script complete:\n"${result.script}"\n`);
+  }
+
+  console.log(`Success! audio_url saved: ${result.audioUrl}`);
 };
 
 const fetchLocationByName = async (name) => {
@@ -70,6 +62,16 @@ const fetchLocationByName = async (name) => {
 
   if (error || !data) {
     throw new Error(error?.message ?? `Location not found: ${name}`);
+  }
+
+  return data;
+};
+
+const fetchLocationById = async (id) => {
+  const { data, error } = await supabase.from('locations').select('*').eq('id', id).single();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? `Location not found: ${id}`);
   }
 
   return data;
@@ -88,19 +90,29 @@ const fetchAllLocations = async () => {
 const parseArgs = () => {
   const args = process.argv.slice(2);
   const all = args.includes('--all');
+  const force = args.includes('--force');
   const nameIndex = args.indexOf('--name');
   const name = nameIndex !== -1 ? args[nameIndex + 1] : null;
+  const idIndex = args.indexOf('--id');
+  const id = idIndex !== -1 ? args[idIndex + 1] : null;
+  const styleIndex = args.indexOf('--style');
+  const styleRaw = styleIndex !== -1 ? args[styleIndex + 1] : DEFAULT_TOUR_STYLE_ID;
+  const styleId = isTourStyleId(styleRaw) ? styleRaw : DEFAULT_TOUR_STYLE_ID;
+  const localeIndex = args.indexOf('--locale');
+  const locale = localeIndex !== -1 ? args[localeIndex + 1] : DEFAULT_LOCALE;
 
-  return { all, name };
+  return { all, force, name, id, styleId, locale };
 };
 
 const run = async () => {
-  const { all, name } = parseArgs();
+  const { all, force, name, id, styleId, locale } = parseArgs();
 
   if (!getOpenRouterApiKey()) {
-    console.error('OPENROUTER_API_KEY (or GROQ_API_KEY) is required in .env');
+    console.error('OPENROUTER_API_KEY is required in .env');
     process.exit(1);
   }
+
+  const options = { force, styleId, locale };
 
   try {
     if (all) {
@@ -112,14 +124,20 @@ const run = async () => {
 
       console.log(`Generating audio for ${locations.length} landmark(s)...`);
       for (const location of locations) {
-        await buildAudioTourForLocation(location);
+        await buildAudioTourForLocation(location, options);
       }
+      return;
+    }
+
+    if (id) {
+      const location = await fetchLocationById(id);
+      await buildAudioTourForLocation(location, options);
       return;
     }
 
     const targetName = name ?? 'Hungarian Parliament Building';
     const location = await fetchLocationByName(targetName);
-    await buildAudioTourForLocation(location);
+    await buildAudioTourForLocation(location, options);
   } catch (error) {
     console.error('Audio pipeline failed:', error.message);
     process.exit(1);

@@ -10,6 +10,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const migrationsDir = path.join(__dirname, '..', 'supabase', 'migrations');
 
 const migrationFiles = [
+  '001_locations.sql',
   '001_alter_only.sql',
   '002_storage.sql',
   '003_locations_name_unique.sql',
@@ -18,6 +19,17 @@ const migrationFiles = [
   '006_narratives.sql',
   '007_narrative_writes.sql',
   '008_rag_history.sql',
+  '009_location_provenance.sql',
+  '010_location_translations.sql',
+  '011_location_importance.sql',
+  '012_locations_map_index.sql',
+  '013_location_history.sql',
+  '014_knowledge_graph_staging.sql',
+  '015_knowledge_graph_canonical.sql',
+  '016_kg_hybrid_search.sql',
+  '017_kg_claim_era.sql',
+  '018_kg_alias_exact_match.sql',
+  '019_kg_organisations_and_placeholders.sql',
 ];
 
 const runMigration = async () => {
@@ -57,6 +69,16 @@ const runMigration = async () => {
     console.log('All migrations complete');
   } catch (error) {
     console.error('Migration failed:', error.message);
+    if (
+      error.message.includes('ENOIDENTIFIER') ||
+      error.message.includes('tenant identifier')
+    ) {
+      console.error('');
+      console.error(
+        'Local Docker maps port 5432 to Supavisor. Run migrations inside the DB container instead:',
+      );
+      console.error('  bash infra/scripts/migrate.sh');
+    }
     process.exit(1);
   } finally {
     await client.end();
