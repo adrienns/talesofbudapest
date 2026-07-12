@@ -14,3 +14,7 @@ export const GENERATING_MESSAGES = [
 export const PROMPT_BAR_PLACEHOLDER = 'Weave a new historical narrative…'
 
 export const LAST_NARRATIVE_STORAGE_KEY = 'tob:lastNarrativeId'
+
+/** Per-narrative chapter progress, so resuming picks up where you left off. */
+export const lastNarrativeChapterKey = (narrativeId: string): string =>
+  `tob:lastChapterIndex:${narrativeId}`
