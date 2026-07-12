@@ -1,0 +1,13 @@
+# Use from infra/supabase-upstream/docker:
+#   docker compose -f docker-compose.yml -f ../../../infra/docker-compose.override.yml up -d
+#
+# Persists Postgres + Storage on disk (easy to rsync to Oracle later).
+
+services:
+  db:
+    volumes:
+      - ../../data/postgres:/var/lib/postgresql/data
+
+  storage:
+    volumes:
+      - ../../data/storage:/var/lib/storage

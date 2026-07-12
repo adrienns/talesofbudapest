@@ -16,6 +16,13 @@ into rows in `kg_pages`, and `kg_pages` into the knowledge graph.
    Same-family models make the same mistakes; cross-family auditing catches
    them.
 
+**Rule zero: rights before tokens.** Before conversion or an API call, the
+source must have a stable `source_id`, an item-level rights-evidence URL, a
+`green|yellow|red` verdict, and a complete local inventory record. Unknown
+rights default to red/private. Extraction success never changes that verdict.
+See [licensing.md](licensing.md) and
+[`ingest/corpus/README.md`](../ingest/corpus/README.md).
+
 ---
 
 ## 1. File intake — decision tree by type
@@ -98,6 +105,7 @@ openrouter.ai/models before each batch — prices move monthly.** The
 | T1 | OCR, clean modern print | Tesseract (local) | $0 | Gemini Flash-Lite (vision) | free forever |
 | T2 | OCR, old/damaged/multi-column | `google/gemini-2.5-flash-lite` (vision) or AI Studio free tier | ~$0.10 / $0.40 | `google/gemini-2.5-flash` | vision quality on Hungarian print is excellent |
 | T3 | Page extraction (Prompt P1) | `google/gemma-3-27b-it:free` → paid fallback `deepseek/deepseek-chat-v3` | $0 / ~$0.3–1.1 | `google/gemini-2.5-flash`, then `anthropic/claude-sonnet-*` for the worst sources | the workhorse; ~5k pages × ~3k tokens ≈ 15M tokens total — even paid ≈ a few $ |
+| T3-R | Current restricted-book extraction (Prompt P1-R) | `qwen/qwen3-coder:free` | Live preflight | `deepseek/deepseek-v4-flash` → `google/gemini-2.5-flash-lite` | implemented ladder; 5,000 max output tokens, 10 items/array, one request/rung, conservative `$1` default ceiling |
 | T4 | Address-book page → JSON (Prompt P3) | `google/gemini-2.5-flash` (vision) | ~$0.30 / $2.50 | `gemini-2.5-pro` | worth the mid-tier: these produce your highest-value edges; volume is small |
 | T5 | Entity adjudication, yes/no (Prompt P4) | `google/gemma-3-27b-it:free` | $0 | `gemini-2.5-flash-lite` | trivially small calls |
 | T6 | Fact re-ranking per location (Prompt P5) | `google/gemini-2.5-flash-lite` | ~$0.10 / $0.40 | `gemini-2.5-flash` | needs mild judgment; ~500 calls total |
@@ -109,11 +117,13 @@ openrouter.ai/models before each batch — prices move monthly.** The
 | T12 | TTS — English | Kokoro or Piper on VM / Gemini TTS free tier | $0 | ElevenLabs for hero voices | per plan step M-08 |
 | T12b | TTS — Hungarian | **Piper** (open source, has hu_HU voices; Kokoro has NO Hungarian; verify Gemini TTS hu support before relying on it) | $0 | paid TTS with confirmed hu (e.g. ElevenLabs/Azure) | gate: a 10s hu sample must pass a native listener (plan Q-04) |
 
-**Budget shape this produces:** T3 dominates volume but is free-tier-first;
-everything expensive (T4, T11) is low-volume. Full 5,000-page corpus:
-realistically **$0–5 total** if free tiers cooperate, **<$25** if you pay for
-everything. Decision rule when a free tier throttles you: waiting is free,
-paying ~$3 to finish tonight is also fine — pick by mood, both are correct.
+**Budget shape this produces:** T3/T3-R dominate volume but are free-tier-first;
+everything expensive (T4, T11) is low-volume. Historical whole-corpus dollar
+figures are planning examples, not a spending authorization: model prices,
+provider availability, tokenization and failure rates move. For the restricted
+extractor, the live catalog preflight and displayed conservative ceiling are
+the only valid estimate for the next run. For other tasks, sample first and
+record measured input/output tokens before projecting a batch.
 
 **OpenRouter mechanics:** pin exact, fully-suffixed model IDs in env vars
 (`KG_EXTRACT_MODEL=…` — check the live ID on openrouter.ai; e.g. DeepSeek
@@ -145,8 +155,54 @@ the schedule assume uncapped free throughput.
 | Fortepan | JPEG + metadata API | DIRECT (media) | — | none; optional P9 caption pass |
 | Postcards | JPEG + catalog metadata | DIRECT (media) | T2 only if the card back has text worth reading | — |
 | Old maps | TIFF/JPEG scans | media only | — | none (georeferencing is manual, plan M-16) |
+| MAPIRE / Budapest Time Machine (Arcanum + BFL) | georeferenced map tiles (WMTS) + plot/house person data | **BLOCKED — RED**; negotiate access (see [licensing.md](licensing.md#budapest-time-machine--mapire--partnership-target-red)) | — | none until licensed; own scans → manual georef |
 | Europeana | API JSON + files | DIRECT + per-file | per rights | P1 for text records |
 | műemlékem.hu | HTML | TEXT | — | P1 |
+
+### 3.1 Next monograph runbook
+
+Use this sequence for every new book, including an open MEK monograph. The
+restricted CLI name describes its private staging boundary; it does not grant
+or imply any rights to the input.
+
+1. **Register the edition.** Record title, author/editor, edition/volume,
+   item page, exact file URL, SHA-256, bytes, retrieval time, license,
+   verdict, attribution and evidence URL. Multi-volume works get one file
+   record per volume.
+2. **Choose a stable slug.** The same slug must identify the page-text file,
+   extraction JSONL and `kg_sources` row. Never reuse a slug for a different
+   edition.
+3. **Test representative pages locally.** Include front matter, ordinary
+   prose, a dense page/table and a scan with poor OCR. Prefer text-layer or
+   local OCR when its sample is usable.
+4. **Price without extracting** from `talesofbudapest-backend/`:
+
+   ```bash
+   npm run check:openrouter-models
+   npm run extract:restricted:deep -- \
+     --source <slug> --from-page <n> --limit 5 --preflight-only
+   ```
+
+   The first command verifies that the configured IDs still exist and that
+   the expected free rung has not become paid. The second uses live catalog
+   prices and reserves every ladder rung for every selected window.
+5. **Run only the same five-window sample.** Remove `--preflight-only`, keep
+   `--limit 5`, and inspect schema validity, evidence alignment, English
+   translations, relation density and failures. A cheap invalid result is not
+   a successful bargain.
+6. **Scale in bounded batches.** Increase `--limit` only after the sample
+   passes. Keep the default `$1` ceiling unless a reviewed preflight justifies
+   an explicit lower/higher `--max-cost-usd`. Never use
+   `--confirm-full-book` as a convenience flag.
+7. **Load privately and reconcile counts.** Pages/windows attempted,
+   successful/failed JSONL records and staged entity/relation counts must be
+   explainable before resolution or promotion.
+8. **Publish separately.** A human rights/review decision, not the extractor,
+   controls movement across the public boundary.
+
+For exact ladder order, cache assumptions, ceiling math and incident-safe
+commands, [OPENROUTER.md](OPENROUTER.md) is authoritative. This document is
+authoritative for file/page paths and prompt behavior.
 
 ---
 
@@ -238,6 +294,54 @@ Implementation notes: validate against a JSON Schema; on failure retry once
 with the validator error appended ("Your previous output failed validation:
 {error}. Return corrected JSON only."). Two failures → mark page `failed`,
 move on; failures re-queue for the escalation model at week's end.
+
+### Prompt P1-R — restricted-book CLI (`cli/extract-restricted-book.js`)
+
+Restricted books (currently `jewish-budapest`) don't go through the generic
+Prompt P1 pipeline — they run through a standalone CLI,
+`npm run extract:restricted:deep -- --source <id>` (`--source` defaults to
+`jewish-budapest` and derives both the input page-text path and the output
+JSONL path, so the same CLI handles any restricted book). The current
+cheap-first ladder is `qwen/qwen3-coder:free` →
+`deepseek/deepseek-v4-flash` → `google/gemini-2.5-flash-lite` (override with
+`KG_RESTRICTED_EXTRACT_MODEL`). `load-restricted-kg.js` now
+validates records by payload shape rather than gating on a Qwen model name,
+so it accepts prompt_version `restricted-book-entities-p1`, `-p2`, and the
+current `-p3`.
+
+P1-R follows P1's hard rules (extract only what's stated, empty arrays are
+correct, never sharpen vague dates, verbatim quotes) with two differences
+from the P1 schema above:
+
+- **Source-language fidelity.** Locations and people record both the
+  as-written text and an English gloss: `source_name`/`address_source`
+  (verbatim, historical spellings kept) alongside `name_en`/`address_en`.
+  People also carry `partial_name: true` when only a surname is given —
+  never invent or complete a name from a surname alone.
+- **`facts[]` is a new top-level array**, distinct from `events`/`relations`:
+  each fact has `location_source_name`, `text_en`, `year`/`year_approx`,
+  `category`, `interestingness` (1-5, same tourist-gasp scale as P1's
+  `facts.interestingness`), `confidence` (1.0/0.7/0.5, same scale as P1's
+  5b), and `evidence: {quote}` — one short verbatim source-language sentence.
+
+**Format history — evidence and caps.** The `-p2` revision dropped the
+per-array cap and required bilingual evidence (`{quote_source, quote_en}`) on
+every item. On dense pages this tripled output length and truncated the JSON
+mid-object (all-or-nothing loss), giving a ~75% failure rate. `-p3` reverted
+to a per-array cap, now conservatively set to **10 items**, and a
+**single-`quote` evidence object** — the English
+rendering was redundant since `text_en`/`statement_en`/`name_en` already carry
+it, so the quote only needs the verbatim source sentence for provenance. This
+cut the failure rate to ~23% (the residual failures are content-specific
+dense/tabular pages, not length). `max_tokens` is 5000, with one HTTP request
+per ladder rung. Before any extraction call, the CLI live-checks prices and
+refuses a conservative worst-case estimate above $1 by default.
+`prompt_version` is
+`restricted-book-entities-p3`, recorded on every JSONL line so downstream
+tooling and `docs/DECISIONS.md` can trace behavior back to the exact prompt.
+Output JSONL's `source` field is the source slug (e.g. `jewish-budapest`),
+not a fixed constant. The loader reads `evidence` schema-agnostically, so p1/
+p2/p3 all load without migration.
 
 ### Prompt P2 — vision OCR (task T2)
 
@@ -383,6 +487,37 @@ unless architectural/vehicle evidence makes it obvious; never invent
 street names. Photo metadata: {year}, {location_name}.
 ```
 
+### Geocoding (restricted-book locations, `cli/geocode-kg.js`)
+
+Not an extraction prompt — a deterministic lookup that feeds the entity
+resolver. `npm run geocode:kg -- --dry-run|--limit N|--input <jsonl>` reads
+unique staged location names/addresses out of a restricted book's extraction
+JSONL and geocodes each one, writing `<basename>.geocoded.json` next to the
+input. `cli/resolve-kg-locations.js --geocoded <path>` reads that file to
+attach coordinates to staged locations before scoring, which is what lets
+the distance <= 50m arm of the auto-link rule
+([KG_APP_SYSTEM.md](KG_APP_SYSTEM.md#entity-resolution)) fire — staged
+`kg_locations` carry no coordinates of their own otherwise.
+
+- **Provider:** free-tier Nominatim/OpenStreetMap (`nominatim.openstreetmap.org`),
+  not an LLM. Only place names/addresses are sent — never book text, quotes,
+  or citations.
+- **Policy constraints:** paced at least 1.1s between live requests (max
+  1 request/second per Nominatim's usage policy), identifying `User-Agent`
+  built from `NOMINATIM_CONTACT_EMAIL`, and results are cached persistently
+  at `ingest/corpus/restricted/experiments/geocode.cache.json` so a query is
+  never repeated against the live API.
+- **Budapest bias:** requests are scoped to a Budapest viewbox and
+  `countrycodes=hu`.
+- **Hungarian<->English retry:** a zero-result query gets one retry with a
+  single generic term swapped (street<->utca, square<->tér,
+  synagogue<->zsinagóga, cemetery<->temető, and similar).
+- **Precision guard:** city/administrative-level results are rejected when
+  the query was street-level (named a specific address or building), so a
+  vague match can't silently satisfy the 50m rule.
+- **Known gap:** historical street names that no longer exist won't geocode
+  — those locations rely on the name/alias-matching auto-link arm instead.
+
 ---
 
 ## 5. Quality gates and the escalation ladder
@@ -417,7 +552,8 @@ it takes minutes and catches silent regressions.
 - Average facts-per-page suddenly 2× up or down vs the source's trailing
   average → alert (prompt drift or a garbage batch).
 - P7 audit sample: any `unsupported` verdict → the offending fact is
-  auto-quarantined (status flag), reviewed in /admin/kg.
+  auto-quarantined (status flag), reviewed in the separate admin app's
+  `/reviews` queue.
 
 ---
 

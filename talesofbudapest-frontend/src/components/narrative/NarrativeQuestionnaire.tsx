@@ -51,6 +51,23 @@ const pillStyle = (index: number): CSSProperties => {
   }
 }
 
+const QuestionnaireWaveSeparator = () => (
+  <div className="q-wave-container" aria-hidden="true">
+    <svg viewBox="0 0 1440 120" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+      <path
+        d="M0 0H1440V40C1320 85 1080 85 960 40C840 -5 600 -5 480 40C360 85 120 85 0 40V0Z"
+        fill="#E1F3FD"
+      />
+      <path
+        d="M0 40C120 85 360 85 480 40C600 -5 840 -5 960 40C1080 85 1320 85 1440 40"
+        stroke="#0D47A1"
+        strokeWidth={6}
+        strokeLinecap="round"
+      />
+    </svg>
+  </div>
+)
+
 export const NarrativeQuestionnaire = ({
   isOpen,
   onClose,
@@ -206,46 +223,59 @@ export const NarrativeQuestionnaire = ({
 
       <div className="flex-1 overflow-y-auto px-5 pt-6">
         {step === 'style' && (
-          <div key="style" className="q-bubble-in mx-auto flex max-w-md flex-col items-center gap-7">
-            <QuickStartTourCarousel
-              label={t('quickStart')}
-              tours={CURATED_STARTERS}
-              onSelect={(slug) => {
-                const starter = CURATED_STARTERS.find((item) => item.slug === slug)
-                if (starter) {
-                  handleCuratedSelect(starter)
-                }
-              }}
-            />
-
-            <div className="text-center">
-              <h2 className="text-2xl font-bold tracking-tight text-on-surface">
-                {t('styleQuestion')}
-              </h2>
-              <p className="mt-1.5 text-sm text-on-surface/50">{t('styleHelper')}</p>
+          <div
+            key="style"
+            className="q-bubble-in -mx-5 flex flex-col bg-[var(--color-ai-chat-bg)]"
+          >
+            <div className="q-top-section">
+              <div className="mx-auto max-w-md">
+                <QuickStartTourCarousel
+                  label={t('quickStart')}
+                  tours={CURATED_STARTERS}
+                  onSelect={(slug) => {
+                    const starter = CURATED_STARTERS.find((item) => item.slug === slug)
+                    if (starter) {
+                      handleCuratedSelect(starter)
+                    }
+                  }}
+                />
+              </div>
             </div>
 
-            <div className="flex w-full flex-col gap-3">
-              {TOUR_STYLES.map((item, index) => {
-                const Icon = item.icon
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => handleStyleSelect(item)}
-                    style={pillStyle(index)}
-                    className="q-option-in flex w-full items-center gap-3 rounded-2xl px-5 py-4 text-left text-white transition active:scale-[0.98]"
-                  >
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/20">
-                      <Icon className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block text-base font-bold leading-tight">{item.label}</span>
-                      <span className="block text-xs text-white/75">{item.blurb}</span>
-                    </span>
-                  </button>
-                )
-              })}
+            <QuestionnaireWaveSeparator />
+
+            <div className="q-bottom-section">
+              <div className="mx-auto flex max-w-md flex-col items-center gap-7">
+                <div className="text-center">
+                  <h2 className="text-2xl font-bold tracking-tight text-on-surface">
+                    {t('styleQuestion')}
+                  </h2>
+                  <p className="mt-1.5 text-sm text-on-surface/50">{t('styleHelper')}</p>
+                </div>
+
+                <div className="flex w-full flex-col gap-3">
+                  {TOUR_STYLES.map((item, index) => {
+                    const Icon = item.icon
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => handleStyleSelect(item)}
+                        style={pillStyle(index)}
+                        className="q-option-in flex w-full items-center gap-3 rounded-2xl px-5 py-4 text-left text-white transition active:scale-[0.98]"
+                      >
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/20">
+                          <Icon className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-base font-bold leading-tight">{item.label}</span>
+                          <span className="block text-xs text-white/75">{item.blurb}</span>
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         )}
