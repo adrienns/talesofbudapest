@@ -5,17 +5,39 @@
   "description": "Monorepo for Tales of Budapest audio tour app",
   "workspaces": [
     "talesofbudapest-backend",
-    "talesofbudapest-frontend"
+    "talesofbudapest-frontend",
+    "talesofbudapest-admin",
+    "ingest"
   ],
   "scripts": {
     "dev:backend": "npm run dev --workspace=talesofbudapest-backend",
     "dev:frontend": "npm run dev --workspace=talesofbudapest-frontend",
+    "dev:admin": "npm run dev --workspace=talesofbudapest-admin",
+    "build:admin": "npm run build --workspace=talesofbudapest-admin",
+    "start:admin": "npm run start --workspace=talesofbudapest-admin",
+    "test:admin": "npm run test --workspace=talesofbudapest-admin",
+    "typecheck:admin": "npm run typecheck --workspace=talesofbudapest-admin",
     "seed": "npm run seed --workspace=talesofbudapest-backend",
     "generate:story": "npm run generate:story --workspace=talesofbudapest-backend",
     "generate:audio": "npm run generate:audio --workspace=talesofbudapest-backend",
     "generate:audio:all": "npm run generate:audio:all --workspace=talesofbudapest-backend",
     "db:migrate": "npm run db:migrate --workspace=talesofbudapest-backend",
-    "setup": "npm run setup --workspace=talesofbudapest-backend"
+    "setup": "npm run setup --workspace=talesofbudapest-backend",
+    "scrape:budapest100": "npm run scrape -w ingest --",
+    "ingest:wikipedia": "npm run ingest:wikipedia -w ingest --",
+    "ingest:muemlekem": "npm run ingest:muemlekem -w ingest --",
+    "fetch:mek": "npm run fetch:mek -w ingest --",
+    "extract:mek": "npm run extract:mek --workspace=talesofbudapest-backend --",
+    "extract:mek:deep": "npm run extract:mek:deep --workspace=talesofbudapest-backend --",
+    "extract:restricted:deep": "npm run extract:restricted:deep --workspace=talesofbudapest-backend --",
+    "load:mek:kg": "npm run load:mek:kg --workspace=talesofbudapest-backend",
+    "load:restricted:kg": "npm run load:restricted:kg --workspace=talesofbudapest-backend --",
+    "embed:kg": "npm run embed:kg --workspace=talesofbudapest-backend --",
+    "promote:kg-location": "npm run promote:kg-location --workspace=talesofbudapest-backend --",
+    "poll:open-wikidata": "npm run poll:open-wikidata -w ingest --",
+    "poll:open-commons": "npm run poll:open-commons -w ingest --",
+    "load:landmarks": "npm run load -w ingest --",
+    "fix:service-key": "node infra/scripts/fix-service-role-key.mjs"
   },
   "license": "ISC",
   "devDependencies": {
