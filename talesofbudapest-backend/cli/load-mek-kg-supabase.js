@@ -2,10 +2,11 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import dotenv from 'dotenv';
+import { loadCliEnv } from './_shared/loadEnv.js';
+import { requireSupabaseEnv, createRestClient } from './_shared/supabaseRest.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.join(__dirname, '../.env') });
+loadCliEnv(import.meta.url);
 
 const SOURCE_ID = 'MEK-15124';
 const VOLUME = 'volume-1';
@@ -38,27 +39,9 @@ const personSubjectPredicates = new Set(['was_editor_in_chief_of', 'advocated_fo
 const personObjectPredicates = new Set(['commemorated_by', 'flourished_under', 'developed_due_to', 'erected_statue_for', 'is_commemorated_by', 'will_be_commemorated_by']);
 const looksLikePerson = (name) => /^(?:(?:King|Queen|Palatine|Count|Baron|Saint|Pope|Prince|Princess)\s+)?[A-ZÁÉÍÓÖŐÚÜŰ][\p{L}'’-]+(?:[ -][A-ZÁÉÍÓÖŐÚÜŰ][\p{L}'’-]+)+$/u.test(name);
 
-const rest = async (baseUrl, serviceKey, table, method, body, params = {}, representation = true) => {
-  const url = new URL(`/rest/v1/${table}`, baseUrl);
-  for (const [name, value] of Object.entries(params)) url.searchParams.set(name, value);
-  const response = await fetch(url, {
-    method,
-    headers: {
-      apikey: serviceKey,
-      Authorization: `Bearer ${serviceKey}`,
-      'Content-Type': 'application/json',
-      Prefer: representation ? 'resolution=merge-duplicates,return=representation' : 'resolution=merge-duplicates,return=minimal',
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  if (!response.ok) throw new Error(`${table}: ${response.status} ${await response.text()}`);
-  return representation ? response.json() : [];
-};
-
 const main = async () => {
-  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
-  }
+  const { baseUrl, serviceKey } = requireSupabaseEnv();
+  const { restLegacy } = createRestClient(baseUrl, serviceKey);
   const [pageText, extractionText] = await Promise.all([fs.readFile(PAGES_FILE, 'utf8'), fs.readFile(EXTRACTIONS_FILE, 'utf8')]);
   const allPages = pages(pageText);
   const extracted = records(extractionText);
@@ -66,10 +49,8 @@ const main = async () => {
     throw new Error(`Expected a complete book, found only ${allPages.length} text-bearing pages`);
   }
 
-  const dbUrl = process.env.SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const upsert = (table, rows, onConflict) => rest(dbUrl, serviceKey, table, 'POST', rows, { on_conflict: onConflict });
-  const updateIn = (table, column, values, patch) => rest(dbUrl, serviceKey, table, 'PATCH', patch, { [column]: `in.(${values.join(',')})` }, false);
+  const upsert = (table, rows, onConflict) => restLegacy(table, 'POST', rows, { on_conflict: onConflict });
+  const updateIn = (table, column, values, patch) => restLegacy(table, 'PATCH', patch, { [column]: `in.(${values.join(',')})` }, false);
   const totals = { pages: allPages.length, mentions: 0, locations: 0, people: 0, events: 0, facts: 0, relations: 0 };
 
   await upsert('kg_sources', source, 'id');
