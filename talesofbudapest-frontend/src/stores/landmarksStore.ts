@@ -1,11 +1,9 @@
 import { create } from 'zustand'
-import { mockLandmarks } from '@/data/mockLandmarks'
-import { getAllLandmarks } from '@/services/repositories/landmarksRepository'
-import { isSupabaseConfigured } from '@/services/supabase'
-import type { Landmark } from '@/types'
+import { getAllMapPins } from '@/services/repositories/landmarksRepository'
+import type { MapPin } from '@/types/landmark'
 
 type LandmarksState = {
-  landmarks: Landmark[]
+  landmarks: MapPin[]
   isLoading: boolean
   error: string | null
   fetchLandmarks: () => Promise<void>
@@ -19,13 +17,8 @@ export const useLandmarksStore = create<LandmarksState>((set) => ({
   fetchLandmarks: async () => {
     set({ isLoading: true, error: null })
 
-    if (process.env.NEXT_PUBLIC_USE_MOCKS === 'true' || !isSupabaseConfigured()) {
-      set({ landmarks: mockLandmarks, isLoading: false })
-      return
-    }
-
     try {
-      const data = await getAllLandmarks()
+      const data = await getAllMapPins()
       set({ landmarks: data, isLoading: false })
     } catch (loadError) {
       set({
