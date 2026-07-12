@@ -8,7 +8,8 @@ Next.js (App Router) + TypeScript + Tailwind CSS mobile-first map app.
 src/
 ├── app/                         # Next.js routes only
 ├── features/
-│   └── landmarks/hooks/         # feature hooks
+│   ├── landmarks/hooks/         # map, audio, chronicle hooks
+│   └── narrative/hooks/         # tour planning & generation hooks
 ├── stores/                      # Zustand global state
 ├── components/
 │   ├── map/                     # web-only (Leaflet)
@@ -18,7 +19,13 @@ src/
 ├── styles/                        # design system
 │   ├── tokens.css               # CSS custom properties
 │   ├── theme.css                # Tailwind v4 @theme mapping
-│   └── typography.css           # headline, body, label scale
+│   ├── typography.css           # headline, body, label scale
+│   ├── map-markers.css          # Leaflet pin styles
+│   ├── glass.css                # glassmorphism surfaces
+│   ├── bottom-nav.css           # floating nav capsule
+│   ├── audio-player.css         # scrubbers, CTA glow
+│   ├── ai-orb.css               # AI orb animations
+│   └── narrative.css            # questionnaire, marquee, overlays
 ├── constants/
 │   ├── designTokens.ts          # TS mirror of color/typography tokens
 │   └── map.ts                   # map center, zoom, tile URLs
@@ -42,7 +49,7 @@ Follow [.github/skills/react-best-practices/SKILL.md](../.github/skills/react-be
 From the monorepo root:
 
 ```bash
-cp frontend/.env.local.example frontend/.env.local
+cp talesofbudapest-frontend/.env.local.example talesofbudapest-frontend/.env.local
 npm run dev:frontend
 ```
 
@@ -51,4 +58,3 @@ Open [http://localhost:3000](http://localhost:3000).
 ## Data source
 
 - **Production/dev with Supabase**: set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- **Offline dev**: set `NEXT_PUBLIC_USE_MOCKS=true`
