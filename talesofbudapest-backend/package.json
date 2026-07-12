@@ -13,7 +13,11 @@
     "setup": "node setup.js",
     "extract:mek": "node cli/extract-mek.js",
     "extract:mek:deep": "node cli/extract-mek-deep.js",
-    "load:mek:kg": "node cli/load-mek-kg-supabase.js"
+    "load:mek:kg": "node cli/load-mek-kg-supabase.js",
+    "test": "node --test lib/",
+    "test:audio": "node --test lib/sourceHighlights.test.js lib/prepareSpeechText.test.js lib/audioVariantKey.test.js lib/ttsChunking.test.js lib/entityLocaleNames.test.js",
+    "test:kg-promotion": "node --test lib/kgPromotion.test.js",
+    "test:narrative": "node --test lib/narrativeParsing.test.js"
   },
   "keywords": [],
   "author": "",
