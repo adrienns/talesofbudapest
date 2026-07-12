@@ -19,7 +19,7 @@ export const LandmarkImageGallery = ({
 
   return (
     <div
-      className="flex gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-hide"
       role="list"
       aria-label="Landmark photo gallery"
     >
@@ -44,7 +44,7 @@ export const LandmarkImageGallery = ({
             <img
               src={image.url}
               alt={image.alt ?? ''}
-              className="h-full w-full object-cover grayscale"
+              className="h-full w-full object-cover"
             />
           </button>
         )

@@ -2,7 +2,8 @@
 
 import { BookOpen, Home, Library, Settings } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { NAV_TABS } from '@/constants/navigation'
+import { useTranslations } from 'next-intl'
+import { NAV_TAB_IDS } from '@/constants/navigation'
 import type { BottomNavProps, NavTabId } from '@/types/navigation'
 
 const NAV_ICONS: Record<NavTabId, LucideIcon> = {
@@ -12,54 +13,66 @@ const NAV_ICONS: Record<NavTabId, LucideIcon> = {
   settings: Settings,
 }
 
+const NAV_LABEL_KEYS: Record<NavTabId, 'home' | 'narrative' | 'archives' | 'settings'> = {
+  map: 'home',
+  narrative: 'narrative',
+  archives: 'archives',
+  settings: 'settings',
+}
+
 export const BottomNav = ({
   activeTab,
   onTabChange,
   onAiGuideClick,
   className = '',
-}: BottomNavProps) => (
-  <div
-    className={`pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] ${className}`}
-  >
-    <nav
-      role="tablist"
-      aria-label="Main navigation"
-      className="bottom-nav-capsule pointer-events-auto flex items-center gap-2 px-3 py-2"
+}: BottomNavProps) => {
+  const t = useTranslations('nav')
+
+  return (
+    <div
+      className={`pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] ${className}`}
     >
-      {NAV_TABS.map(({ id, label }) => {
-        const Icon = NAV_ICONS[id]
-        const isActive = activeTab === id
+      <nav
+        role="tablist"
+        aria-label={t('mainNavigation')}
+        className="bottom-nav-capsule pointer-events-auto flex items-center gap-2 px-3 py-2"
+      >
+        {NAV_TAB_IDS.map((id) => {
+          const Icon = NAV_ICONS[id]
+          const isActive = activeTab === id
+          const label = t(NAV_LABEL_KEYS[id])
 
-        return (
+          return (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              aria-label={label}
+              aria-current={isActive ? 'page' : undefined}
+              onClick={() => onTabChange(id)}
+              className={`bottom-nav-btn flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all duration-200 active:scale-95 ${
+                isActive ? 'terracotta-glow-btn' : 'bottom-nav-btn--inactive'
+              }`}
+            >
+              <Icon className="h-5 w-5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+            </button>
+          )
+        })}
+
+        {onAiGuideClick && (
           <button
-            key={id}
             type="button"
-            role="tab"
-            aria-selected={isActive}
-            aria-label={label}
-            aria-current={isActive ? 'page' : undefined}
-            onClick={() => onTabChange(id)}
-            className={`bottom-nav-btn flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all duration-200 active:scale-95 ${
-              isActive ? 'terracotta-glow-btn' : 'bottom-nav-btn--inactive'
-            }`}
+            onClick={onAiGuideClick}
+            aria-label={t('openAiGuide')}
+            className="bottom-nav-ai-btn flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition active:scale-95"
           >
-            <Icon className="h-5 w-5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+            <span className="bottom-nav-ai-n" aria-hidden="true">
+              N
+            </span>
           </button>
-        )
-      })}
-
-      {onAiGuideClick && (
-        <button
-          type="button"
-          onClick={onAiGuideClick}
-          aria-label="Open AI guide"
-          className="bottom-nav-ai-btn flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition active:scale-95"
-        >
-          <span className="bottom-nav-ai-n" aria-hidden="true">
-            N
-          </span>
-        </button>
-      )}
-    </nav>
-  </div>
-)
+        )}
+      </nav>
+    </div>
+  )
+}

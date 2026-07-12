@@ -1,72 +1,208 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { MiniPlayerControls } from '@/components/ui/MiniPlayerControls'
-import { NARRATIVE_ARCHIVE_LABEL } from '@/constants/audio'
-import { useAudioPlayer } from '@/features/landmarks/hooks/useAudioPlayer'
+import { useCallback, useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
+import { SwipeableTourSheet } from '@/components/ui/SwipeableTourSheet'
+import { TourSheetCollapsed } from '@/components/ui/tour-sheet/TourSheetCollapsed'
+import { TourSheetExpanded } from '@/components/ui/tour-sheet/TourSheetExpanded'
+import { usePlaybackAudio } from '@/features/landmarks/hooks/usePlaybackAudio'
+import { buildLandmarkMeta, buildTourChapterMeta } from '@/lib/narrative/tourSheetMeta'
+import type { NarrativeRoute } from '@/types/narrative'
 import type { PlaybackItem } from '@/types/narrative'
+import type { SheetSnap } from '@/types/tourSheet'
 
 type AudioDrawerProps = {
   playbackItem: PlaybackItem | null
   routeTitle?: string | null
   chapterIndex?: number
+  activeRoute?: NarrativeRoute | null
+  enableOnDemandAudio?: boolean
+  onLandmarkAudioReady?: (audioUrl: string) => void
   onSkipBack?: () => void
   onSkipForward?: () => void
   readyGlow?: boolean
+  chronicleLocationId?: string | null
+  snap?: SheetSnap
+  onSnapChange?: (snap: SheetSnap) => void
 }
-
-const formatChapterLabel = (index: number) => `• CH. ${String(index + 1).padStart(2, '0')}`
 
 export const AudioDrawer = ({
   playbackItem,
   routeTitle,
   chapterIndex = 0,
+  activeRoute = null,
+  enableOnDemandAudio = false,
+  onLandmarkAudioReady,
   onSkipBack,
   onSkipForward,
   readyGlow = false,
+  chronicleLocationId = null,
+  snap: controlledSnap,
+  onSnapChange,
 }: AudioDrawerProps) => {
-  const [coverUrl, setCoverUrl] = useState<string | null>(null)
+  const t = useTranslations('player')
+  const [internalSnap, setInternalSnap] = useState<SheetSnap>('collapsed')
+  const snap = controlledSnap ?? internalSnap
+
+  const setSnap = useCallback(
+    (next: SheetSnap) => {
+      onSnapChange?.(next)
+      if (controlledSnap === undefined) {
+        setInternalSnap(next)
+      }
+    },
+    [controlledSnap, onSnapChange],
+  )
 
   useEffect(() => {
-    setCoverUrl(null)
-  }, [playbackItem?.id])
+    if (controlledSnap !== undefined) {
+      return
+    }
+    setInternalSnap('collapsed')
+  }, [controlledSnap, playbackItem?.id])
 
-  const { isPlaying, currentTime, duration, hasAudio, togglePlayPause, seek } =
-    useAudioPlayer(playbackItem?.audioUrl ?? null)
+  const handleAudioReady = useCallback(
+    (audioUrl: string) => {
+      onLandmarkAudioReady?.(audioUrl)
+    },
+    [onLandmarkAudioReady],
+  )
+
+  const {
+    isPlaying,
+    currentTime,
+    duration,
+    hasAudio,
+    isGenerating,
+    generateError,
+    canRequestAudio,
+    script,
+    audioUrl,
+    historyDepth,
+    togglePlayPause,
+    seek,
+  } = usePlaybackAudio(playbackItem?.audioUrl ?? null, playbackItem?.id ?? null, {
+    enableOnDemand: enableOnDemandAudio,
+    initialScript: playbackItem?.script ?? null,
+    onAudioReady: handleAudioReady,
+  })
+
+  const displayImageUrl = playbackItem?.imageUrl ?? null
+  const displayTitle = routeTitle
+    ? `${routeTitle}: ${t('chapter', { number: chapterIndex + 1 })}`
+    : playbackItem?.title ?? ''
+
+  const handleShare = useCallback(() => {
+    if (typeof navigator === 'undefined') {
+      return
+    }
+
+    const shareData = {
+      title: displayTitle,
+      text: displayTitle,
+      url: typeof window !== 'undefined' ? window.location.href : undefined,
+    }
+
+    if (navigator.share) {
+      navigator.share(shareData).catch(() => {})
+      return
+    }
+
+    if (navigator.clipboard && shareData.url) {
+      navigator.clipboard.writeText(shareData.url).catch(() => {})
+    }
+  }, [displayTitle])
+
+  const handleDownload = useCallback(async () => {
+    if (!audioUrl) {
+      return
+    }
+
+    const fileName = `${displayTitle.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '') || 'audio-tour'}.mp3`
+
+    try {
+      const response = await fetch(audioUrl)
+      const blob = await response.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = objectUrl
+      anchor.download = fileName
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(objectUrl)
+    } catch {
+      window.open(audioUrl, '_blank', 'noopener')
+    }
+  }, [audioUrl, displayTitle])
 
   if (!playbackItem) {
     return null
   }
 
-  const displayImageUrl = coverUrl ?? playbackItem.imageUrl
-  const displayTitle = routeTitle
-    ? `${routeTitle}: Chapter ${chapterIndex + 1}`
-    : playbackItem.title
+  const chapterLabel =
+    playbackItem.chapterLabel ??
+    `• ${t('chapter', { number: String(chapterIndex + 1).padStart(2, '0') })}`
+  const subtitle = playbackItem.subtitle ?? t('narrativeArchive')
+  const imageAlt = playbackItem.imageAlt ?? playbackItem.title
+  const onShare = hasAudio || canRequestAudio ? handleShare : undefined
+  const onDownload = hasAudio ? handleDownload : undefined
+
+  const meta = activeRoute
+    ? buildTourChapterMeta(activeRoute, chapterIndex)
+    : buildLandmarkMeta(playbackItem.title)
+
+  const transportProps = {
+    isPlaying,
+    currentTime,
+    duration,
+    hasAudio,
+    isGenerating,
+    canRequestAudio,
+    generateError,
+    historyDepth,
+    onPlayPause: () => {
+      void togglePlayPause()
+    },
+    onSeek: seek,
+    onSkipBack,
+    onSkipForward,
+    readyGlow,
+  }
+
+  const mediaProps = {
+    title: displayTitle,
+    subtitle,
+    chapterLabel,
+    imageUrl: displayImageUrl,
+    imageAlt,
+    script,
+    meta,
+    onShare,
+    onDownload,
+  }
 
   return (
-    <aside
-      role="region"
-      aria-label="Now playing"
-      className="fixed inset-x-3 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-40 mx-auto max-w-lg transition-transform duration-300"
-    >
-      <div className="audio-card-glass relative overflow-hidden rounded-[1.375rem] px-4 py-3.5">
-        <MiniPlayerControls
-          title={displayTitle}
-          subtitle={playbackItem.subtitle ?? NARRATIVE_ARCHIVE_LABEL}
-          chapterLabel={playbackItem.chapterLabel ?? formatChapterLabel(chapterIndex)}
-          imageUrl={displayImageUrl}
-          imageAlt={playbackItem.imageAlt ?? playbackItem.title}
-          isPlaying={isPlaying}
-          currentTime={currentTime}
-          duration={duration}
-          hasAudio={hasAudio}
-          onPlayPause={togglePlayPause}
-          onSeek={seek}
-          onSkipBack={onSkipBack}
-          onSkipForward={onSkipForward}
-          readyGlow={readyGlow && hasAudio && !isPlaying}
+    <SwipeableTourSheet
+      snap={snap}
+      onSnapChange={setSnap}
+      hideBottomNav={snap === 'expanded'}
+      ariaLabel={t('nowPlaying')}
+      collapsed={
+        <TourSheetCollapsed
+          {...mediaProps}
+          {...transportProps}
+          onExpand={() => setSnap('expanded')}
         />
-      </div>
-    </aside>
+      }
+      expanded={
+        <TourSheetExpanded
+          {...mediaProps}
+          {...transportProps}
+          onCollapse={() => setSnap('collapsed')}
+          chronicleLocationId={chronicleLocationId}
+        />
+      }
+    />
   )
 }
