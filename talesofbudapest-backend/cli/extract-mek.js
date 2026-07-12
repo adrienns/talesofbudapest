@@ -104,6 +104,7 @@ const extractChunk = async ({ model, sourceTitle, chunk, maxTokens }) => {
   let retryError = '';
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     const completion = await createChatCompletion({
+      operation: 'kg.mek_extract',
       model,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },

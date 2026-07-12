@@ -57,6 +57,7 @@ const valid = (payload) => payload && ['locations', 'people', 'events', 'facts',
 const extract = async (window) => {
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     const completion = await createChatCompletion({
+      operation: 'kg.mek_deep_extract',
       model: MODEL,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },

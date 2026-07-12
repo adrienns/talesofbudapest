@@ -20,6 +20,7 @@ const generateTourScript = async () => {
 
   try {
     const chatCompletion = await createChatCompletion({
+      operation: 'demo.generate_story',
       messages: [
         {
           role: 'system',
