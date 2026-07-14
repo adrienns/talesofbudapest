@@ -35,6 +35,7 @@ Documentation for the monorepo: a Budapest audio-tour app with a map of landmark
 |-----|----------------|
 | [KG app system](KG_APP_SYSTEM.md) | Knowledge-graph → Chronicle system: data boundary, entity resolution, alias matching |
 | [Extraction pipeline](EXTRACTION_PIPELINE.md) | File intake, models, prompts (P1/P1-R/P2/P3), quality gates |
+| [Historical book knowledge extraction](HISTORICAL_BOOK_KNOWLEDGE_EXTRACTION.md) | Research, page experiment findings, and the decided evidence-first canonical-event architecture |
 | [Vector DB improvements](VECTOR_DB_IMPROVEMENTS.md) | Retrieval upgrades: enriched embeddings, hybrid search, era taxonomy, name matching |
 | [Decisions log](DECISIONS.md) | Dated record of prompt, model, and pipeline-behavior changes |
 | [OpenRouter](OPENROUTER.md) | Models, cost, prompt caching, the July 2026 cost incident, and the cost-control/health-check tooling |
