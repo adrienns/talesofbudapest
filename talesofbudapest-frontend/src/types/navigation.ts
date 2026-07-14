@@ -5,4 +5,5 @@ export type BottomNavProps = {
   onTabChange: (tab: NavTabId) => void
   onAiGuideClick?: () => void
   className?: string
+  variant?: 'default' | 'map'
 }

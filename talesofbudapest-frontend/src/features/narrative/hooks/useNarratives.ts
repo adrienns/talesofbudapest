@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useLocale } from 'next-intl'
 import { LAST_NARRATIVE_STORAGE_KEY, lastNarrativeChapterKey } from '@/constants/narrative'
 import { useNarrativeStore } from '@/stores/narrativeStore'
 import type { NarrativeRoute, NarrativeSummary } from '@/types/narrative'
@@ -19,6 +20,7 @@ const readStoredChapterIndex = (narrativeId: string): number => {
 }
 
 export const useNarratives = () => {
+  const locale = useLocale()
   const [narratives, setNarratives] = useState<NarrativeSummary[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -29,7 +31,7 @@ export const useNarratives = () => {
     setError(null)
 
     try {
-      const response = await fetch('/api/narratives')
+      const response = await fetch(`/api/narratives?locale=${locale}`)
       const payload = await response.json()
 
       if (!response.ok) {
@@ -42,11 +44,11 @@ export const useNarratives = () => {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [locale])
 
   const loadNarrativeById = useCallback(
     async (id: string, initialChapterIndex = 0) => {
-      const response = await fetch(`/api/narratives/${id}`)
+      const response = await fetch(`/api/narratives/${id}?locale=${locale}`)
       const payload = await response.json()
 
       if (!response.ok) {
@@ -57,6 +59,7 @@ export const useNarratives = () => {
         id: payload.id,
         title: payload.title,
         chapters: payload.chapters,
+        walkingRoute: payload.walkingRoute ?? null,
       }
 
       const safeIndex = Math.min(Math.max(initialChapterIndex, 0), route.chapters.length - 1)
@@ -66,7 +69,7 @@ export const useNarratives = () => {
 
       return route
     },
-    [setActiveRoute, setFlowState],
+    [locale, setActiveRoute, setFlowState],
   )
 
   /** Checks for an abandoned tour without loading it — powers the resume banner. */
@@ -77,7 +80,7 @@ export const useNarratives = () => {
     }
 
     try {
-      const response = await fetch(`/api/narratives/${lastId}`)
+      const response = await fetch(`/api/narratives/${lastId}?locale=${locale}`)
       const payload = await response.json()
 
       if (!response.ok || !payload?.chapters?.length) {
@@ -92,7 +95,7 @@ export const useNarratives = () => {
       localStorage.removeItem(LAST_NARRATIVE_STORAGE_KEY)
       return null
     }
-  }, [])
+  }, [locale])
 
   const resumeLastNarrative = useCallback(
     (peek: LastNarrativePeek) => loadNarrativeById(peek.id, peek.chapterIndex),

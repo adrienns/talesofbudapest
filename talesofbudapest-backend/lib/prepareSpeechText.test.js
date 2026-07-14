@@ -4,11 +4,12 @@ import { prepareSpeechText } from './prepareSpeechText.js';
 
 test('respells known Hungarian names for English TTS', () => {
   const { displayScript, speechText } = prepareSpeechText(
-    'Walk along Kazinczy Street toward the Dohány Synagogue.',
+    'Welcome to Budapest. Walk along Kazinczy Street toward the Dohány Synagogue.',
     'en',
   );
 
-  assert.equal(displayScript, 'Walk along Kazinczy Street toward the Dohány Synagogue.');
+  assert.equal(displayScript, 'Welcome to Budapest. Walk along Kazinczy Street toward the Dohány Synagogue.');
+  assert.match(speechText, /BOO-dah-pesht/);
   assert.match(speechText, /KAH-zin-tsee/);
   assert.match(speechText, /DOH-hahn/);
 });

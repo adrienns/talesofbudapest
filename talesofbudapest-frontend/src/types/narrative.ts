@@ -7,12 +7,21 @@ export type NarrativeChapter = {
   audioUrl: string | null
   imageUrl: string | null
   landmarkId?: string | null
+  script?: string | null
+}
+
+export type WalkingRoute = {
+  /** Leaflet coordinate order: [latitude, longitude]. */
+  geometry: [number, number][]
+  distanceMeters: number
+  durationSeconds: number
 }
 
 export type NarrativeRoute = {
   id: string
   title: string
   chapters: NarrativeChapter[]
+  walkingRoute?: WalkingRoute | null
 }
 
 export type NarrativeSummary = {
@@ -53,6 +62,7 @@ export type DraftNarrative = {
   userPrompt: string
   context: NarrativeContext
   chapters: DraftChapter[]
+  walkingRoute?: WalkingRoute | null
 }
 
 export type NarrativeFlowState =

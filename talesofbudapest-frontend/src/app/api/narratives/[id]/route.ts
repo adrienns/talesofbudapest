@@ -7,11 +7,13 @@ type RouteParams = {
   params: Promise<{ id: string }>
 }
 
-export const GET = async (_request: Request, { params }: RouteParams) => {
+export const GET = async (request: Request, { params }: RouteParams) => {
   try {
     const { id } = await params
     const supabase = getSupabaseRead()
-    const narrative = await fetchNarrativeById(supabase, id)
+    const localeParam = new URL(request.url).searchParams.get('locale')
+    const locale = localeParam === 'en' || localeParam === 'hu' ? localeParam : null
+    const narrative = await fetchNarrativeById(supabase, id, locale)
 
     if (!narrative) {
       return NextResponse.json({ error: 'Narrative not found' }, { status: 404 })

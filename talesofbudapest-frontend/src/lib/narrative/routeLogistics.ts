@@ -1,6 +1,7 @@
 /** Honest walking-tour logistics — real distance/time from stop coordinates, not a guess. */
 
 import { haversineKm, type GeoPoint } from '@/lib/geo/haversine'
+import type { WalkingRoute } from '@/types/narrative'
 
 export type { GeoPoint }
 export { haversineKm }
@@ -78,6 +79,7 @@ const estimateListeningMinutes = (chapter: LogisticsChapter): number => {
 export const computeRouteLogistics = <T extends LogisticsChapter>(
   orderedChapters: T[],
   start?: GeoPoint | null,
+  walkingRoute?: WalkingRoute | null,
 ): RouteLogistics => {
   let totalDistanceKm = 0
   let cursor: GeoPoint | null = start ?? null
@@ -93,7 +95,11 @@ export const computeRouteLogistics = <T extends LogisticsChapter>(
     (total, chapter) => total + estimateListeningMinutes(chapter),
     0,
   )
-  const walkingMinutes = (totalDistanceKm / WALK_KMH) * 60
+  const hasWalkingRoute = Boolean(walkingRoute && walkingRoute.distanceMeters > 0 && walkingRoute.durationSeconds > 0)
+  if (hasWalkingRoute) totalDistanceKm = walkingRoute!.distanceMeters / 1000
+  const walkingMinutes = hasWalkingRoute
+    ? walkingRoute!.durationSeconds / 60
+    : (totalDistanceKm / WALK_KMH) * 60
 
   return {
     totalDistanceKm,

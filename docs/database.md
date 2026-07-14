@@ -57,11 +57,14 @@ partial local-Docker helper; see the note below.
 | 018 | `017_kg_claim_era.sql` | Claim era column, index, and initial backfill |
 | 019 | `018_kg_alias_exact_match.sql` | Approved-alias exact lookup and alias provenance |
 | 020 | `019_kg_organisations_and_placeholders.sql` | Staged organisations and flagged relation-endpoint placeholders |
+| 021 | `020_narrative_walking_routes.sql` | Cached walking geometry, distance, and duration |
+| 022 | `021_curated_narratives.sql` | Stable slug, version, and locale identity for curated tours |
 
 `talesofbudapest-backend/migrate.js` lists every migration above, including
-019. `infra/scripts/migrate.sh` is currently a narrower local-Docker helper
-and stops after migration 014; it must not be used as evidence that a local
-database has the canonical KG migrations. For the complete sequence use:
+021. `infra/scripts/migrate.sh` is currently a narrower local-Docker helper:
+it applies migrations through 014 and then the narrative migrations 020–021,
+but skips the canonical KG migrations 015–019. It must not be used as evidence
+that a local database has the complete canonical KG schema. For that use:
 
 ```bash
 npm run db:migrate

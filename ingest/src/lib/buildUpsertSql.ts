@@ -17,13 +17,14 @@ export const buildUpsertSql = (seed: LandmarkSeed): string => {
 
   return `
 insert into public.locations (
-  source, external_id, landmark_type, name, latitude, longitude, story_prompt,
+  source, external_id, landmark_type, map_theme, name, latitude, longitude, story_prompt,
   source_material, history_depth, image_url, images
 )
 values (
   ${escapeLiteral(row.source)},
   ${escapeLiteral(row.external_id)},
   ${escapeLiteral(row.landmark_type)},
+  ${escapeLiteral(row.map_theme)},
   ${escapeLiteral(row.name)},
   ${row.latitude},
   ${row.longitude},
@@ -37,6 +38,7 @@ on conflict (name) do update set
   source = excluded.source,
   external_id = excluded.external_id,
   landmark_type = excluded.landmark_type,
+  map_theme = excluded.map_theme,
   latitude = excluded.latitude,
   longitude = excluded.longitude,
   story_prompt = excluded.story_prompt,

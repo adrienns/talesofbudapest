@@ -2,6 +2,8 @@ export type ImportanceTier = 'featured' | 'standard' | 'archive' | 'skip'
 
 export type LandmarkSource = 'budapest100' | 'muemlekem' | 'wikipedia' | 'iconic'
 
+export type MapTheme = 'history' | 'architecture'
+
 export type LandmarkImage = {
   url: string
   alt?: string
@@ -18,6 +20,7 @@ export type MapPin = {
   locale?: 'en' | 'hu'
   source?: LandmarkSource
   landmark_type?: string
+  map_theme?: MapTheme
   importance_tier?: ImportanceTier
   importance_score?: number | null
 }

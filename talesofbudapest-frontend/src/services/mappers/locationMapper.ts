@@ -1,6 +1,6 @@
 import type { Landmark, LandmarkImage, MapPin } from '@/types'
 import type { AppLocale } from '@/types/locale'
-import type { ImportanceTier, LandmarkSource } from '@/types/landmark'
+import type { ImportanceTier, LandmarkSource, MapTheme } from '@/types/landmark'
 import { audioTourFileSuffix, DEFAULT_LOCALE } from '@/types/locale'
 
 export type LocationTranslationRow = {
@@ -21,6 +21,7 @@ export type LocationRow = {
   images?: unknown
   source?: string | null
   landmark_type?: string | null
+  map_theme?: string | null
   importance_tier?: string | null
   importance_score?: number | null
   location_translations?: LocationTranslationRow[] | null
@@ -85,6 +86,7 @@ export type MapPinRow = {
   image_url?: string | null
   source?: string | null
   landmark_type?: string | null
+  map_theme?: string | null
   importance_tier?: string | null
   importance_score?: number | null
   location_translations?: Pick<LocationTranslationRow, 'locale' | 'name' | 'audio_url'>[] | null
@@ -105,6 +107,7 @@ export const mapLocationToMapPin = (row: MapPinRow, locale: AppLocale = DEFAULT_
     locale,
     source: (row.source as LandmarkSource | null) ?? undefined,
     landmark_type: row.landmark_type ?? undefined,
+    map_theme: (row.map_theme as MapTheme | null) ?? undefined,
     importance_tier: (row.importance_tier as ImportanceTier | null) ?? undefined,
     importance_score: row.importance_score ?? undefined,
   }

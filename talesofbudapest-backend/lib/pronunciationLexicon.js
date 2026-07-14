@@ -3,6 +3,7 @@
  * Applied at TTS time; display scripts keep proper orthography.
  */
 export const PRONUNCIATION_LEXICON = {
+  Budapest: 'BOO-dah-pesht',
   'Széchenyi': 'SEH-cheh-nee',
   Szechenyi: 'SEH-cheh-nee',
   Kazinczy: 'KAH-zin-tsee',

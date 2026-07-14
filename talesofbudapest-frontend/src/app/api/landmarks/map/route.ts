@@ -13,6 +13,7 @@ const MAP_PIN_SELECT = `
   image_url,
   source,
   landmark_type,
+  map_theme,
   importance_tier,
   importance_score,
   location_translations (locale, name, audio_url)

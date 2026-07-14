@@ -42,5 +42,28 @@ export const useGenerateNarrative = () => {
     [setActiveRoute, setError, setFlowState],
   )
 
-  return { generateNarrative }
+  const loadCuratedTour = useCallback(
+    async (slug: string, locale: 'en' | 'hu') => {
+      setFlowState('generating')
+      setError(null)
+      try {
+        const response = await fetch(`/api/curated-tours/${encodeURIComponent(slug)}?locale=${locale}`)
+        const payload = await response.json()
+        if (!response.ok) throw new Error(payload.error ?? 'Failed to load curated tour')
+        const route = payload as NarrativeRoute
+        setActiveRoute(route)
+        setFlowState('ready')
+        localStorage.setItem(LAST_NARRATIVE_STORAGE_KEY, route.id)
+        return route
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to load curated tour'
+        setError(message)
+        setFlowState('error')
+        throw error
+      }
+    },
+    [setActiveRoute, setError, setFlowState],
+  )
+
+  return { generateNarrative, loadCuratedTour }
 }

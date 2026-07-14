@@ -1,4 +1,22 @@
 /** Cache lookup by exact prompt text — powers instant repeat-taps on curated starters. */
+const mapWalkingRoute = (narrative) => narrative.walking_geometry?.length > 1 ? {
+  geometry: narrative.walking_geometry,
+  distanceMeters: narrative.walking_distance_meters ?? 0,
+  durationSeconds: narrative.walking_duration_seconds ?? 0,
+} : null;
+
+const mapChapter = (row) => ({
+  id: row.id,
+  chapterIndex: row.chapter_index,
+  title: row.title,
+  lat: row.lat,
+  lng: row.lng,
+  script: row.script ?? null,
+  audioUrl: row.audio_url,
+  imageUrl: row.image_url,
+  landmarkId: row.landmark_id,
+});
+
 export const findNarrativeByPrompt = async (supabase, userPrompt) => {
   const { data: narrative, error: narrativeError } = await supabase
     .from('narratives')
@@ -33,20 +51,12 @@ export const findNarrativeByPrompt = async (supabase, userPrompt) => {
   return {
     id: narrative.id,
     title: narrative.title,
-    chapters: chapters.map((row) => ({
-      id: row.id,
-      chapterIndex: row.chapter_index,
-      title: row.title,
-      lat: row.lat,
-      lng: row.lng,
-      audioUrl: row.audio_url,
-      imageUrl: row.image_url,
-      landmarkId: row.landmark_id,
-    })),
+    walkingRoute: mapWalkingRoute(narrative),
+    chapters: chapters.map(mapChapter),
   };
 };
 
-export const fetchNarrativeById = async (supabase, id) => {
+export const fetchNarrativeById = async (supabase, id, requestedLocale = null) => {
   const { data: narrative, error: narrativeError } = await supabase
     .from('narratives')
     .select('*')
@@ -58,6 +68,11 @@ export const fetchNarrativeById = async (supabase, id) => {
   }
 
   if (!narrative) {
+    return null;
+  }
+
+  const narrativeLocale = narrative.locale ?? narrative.context?.locale ?? null;
+  if (requestedLocale && narrativeLocale && narrativeLocale !== requestedLocale) {
     return null;
   }
 
@@ -76,30 +91,43 @@ export const fetchNarrativeById = async (supabase, id) => {
     title: narrative.title,
     userPrompt: narrative.user_prompt,
     createdAt: narrative.created_at,
-    chapters: (chapters ?? []).map((row) => ({
-      id: row.id,
-      chapterIndex: row.chapter_index,
-      title: row.title,
-      lat: row.lat,
-      lng: row.lng,
-      audioUrl: row.audio_url,
-      imageUrl: row.image_url,
-      landmarkId: row.landmark_id,
-    })),
+    locale: narrativeLocale,
+    walkingRoute: mapWalkingRoute(narrative),
+    chapters: (chapters ?? []).map(mapChapter),
   };
 };
 
-export const fetchAllNarratives = async (supabase) => {
+export const fetchCuratedNarrative = async (supabase, { slug, version, locale }) => {
+  const { data: narrative, error } = await supabase
+    .from('narratives')
+    .select('*')
+    .eq('curated_slug', slug)
+    .eq('content_version', version)
+    .eq('locale', locale)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!narrative) return null;
+  return fetchNarrativeById(supabase, narrative.id, locale);
+};
+
+export const fetchAllNarratives = async (supabase, requestedLocale = null) => {
   const { data: narratives, error } = await supabase
     .from('narratives')
-    .select('id, title, user_prompt, created_at, narrative_chapters(id)')
+    .select('id, title, user_prompt, context, locale, created_at, narrative_chapters(id)')
     .order('created_at', { ascending: false });
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return (narratives ?? []).map((row) => ({
+  return (narratives ?? [])
+    .filter((row) => {
+      if (!requestedLocale) return true;
+      const rowLocale = row.locale ?? row.context?.locale ?? null;
+      return !rowLocale || rowLocale === requestedLocale;
+    })
+    .map((row) => ({
     id: row.id,
     title: row.title,
     userPrompt: row.user_prompt,

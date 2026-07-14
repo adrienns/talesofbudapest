@@ -30,6 +30,9 @@ const migrationFiles = [
   '017_kg_claim_era.sql',
   '018_kg_alias_exact_match.sql',
   '019_kg_organisations_and_placeholders.sql',
+  '020_narrative_walking_routes.sql',
+  '021_curated_narratives.sql',
+  '022_locations_map_theme.sql',
 ];
 
 const runMigration = async () => {

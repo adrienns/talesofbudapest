@@ -5,6 +5,7 @@ export type LocationRow = {
   source: string
   external_id: string
   landmark_type: string
+  map_theme: string
   name: string
   latitude: number
   longitude: number
@@ -25,6 +26,9 @@ export const resolveTranslations = (seed: LandmarkSeed): LandmarkTranslationSeed
   return [{ locale: 'en', name: seed.name, story_prompt: seed.story_prompt }]
 }
 
+export const resolveMapTheme = (seed: LandmarkSeed): 'history' | 'architecture' =>
+  seed.map_theme ?? (['monument', 'statue', 'iconic'].includes(seed.landmark_type) ? 'history' : 'architecture')
+
 export const toLocationRow = (seed: LandmarkSeed): LocationRow => {
   const translations = resolveTranslations(seed)
   const primary =
@@ -40,6 +44,7 @@ export const toLocationRow = (seed: LandmarkSeed): LocationRow => {
     source: seed.source,
     external_id: seed.external_id,
     landmark_type: seed.landmark_type,
+    map_theme: resolveMapTheme(seed),
     name: primary?.name ?? seed.name,
     latitude: seed.lat,
     longitude: seed.lng,
@@ -100,6 +105,7 @@ export const upsertLandmark = async (
         source: row.source,
         external_id: row.external_id,
         landmark_type: row.landmark_type,
+        map_theme: row.map_theme,
         name: row.name,
         latitude: row.latitude,
         longitude: row.longitude,

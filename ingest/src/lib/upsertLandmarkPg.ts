@@ -41,16 +41,17 @@ export const upsertLandmarkPg = async (
        set source = $2,
            external_id = $3,
            landmark_type = $4,
-           name = $5,
-           latitude = $6,
-           longitude = $7,
-           story_prompt = $8,
-           source_material = $9,
-           history_depth = $10,
-           image_url = $11,
-           images = $12::jsonb,
-           importance_tier = $13,
-           importance_score = $14
+           map_theme = $5,
+           name = $6,
+           latitude = $7,
+           longitude = $8,
+           story_prompt = $9,
+           source_material = $10,
+           history_depth = $11,
+           image_url = $12,
+           images = $13::jsonb,
+           importance_tier = $14,
+           importance_score = $15
        where id = $1
        returning id, name`,
       [
@@ -58,6 +59,7 @@ export const upsertLandmarkPg = async (
         row.source,
         row.external_id,
         row.landmark_type,
+        row.map_theme,
         row.name,
         row.latitude,
         row.longitude,
@@ -77,16 +79,17 @@ export const upsertLandmarkPg = async (
 
   const inserted = await pool.query<{ id: string; name: string }>(
     `insert into public.locations (
-       source, external_id, landmark_type, name, latitude, longitude, story_prompt,
+       source, external_id, landmark_type, map_theme, name, latitude, longitude, story_prompt,
        source_material, history_depth, image_url, images,
        importance_tier, importance_score
      )
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, $14)
      returning id, name`,
     [
       row.source,
       row.external_id,
       row.landmark_type,
+      row.map_theme,
       row.name,
       row.latitude,
       row.longitude,

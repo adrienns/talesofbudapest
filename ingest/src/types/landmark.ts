@@ -2,6 +2,8 @@ export type LandmarkSource = 'budapest100' | 'muemlekem' | 'wikipedia' | 'iconic
 
 export type LandmarkType = 'house' | 'monument' | 'statue' | 'building' | 'iconic'
 
+export type MapTheme = 'history' | 'architecture'
+
 export type ImportanceTier = 'featured' | 'standard' | 'archive' | 'skip'
 
 export type HistoryDepth = 'thin' | 'standard' | 'rich'
@@ -18,6 +20,8 @@ export type LandmarkSeed = {
   source: LandmarkSource
   external_id: string
   landmark_type: LandmarkType
+  /** Curated overrides win over the type-based default. */
+  map_theme?: MapTheme
   name: string
   lat: number
   lng: number

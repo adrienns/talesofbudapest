@@ -20,6 +20,9 @@ MIGRATION_FILES=(
   012_locations_map_index.sql
   013_location_history.sql
   014_knowledge_graph_staging.sql
+  020_narrative_walking_routes.sql
+  021_curated_narratives.sql
+  022_locations_map_theme.sql
 )
 
 if ! docker ps --format '{{.Names}}' | grep -q '^supabase-db$'; then

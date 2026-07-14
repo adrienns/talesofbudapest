@@ -58,6 +58,8 @@ cp talesofbudapest-frontend/.env.local.example talesofbudapest-frontend/.env.loc
 18. `017_kg_claim_era.sql` — `era` column on `kg_claims`
 19. `018_kg_alias_exact_match.sql` — `source` column on `kg_entity_aliases` + `match_kg_entity_exact` RPC
 20. `019_kg_organisations_and_placeholders.sql` — staged organisations, organisation relation endpoints, and placeholder metadata/indexes
+21. `020_narrative_walking_routes.sql` — cached walking geometry, distance, and duration for saved narratives
+22. `021_curated_narratives.sql` — stable slug, version, and locale identity for fixed bilingual tours
 
 **Get `DATABASE_URL`** (one-time setup in `talesofbudapest-backend/.env`):
 
@@ -128,6 +130,7 @@ python ingest.py --file corpus/sample.txt --source-id budapest-sample-001
 | `npm run generate:audio` | Generate audio, upload to Storage, update audio_url |
 | `npm run db:migrate` | Apply SQL migrations via DATABASE_URL |
 | `bash infra/scripts/migrate.sh` | Apply migrations via Docker when host DB URL fails |
+| `npm run seed:curated-tours` | Validate, upsert, and pre-generate bilingual fixed-tour audio (`-- --local-audio` for private macOS TTS; `-- --skip-audio` for scripts only) |
 | `npm run scrape:budapest100` | Scrape Budapest100 houses to JSON |
 | `node infra/scripts/generate-keys.mjs` | Generate self-hosted Supabase secrets |
 | `bash infra/scripts/setup.sh` | Start local Supabase Docker stack |

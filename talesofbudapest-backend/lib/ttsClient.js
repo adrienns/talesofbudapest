@@ -23,7 +23,7 @@ const MP3_BITRATE_KBPS = 128;
  * MEDIA_ERR_SRC_NOT_SUPPORTED while an old real MP3 from the same server
  * played back fine.
  */
-const pcmToMp3 = (
+export const pcmToMp3 = (
   pcm,
   { sampleRate = GEMINI_TTS_PCM_SAMPLE_RATE, channels = GEMINI_TTS_PCM_CHANNELS } = {},
 ) => {

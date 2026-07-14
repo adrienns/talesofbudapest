@@ -35,6 +35,7 @@ export const POST = async (request: Request) => {
         userPrompt,
         context: draft.context ?? {},
         chapters,
+        walkingRoute: draft.walkingRoute ?? null,
       })
 
       return NextResponse.json(narrative)

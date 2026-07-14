@@ -70,7 +70,7 @@ export const finalizeChapterScripts = async ({
 };
 
 /** Synthesizes audio for planned chapters and persists the narrative. Expensive — call once per confirmed tour. */
-export const synthesizeNarrative = async ({ supabase, title, userPrompt, context, chapters }) => {
+export const synthesizeNarrative = async ({ supabase, title, userPrompt, context, chapters, walkingRoute = null }) => {
   const locale = resolveTourLocale(context);
   const styleId = context?.styleId;
   const topicIds = context?.topicIds ?? [];
@@ -80,7 +80,11 @@ export const synthesizeNarrative = async ({ supabase, title, userPrompt, context
     .insert({
       title,
       user_prompt: userPrompt,
-      context: context ?? {},
+      // Visitor coordinates are transient. Narratives are publicly readable.
+      context: { ...(context ?? {}), userLat: null, userLng: null },
+      walking_geometry: walkingRoute?.geometry ?? null,
+      walking_distance_meters: walkingRoute?.distanceMeters ?? null,
+      walking_duration_seconds: walkingRoute?.durationSeconds ?? null,
     })
     .select()
     .single();
@@ -158,6 +162,7 @@ export const synthesizeNarrative = async ({ supabase, title, userPrompt, context
   return {
     id: narrativeId,
     title,
+    walkingRoute: walkingRoute?.geometry?.length > 1 ? walkingRoute : null,
     chapters: savedChapters
       .sort((a, b) => a.chapter_index - b.chapter_index)
       .map((row) => ({

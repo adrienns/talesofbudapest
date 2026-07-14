@@ -37,6 +37,7 @@
     "poll:open-wikidata": "npm run poll:open-wikidata -w ingest --",
     "poll:open-commons": "npm run poll:open-commons -w ingest --",
     "load:landmarks": "npm run load -w ingest --",
+    "seed:curated-tours": "npm run seed:curated-tours --workspace=talesofbudapest-backend --",
     "fix:service-key": "node infra/scripts/fix-service-role-key.mjs"
   },
   "license": "ISC",
