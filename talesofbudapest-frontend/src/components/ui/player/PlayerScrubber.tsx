@@ -9,7 +9,7 @@ type PlayerScrubberProps = {
   hasAudio: boolean
   onSeek: (time: number) => void
   /** 'onImage' styles the bar and labels for a dark image overlay. */
-  tone?: 'surface' | 'onImage'
+  tone?: 'surface' | 'onImage' | 'musicSheet'
 }
 
 export const PlayerScrubber = ({
@@ -22,6 +22,7 @@ export const PlayerScrubber = ({
   const t = useTranslations('player')
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0
   const onImage = tone === 'onImage'
+  const musicSheet = tone === 'musicSheet'
 
   return (
     <div>
@@ -34,12 +35,12 @@ export const PlayerScrubber = ({
         disabled={!hasAudio}
         onChange={(event) => onSeek(Number(event.target.value))}
         style={{ '--progress': `${progress}%` } as React.CSSProperties}
-        className={`audio-progress-mini w-full ${onImage ? 'audio-progress-overlay' : ''}`}
+        className={`audio-progress-mini w-full ${onImage ? 'audio-progress-overlay' : ''} ${musicSheet ? 'audio-progress-music' : ''}`}
         aria-label={t('playbackProgress')}
       />
       <div
         className={`mt-1.5 flex justify-between text-[0.6875rem] tabular-nums ${
-          onImage ? 'text-white/75' : 'text-on-surface/40'
+          onImage ? 'text-white/75' : musicSheet ? 'text-[var(--map-text)]/55' : 'text-on-surface/40'
         }`}
       >
         <span>{formatTime(currentTime)}</span>

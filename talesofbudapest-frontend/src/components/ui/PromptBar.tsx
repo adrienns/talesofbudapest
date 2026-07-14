@@ -13,14 +13,14 @@ export const PromptBar = ({ onOpen, onMicClick }: PromptBarProps) => {
   const placeholder = t('placeholder')
 
   return (
-    <div className="prompt-bar-glass flex h-12 w-full items-center gap-3 rounded-full px-4">
+    <div className="map-search-pill flex h-12 w-full items-center gap-3 rounded-full px-4">
       <button
         type="button"
         onClick={onOpen}
         aria-label={placeholder}
         className="flex min-w-0 flex-1 items-center gap-3 text-left"
       >
-        <Sparkles className="h-5 w-5 shrink-0 text-accent" strokeWidth={2} aria-hidden="true" />
+        <Sparkles className="h-5 w-5 shrink-0 text-[var(--map-teal)]" strokeWidth={1.75} aria-hidden="true" />
         <span className="truncate text-body font-medium text-on-surface/60">{placeholder}</span>
       </button>
       <button
@@ -30,7 +30,7 @@ export const PromptBar = ({ onOpen, onMicClick }: PromptBarProps) => {
           onOpen()
         }}
         aria-label={t('startVoicePrompt')}
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[var(--color-sunset-start)] to-[var(--color-accent)] text-on-primary shadow-[0_0_16px_var(--color-accent-glow)] transition active:scale-95"
+        className="map-primary-action flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-on-primary transition active:scale-95"
       >
         <Mic className="h-4 w-4" strokeWidth={2.25} aria-hidden="true" />
       </button>

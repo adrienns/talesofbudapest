@@ -14,7 +14,6 @@
   "player": {
     "nowPlaying": "Now playing",
     "chapter": "CH. {number}",
-    "customNarrative": "CUSTOM NARRATIVE",
     "generatingAudioTour": "Generating audio tour",
     "pause": "Pause",
     "play": "Play",
@@ -29,6 +28,7 @@
     "openFullScreen": "Open full screen",
     "closeFullScreen": "Close full screen",
     "transcript": "Transcript",
+    "tapTranscriptToSeek": "Tap a line to jump to that moment.",
     "transcriptUnavailable": "The transcript will appear here once the audio tour has been generated.",
     "share": "Share",
     "download": "Download audio",
@@ -38,12 +38,20 @@
     "atThisStop": "At this stop",
     "collapseSheet": "Collapse player",
     "distanceToNext": "{distance} km to next stop",
+    "upNext": "Up next",
+    "stop": "Stop {number}",
+    "tourTimeline": "Tour timeline",
     "goBack": "Go back"
   },
   "home": {
     "loadingLandmarks": "Loading landmarks…",
     "loadingMap": "Loading map…",
     "failedToLoadLandmarks": "Failed to load landmarks"
+  },
+  "navigation": {
+    "reroute": "Route to this stop",
+    "rerouting": "Routing…",
+    "arrived": "You’ve arrived at {title}."
   },
   "chronicle": {
     "title": "Chronicle",
@@ -83,6 +91,11 @@
     "previousQuestion": "Previous question",
     "close": "Close",
     "quickStart": "Quick start",
+    "quickStarts": {
+      "flagshipTitle": "How Budapest Became Budapest",
+      "flagshipTagline": "About 2¼ h · nine turning points",
+      "flagshipImageAlt": "Hungarian Parliament and the Danube on the flagship Budapest history walk"
+    },
     "styleQuestion": "How do you like your history?",
     "styleHelper": "This sets the pace and depth of your tour.",
     "topicsQuestion": "What pulls you in?",

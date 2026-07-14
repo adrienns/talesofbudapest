@@ -19,6 +19,17 @@
     var(--glass-inset-highlight-drawer);
 }
 
+@utility map-glass-drawer {
+  background: rgba(255, 252, 247, 0.65);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1.5px solid var(--map-glass-border);
+  border-bottom: none;
+  box-shadow:
+    0 8px 32px var(--map-elevation),
+    inset 0 0 15px rgba(255, 255, 255, 0.3);
+}
+
 @utility prompt-bar-glass {
   background: var(--glass-bg);
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));

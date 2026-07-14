@@ -1,18 +1,25 @@
 import { ClassicTourCard } from '@/components/narrative/ClassicTourCard'
-import type { CuratedStarter } from '@/constants/questionnaire'
-
-type QuickStartTour = Pick<
-  CuratedStarter,
-  'slug' | 'title' | 'tagline' | 'imageSrc' | 'imageAlt'
->
+export type CarouselCard = {
+  slug: string
+  title: string
+  tagline: string
+  imageSrc: string
+  imageAlt: string
+}
 
 type QuickStartTourCarouselProps = {
   label: string
-  tours: QuickStartTour[]
-  onSelect: (slug: string) => void
+  tours: CarouselCard[]
+  onSelect?: (slug: string) => void
+  variant?: 'tour' | 'place'
 }
 
-export const QuickStartTourCarousel = ({ label, tours, onSelect }: QuickStartTourCarouselProps) => (
+export const QuickStartTourCarousel = ({
+  label,
+  tours,
+  onSelect,
+  variant = 'tour',
+}: QuickStartTourCarouselProps) => (
   <div className="w-full">
     <p className="mb-2.5 px-1 text-xs font-semibold uppercase tracking-[0.08em] text-on-surface/45">
       {label}
@@ -22,19 +29,35 @@ export const QuickStartTourCarousel = ({ label, tours, onSelect }: QuickStartTou
       role="list"
       aria-label={label}
     >
-      {tours.map((tour) => (
+      {tours.map((tour, index) => (
         <div
           key={tour.slug}
           role="listitem"
           className="w-[calc((100%-0.625rem)/2.12)] shrink-0 snap-start"
         >
-          <ClassicTourCard
-            title={tour.title}
-            tagline={tour.tagline}
-            imageSrc={tour.imageSrc}
-            imageAlt={tour.imageAlt}
-            onClick={() => onSelect(tour.slug)}
-          />
+          {variant === 'tour' ? (
+            <ClassicTourCard
+              title={tour.title}
+              tagline={tour.tagline}
+              imageSrc={tour.imageSrc}
+              imageAlt={tour.imageAlt}
+              onClick={onSelect ? () => onSelect(tour.slug) : undefined}
+            />
+          ) : (
+            <article className="flex aspect-[4/5] flex-col overflow-hidden rounded-2xl border border-outline-variant/20 bg-surface shadow-[0_8px_22px_rgba(45,41,38,0.08)]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={tour.imageSrc} alt={tour.imageAlt} className="h-[58%] w-full object-cover" />
+              <div className="min-h-0 px-3.5 py-3">
+                <h3 className="line-clamp-2 flex items-start gap-1.5 text-sm font-bold leading-tight text-on-surface">
+                  <span className="mt-px grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[color-mix(in_srgb,var(--map-orange)_18%,transparent)] text-[0.625rem] font-bold text-[var(--map-orange-deep)]">
+                    {index + 1}
+                  </span>
+                  <span>{tour.title}</span>
+                </h3>
+                <p className="mt-1 line-clamp-2 text-[0.6875rem] leading-snug text-on-surface/75">{tour.tagline}</p>
+              </div>
+            </article>
+          )}
         </div>
       ))}
     </div>

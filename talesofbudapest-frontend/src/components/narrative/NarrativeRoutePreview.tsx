@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import { useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useReplaceStop } from '@/features/narrative/hooks/useReplaceStop'
+import { useWalkingRoute } from '@/features/narrative/hooks/useWalkingRoute'
 import { formatLogistics, computeRouteLogistics, orderChaptersForWalking } from '@/lib/narrative/routeLogistics'
 import type { DraftChapter, DraftNarrative } from '@/types/narrative'
 
@@ -35,10 +36,12 @@ export const NarrativeRoutePreview = ({ draft, onConfirm, onDiscard }: Narrative
     reindex(orderChaptersForWalking(draft.chapters, start)),
   )
   const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null)
+  // A visitor's current location is never part of a cached/public route.
+  const walkingRoute = useWalkingRoute(orderedChapters)
 
   const logistics = useMemo(
-    () => computeRouteLogistics(orderedChapters, start),
-    [orderedChapters, start],
+    () => computeRouteLogistics(orderedChapters, start, walkingRoute),
+    [orderedChapters, start, walkingRoute],
   )
 
   const mapChapters = useMemo(
@@ -69,7 +72,7 @@ export const NarrativeRoutePreview = ({ draft, onConfirm, onDiscard }: Narrative
   }
 
   const handleConfirm = () => {
-    onConfirm({ ...draft, chapters: orderedChapters })
+    onConfirm({ ...draft, chapters: orderedChapters, walkingRoute })
   }
 
   return (
@@ -101,6 +104,7 @@ export const NarrativeRoutePreview = ({ draft, onConfirm, onDiscard }: Narrative
             selectedChapterId={selectedChapterId}
             onChapterSelect={(chapter) => setSelectedChapterId(chapter.id)}
             fitKey={orderedChapters.map((c) => c.landmarkId ?? c.chapterIndex).join('-')}
+            walkingRoute={walkingRoute}
           />
         </div>
       </div>

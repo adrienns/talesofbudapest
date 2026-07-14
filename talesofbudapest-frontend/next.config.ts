@@ -17,6 +17,8 @@ loadEnv({
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Hides Next.js's development "N" route/status indicator.
+  devIndicators: false,
   experimental: {
     externalDir: true,
   },

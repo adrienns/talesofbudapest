@@ -35,6 +35,7 @@ export const MapView = ({
   selectedChapterId = null,
   onChapterSelect,
   showLandmarks = true,
+  temporaryRoute = null,
 }: MapViewProps) => {
   const [isMapReady, setIsMapReady] = useState(false)
   const [viewport, setViewport] = useState<MapViewport>(INITIAL_VIEWPORT)
@@ -62,8 +63,8 @@ export const MapView = ({
     setIsMapReady(true)
   }, [])
 
-  const routePositions =
-    activeRoute?.chapters.map((chapter) => [chapter.lat, chapter.lng] as [number, number]) ?? []
+  const routePositions = activeRoute?.walkingRoute?.geometry
+    ?? activeRoute?.chapters.map((chapter) => [chapter.lat, chapter.lng] as [number, number]) ?? []
 
   const handleChapterSelect = (chapter: NarrativeChapter) => {
     onChapterSelect?.(chapter)
@@ -114,18 +115,23 @@ export const MapView = ({
             <Polyline
               positions={routePositions}
               pathOptions={{
-                color: colors.accent,
+                color: colors.mapOrange,
                 weight: 3,
                 opacity: 0.85,
-                dashArray: '8 8',
+                dashArray: activeRoute.walkingRoute ? undefined : '8 8',
               }}
             />
           )}
 
-          {activeRoute?.chapters.map((chapter) => (
+          {temporaryRoute && (
+            <Polyline positions={temporaryRoute.geometry} pathOptions={{ color: '#245b9f', weight: 4, opacity: 0.95 }} />
+          )}
+
+          {activeRoute?.chapters.map((chapter, index) => (
             <ChapterMarker
               key={chapter.id}
               chapter={chapter}
+              stopNumber={index + 1}
               isSelected={chapter.id === selectedChapterId}
               onSelect={handleChapterSelect}
             />

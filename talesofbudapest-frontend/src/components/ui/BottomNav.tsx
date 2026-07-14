@@ -4,7 +4,6 @@ import { BookOpen, Home, Library, Settings } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { NAV_TAB_IDS } from '@/constants/navigation'
-import { terracottaGlowClass } from '@/components/ui/TerracottaButton'
 import type { BottomNavProps, NavTabId } from '@/types/navigation'
 
 const NAV_ICONS: Record<NavTabId, LucideIcon> = {
@@ -26,6 +25,7 @@ export const BottomNav = ({
   onTabChange,
   onAiGuideClick,
   className = '',
+  variant = 'default',
 }: BottomNavProps) => {
   const t = useTranslations('nav')
 
@@ -36,7 +36,7 @@ export const BottomNav = ({
       <nav
         role="tablist"
         aria-label={t('mainNavigation')}
-        className="bottom-nav-capsule pointer-events-auto flex items-center gap-2 px-3 py-2"
+        className={`bottom-nav-capsule ${variant === 'map' ? 'bottom-nav-capsule--map' : ''} pointer-events-auto flex items-center gap-2 px-3 py-2`}
       >
         {NAV_TAB_IDS.map((id) => {
           const Icon = NAV_ICONS[id]
@@ -53,7 +53,9 @@ export const BottomNav = ({
               aria-current={isActive ? 'page' : undefined}
               onClick={() => onTabChange(id)}
               className={`bottom-nav-btn flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all duration-200 active:scale-95 ${
-                isActive ? terracottaGlowClass : 'bottom-nav-btn--inactive'
+                isActive
+                  ? variant === 'map' ? 'bottom-nav-btn--map-active' : 'bottom-nav-btn--active'
+                  : 'bottom-nav-btn--inactive'
               }`}
             >
               <Icon className="h-5 w-5 shrink-0" strokeWidth={1.75} aria-hidden="true" />

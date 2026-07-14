@@ -2,6 +2,14 @@ import L from 'leaflet'
 import { getLandmarkInitial, getLandmarkMarkerImageUrl } from '@/lib/landmarkImage'
 import type { MapPin } from '@/types/landmark'
 
+type MarkerTheme = 'history' | 'architecture'
+type MarkerVisual = Pick<MapPin, 'name' | 'image_url' | 'map_theme' | 'landmark_type'> & {
+  images?: { url: string }[]
+}
+
+const markerTheme = (landmark: MarkerVisual): MarkerTheme =>
+  landmark.map_theme ?? (['monument', 'statue', 'iconic'].includes(landmark.landmark_type ?? '') ? 'history' : 'architecture')
+
 const MARKER_SIZE = 64
 const POINTER_OVERHANG = 12
 const LABEL_MAX_LENGTH = 22
@@ -18,11 +26,12 @@ const escapeAttr = (value: string): string => escapeHtml(value).replace(/'/g, '&
 const truncateLabel = (name: string): string =>
   name.length > LABEL_MAX_LENGTH ? `${name.slice(0, LABEL_MAX_LENGTH - 1)}…` : name
 
-const buildMarkerContent = (landmark: MapPin, isSelected: boolean): string => {
+const buildMarkerContent = (landmark: MarkerVisual, isSelected: boolean, stopNumber?: number): string => {
   const imageUrl = getLandmarkMarkerImageUrl(landmark)
   const initial = getLandmarkInitial(landmark.name)
   const selectedClass = isSelected ? ' photo-marker--selected' : ''
   const fallbackClass = imageUrl ? '' : ' photo-marker--fallback'
+  const themeClass = ` map-theme-${markerTheme(landmark)}`
 
   const imageMarkup = imageUrl
     ? `
@@ -41,7 +50,7 @@ const buildMarkerContent = (landmark: MapPin, isSelected: boolean): string => {
   return `
     <div class="photo-marker-shell">
       <div
-        class="photo-marker${fallbackClass}${selectedClass}"
+        class="photo-marker${fallbackClass}${selectedClass}${themeClass}"
         role="img"
         aria-label="${escapeAttr(landmark.name)}"
       >
@@ -52,16 +61,17 @@ const buildMarkerContent = (landmark: MapPin, isSelected: boolean): string => {
           </div>
         </div>
         <div class="photo-marker__pointer" aria-hidden="true"></div>
+        ${stopNumber ? `<span class="photo-marker__stop-badge" aria-hidden="true">${stopNumber}</span>` : ''}
       </div>
     </div>
   `
 }
 
-export const createLandmarkDotIcon = (isSelected: boolean) =>
+export const createLandmarkDotIcon = (isSelected: boolean, theme: MarkerTheme = 'architecture') =>
   L.divIcon({
     className: 'landmark-dot-marker-icon',
     html: `
-      <div class="landmark-dot-marker ${isSelected ? 'landmark-dot-marker--selected' : ''}">
+      <div class="landmark-dot-marker map-theme-${theme} ${isSelected ? 'landmark-dot-marker--selected' : ''}">
         <span class="landmark-dot-marker__dot" aria-hidden="true"></span>
       </div>
     `,
@@ -70,16 +80,17 @@ export const createLandmarkDotIcon = (isSelected: boolean) =>
     popupAnchor: [0, -8],
   })
 
-export const createLandmarkIcon = (landmark: MapPin, isSelected: boolean) => {
+export const createLandmarkIcon = (landmark: MarkerVisual, isSelected: boolean, stopNumber?: number) => {
   const markerWidth = 100
   const anchorY = MARKER_SIZE + POINTER_OVERHANG
   const markerHeight = anchorY + 28
+  const theme = markerTheme(landmark)
 
   return L.divIcon({
     className: 'landmark-photo-marker-icon',
     html: `
-      <div class="landmark-photo-marker ${isSelected ? 'landmark-photo-marker--selected' : ''}">
-        ${buildMarkerContent(landmark, isSelected)}
+      <div class="landmark-photo-marker map-theme-${theme} ${isSelected ? 'landmark-photo-marker--selected' : ''}">
+        ${buildMarkerContent(landmark, isSelected, stopNumber)}
         <span class="landmark-photo-marker__label">${escapeHtml(truncateLabel(landmark.name))}</span>
       </div>
     `,
@@ -89,16 +100,14 @@ export const createLandmarkIcon = (landmark: MapPin, isSelected: boolean) => {
   })
 }
 
-export const createChapterIcon = (isSelected: boolean, chapterNumber: number) =>
-  L.divIcon({
-    className: '',
-    html: `
-      <div class="chapter-pin ${isSelected ? 'chapter-pin--selected' : ''}">
-        <span class="chapter-pin__label">${chapterNumber}</span>
-        <span class="chapter-pin__pulse"></span>
-      </div>
-    `,
-    iconSize: [36, 36],
-    iconAnchor: [18, 18],
-    popupAnchor: [0, -18],
-  })
+export const createChapterIcon = (
+  isSelected: boolean,
+  chapter: { title: string; imageUrl?: string | null },
+  stopNumber?: number,
+) =>
+  createLandmarkIcon({
+    name: chapter.title,
+    image_url: chapter.imageUrl ?? '/quick-start/parliement.webp',
+    map_theme: 'history',
+    landmark_type: 'monument',
+  }, isSelected, stopNumber)

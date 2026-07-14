@@ -9,6 +9,8 @@ import { CLUSTER_MAX_ZOOM } from '@/lib/map/visibleLandmarks'
 import type { VisibleLandmarkEntry } from '@/lib/map/visibleLandmarks'
 import type { MapPin } from '@/types/landmark'
 
+type ThemedMarker = L.Marker & { mapTheme?: 'history' | 'architecture' }
+
 import 'leaflet.markercluster/dist/MarkerCluster.css'
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 
@@ -40,8 +42,11 @@ export const LandmarkClusterLayer = ({ entries, rebuildKey, onSelect }: Landmark
       chunkInterval: 80,
       iconCreateFunction: (group) => {
         const count = group.getChildCount()
+        const children = group.getAllChildMarkers() as ThemedMarker[]
+        const historyCount = children.filter((marker) => marker.mapTheme === 'history').length
+        const theme = historyCount > children.length / 2 ? 'history' : 'architecture'
         return L.divIcon({
-          html: `<div class="landmark-cluster"><span>${count}</span></div>`,
+          html: `<div class="landmark-cluster map-theme-${theme}"><span>${count}</span></div>`,
           className: 'landmark-cluster-icon',
           iconSize: [40, 40],
         })
@@ -49,9 +54,12 @@ export const LandmarkClusterLayer = ({ entries, rebuildKey, onSelect }: Landmark
     })
 
     for (const entry of entries) {
+      const theme = entry.landmark.map_theme
+        ?? (['monument', 'statue', 'iconic'].includes(entry.landmark.landmark_type ?? '') ? 'history' : 'architecture')
       const marker = L.marker([entry.landmark.lat, entry.landmark.lng], {
-        icon: createLandmarkDotIcon(false),
+        icon: createLandmarkDotIcon(false, theme),
       })
+      ;(marker as ThemedMarker).mapTheme = theme
       marker.on('click', () => onSelectRef.current(entry.landmark))
       cluster.addLayer(marker)
     }

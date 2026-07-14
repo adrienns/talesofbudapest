@@ -14,7 +14,6 @@
   "player": {
     "nowPlaying": "Most szól",
     "chapter": "{number}. FEJEZET",
-    "customNarrative": "EGYEDI NARRATÍVA",
     "generatingAudioTour": "Hangos túra generálása",
     "pause": "Szünet",
     "play": "Lejátszás",
@@ -29,6 +28,7 @@
     "openFullScreen": "Teljes képernyő megnyitása",
     "closeFullScreen": "Teljes képernyő bezárása",
     "transcript": "Átirat",
+    "tapTranscriptToSeek": "Koppints egy sorra, hogy oda ugorj a hanganyagban.",
     "transcriptUnavailable": "Az átirat itt jelenik meg, miután a hangos túra elkészült.",
     "share": "Megosztás",
     "download": "Hang letöltése",
@@ -38,12 +38,20 @@
     "atThisStop": "Ezen a megállón",
     "collapseSheet": "Lejátszó összecsukása",
     "distanceToNext": "{distance} km a következő megállóig",
+    "upNext": "Következik",
+    "stop": "{number}. megálló",
+    "tourTimeline": "Túra idővonala",
     "goBack": "Vissza"
   },
   "home": {
     "loadingLandmarks": "Látnivalók betöltése…",
     "loadingMap": "Térkép betöltése…",
     "failedToLoadLandmarks": "Nem sikerült betölteni a látnivalókat"
+  },
+  "navigation": {
+    "reroute": "Útvonal ehhez a megállóhoz",
+    "rerouting": "Útvonaltervezés…",
+    "arrived": "Megérkeztél ide: {title}."
   },
   "chronicle": {
     "title": "Krónika",
@@ -83,6 +91,11 @@
     "previousQuestion": "Előző kérdés",
     "close": "Bezárás",
     "quickStart": "Gyors indítás",
+    "quickStarts": {
+      "flagshipTitle": "Hogyan lett Budapestből Budapest?",
+      "flagshipTagline": "Kb. 2¼ óra · kilenc fordulópont",
+      "flagshipImageAlt": "Az Országház és a Duna a kiemelt budapesti történelmi sétán"
+    },
     "styleQuestion": "Hogyan szereted a történelmet?",
     "styleHelper": "Ez határozza meg a túra tempóját és mélységét.",
     "topicsQuestion": "Mi vonz igazán?",

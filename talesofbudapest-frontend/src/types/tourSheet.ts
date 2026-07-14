@@ -9,9 +9,14 @@ export type TourSheetMeta = {
   distanceLine?: string | null
 }
 
+export type TourSheetRouteStop = {
+  id: string
+  title: string
+  imageUrl?: string | null
+}
+
 export type TourSheetMediaProps = {
   title: string
-  subtitle?: string
   chapterLabel?: string
   imageUrl?: string | null
   imageAlt?: string
@@ -19,6 +24,8 @@ export type TourSheetMediaProps = {
   meta?: TourSheetMeta
   onShare?: () => void
   onDownload?: () => void
+  routeStops?: TourSheetRouteStop[]
+  currentStopIndex?: number
 }
 
 export type TourSheetCollapsedProps = TourSheetMediaProps &

@@ -253,40 +253,50 @@ export const composeNarrativePrompt = (
  * Danube). These skip the questionnaire and skip the route preview — the
  * fixed prompt is trusted, and repeat taps hit the generation cache.
  */
-export type CuratedStarter = {
+type CuratedStarterBase = {
   slug: string
-  title: string
-  tagline: string
   imageSrc: string
-  imageAlt: string
-  imageCredit?: string
   icon: LucideIcon
   styleId: string
   topicIds: string[]
+}
+
+export type FixedCuratedStarter = CuratedStarterBase & {
+  kind: 'fixed'
+  titleKey: string
+  taglineKey: string
+  imageAltKey: string
+}
+
+export type GeneratedCuratedStarter = CuratedStarterBase & {
+  kind: 'generated'
+  title: string
+  tagline: string
+  imageAlt: string
   prompt: string
 }
 
+export type CuratedStarter = FixedCuratedStarter | GeneratedCuratedStarter
+
 export const CURATED_STARTERS: CuratedStarter[] = [
   {
-    slug: 'icons-90',
-    title: 'Budapest Icons',
-    tagline: '90 min · photo-worthy classics',
-    imageSrc: '/quick-start/icons-90.webp',
-    imageAlt: 'Hungarian Parliament Building seen from the Danube',
-    imageCredit: 'Photo: Diliff / Wikimedia Commons / CC BY-SA 3.0',
+    kind: 'fixed',
+    slug: 'how-budapest-became-budapest',
+    titleKey: 'quickStarts.flagshipTitle',
+    taglineKey: 'quickStarts.flagshipTagline',
+    imageAltKey: 'quickStarts.flagshipImageAlt',
+    imageSrc: '/quick-start/parliement.webp',
     icon: Camera,
     styleId: 'easy',
     topicIds: ['architecture'],
-    prompt:
-      "Create a light, visual 90-minute audio walking tour of Budapest's most iconic sights — the Hungarian Parliament Building, St. Stephen's Basilica, Fisherman's Bastion, and the Chain Bridge — with vivid photo-worthy stops and a breezy pace. [v2]",
   },
   {
+    kind: 'generated',
     slug: 'castle-royal',
     title: 'Castle District Royal Walk',
     tagline: '~2 h · kings, sieges & legends',
-    imageSrc: '/quick-start/castle-royal.webp',
+    imageSrc: '/quick-start/royal_castle.webp',
     imageAlt: "Fisherman's Bastion on the Buda Castle hill",
-    imageCredit: 'Photo: Alvesgaspar / Wikimedia Commons / CC BY-SA 3.0',
     icon: Crown,
     styleId: 'storyteller',
     topicIds: ['duel'],
@@ -294,12 +304,12 @@ export const CURATED_STARTERS: CuratedStarter[] = [
       'Create a vivid, story-driven audio walking tour of the Buda Castle District — Buda Castle, Matthias Church, and Fisherman’s Bastion — full of royal history, sieges, and the legends that still haunt the hill. [v2]',
   },
   {
+    kind: 'generated',
     slug: 'jewish-quarter-ruin-bars',
     title: 'Jewish Quarter & Ruin Bars',
     tagline: '~2 h · memory meets nightlife',
-    imageSrc: '/quick-start/jewish-quarter-ruin-bars.webp',
+    imageSrc: '/quick-start/dohany_street_synagogue.webp',
     imageAlt: 'Dohány Street Synagogue in Budapest',
-    imageCredit: 'Photo: Civertan / Wikimedia Commons / CC BY-SA 3.0',
     icon: Martini,
     styleId: 'storyteller',
     topicIds: ['shadows', 'liquid'],
@@ -307,12 +317,12 @@ export const CURATED_STARTERS: CuratedStarter[] = [
       "Create a vivid, story-driven audio walking tour of District VII's Jewish Quarter — the Dohány Street Synagogue, Kazinczy Street, and the Gozsdu Passage — tracing its history and how its ruined WWII-era spaces became the world's first ruin bars. [v2]",
   },
   {
+    kind: 'generated',
     slug: 'hidden-pest',
     title: 'Hidden Corners of Pest',
     tagline: '~2.5 h · gems most visitors miss',
     imageSrc: '/quick-start/hidden-pest.webp',
     imageAlt: 'Vörösmarty Square in central Pest',
-    imageCredit: 'Photo: Civertan / Wikimedia Commons / CC BY-SA 3.0',
     icon: Sparkles,
     styleId: 'deep-dive',
     topicIds: ['coffeehouse'],
@@ -320,12 +330,12 @@ export const CURATED_STARTERS: CuratedStarter[] = [
       'Create a richly detailed, historian-grade audio walking tour of downtown Pest that skips the famous landmarks in favor of lesser-known residential buildings, hidden courtyards, and golden-age coffeehouses with real, specific local history. [v2]',
   },
   {
+    kind: 'generated',
     slug: 'danube-golden-hour',
     title: 'Danube at Golden Hour',
     tagline: '~1.5 h · riverside romance',
     imageSrc: '/quick-start/danube-golden-hour.webp',
     imageAlt: 'Széchenyi Chain Bridge over the Danube in Budapest',
-    imageCredit: 'Photo: Civertan / Wikimedia Commons / CC BY-SA 3.0',
     icon: Sunset,
     styleId: 'storyteller',
     topicIds: ['duel'],

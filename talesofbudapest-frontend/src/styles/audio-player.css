@@ -82,3 +82,105 @@
   border: none;
   background: transparent;
 }
+
+.audio-progress-music {
+  height: 5px;
+  background: linear-gradient(to right, #272522 0%, #272522 var(--progress, 0%), rgba(45, 41, 38, 0.16) var(--progress, 0%), rgba(45, 41, 38, 0.16) 100%);
+}
+
+.mini-player-surface {
+  background: rgba(255, 252, 247, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15), inset 0 1px rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+}
+
+.audio-progress-music::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #272522;
+}
+
+.audio-progress-music::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 9999px;
+  background: #272522;
+}
+
+.tour-sheet-title-marquee {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.tour-sheet-title-marquee__text {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.tour-sheet-title-marquee__text.is-marquee {
+  animation: tour-sheet-marquee 12s ease-in-out infinite alternate;
+}
+
+@keyframes tour-sheet-marquee {
+  0%, 20% { transform: translateX(0); }
+  80%, 100% { transform: translateX(var(--marquee-distance)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-sheet-title-marquee__text { animation: none; }
+}
+
+.tour-sheet-collapsed .audio-progress-mini {
+  height: 5px;
+  background: linear-gradient(
+    to right,
+    var(--map-orange) 0%,
+    var(--map-orange) var(--progress, 0%),
+    rgba(45, 41, 38, 0.12) var(--progress, 0%),
+    rgba(45, 41, 38, 0.12) 100%
+  );
+}
+
+.tour-sheet-collapsed .audio-progress-mini::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: var(--map-orange);
+  box-shadow: 0 1px 4px rgba(139, 76, 46, 0.25);
+}
+
+.tour-sheet-collapsed .audio-progress-mini::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: 9999px;
+  background: var(--map-orange);
+  box-shadow: 0 1px 4px rgba(139, 76, 46, 0.25);
+}
+
+.tour-sheet-collapsed .audio-progress-music {
+  height: 3px;
+  background: linear-gradient(to right, var(--map-orange) 0%, var(--map-orange) var(--progress, 0%), rgba(45, 41, 38, 0.14) var(--progress, 0%), rgba(45, 41, 38, 0.14) 100%);
+}
+
+.tour-sheet-collapsed .audio-progress-music::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 9999px;
+  background: var(--map-orange);
+  box-shadow: 0 2px 5px rgba(139, 76, 46, 0.28);
+}
+
+.tour-sheet-collapsed .audio-progress-music::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 9999px;
+  background: var(--map-orange);
+  box-shadow: 0 2px 5px rgba(139, 76, 46, 0.28);
+}

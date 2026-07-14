@@ -1,6 +1,7 @@
 'use client'
 
-import { ChevronUp, Clock, MapPin } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { PlayerScrubber } from '@/components/ui/player/PlayerScrubber'
 import { PlayerTransport } from '@/components/ui/player/PlayerTransport'
@@ -8,11 +9,9 @@ import type { TourSheetCollapsedProps } from '@/types/tourSheet'
 
 export const TourSheetCollapsed = ({
   title,
-  subtitle,
   chapterLabel,
   imageUrl,
   imageAlt,
-  meta,
   isPlaying,
   currentTime,
   duration,
@@ -20,66 +19,50 @@ export const TourSheetCollapsed = ({
   isGenerating = false,
   canRequestAudio = false,
   generateError = null,
-  historyDepth = null,
   onPlayPause,
   onSeek,
-  onSkipBack,
-  onSkipForward,
   onExpand,
   readyGlow = false,
 }: TourSheetCollapsedProps) => {
   const t = useTranslations('player')
+  const marqueeRef = useRef<HTMLDivElement>(null)
+  const titleRef = useRef<HTMLParagraphElement>(null)
+  const [marqueeDistance, setMarqueeDistance] = useState(0)
 
-  const headerLine = [
-    chapterLabel,
-    meta?.distanceLine ? t('distanceToNext', { distance: meta.distanceLine }) : null,
-  ]
-    .filter(Boolean)
-    .join(' · ')
+  useEffect(() => {
+    const measureTitle = () => {
+      const availableWidth = marqueeRef.current?.clientWidth ?? 0
+      const titleWidth = titleRef.current?.scrollWidth ?? 0
+      setMarqueeDistance(Math.max(0, titleWidth - availableWidth))
+    }
 
-  const showThinSource = historyDepth === 'thin' && hasAudio && !isGenerating
+    measureTitle()
+    const observer = new ResizeObserver(measureTitle)
+    if (marqueeRef.current) observer.observe(marqueeRef.current)
+
+    return () => observer.disconnect()
+  }, [title])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <button
-        type="button"
-        onClick={onExpand}
-        className="flex w-full items-center justify-between gap-2 text-left"
-        aria-label={t('swipeUpForMore')}
-      >
-        <div className="min-w-0">
-          {headerLine && (
-            <p className="text-[0.6875rem] font-medium uppercase tracking-[0.12em] text-on-surface/45">
-              {headerLine}
-            </p>
-          )}
-          {subtitle && (
-            <p className="mt-0.5 truncate text-[0.625rem] font-medium uppercase tracking-[0.1em] text-accent/80">
-              {subtitle}
-            </p>
-          )}
-        </div>
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-dim text-on-surface/55">
-          <ChevronUp className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-        </span>
-      </button>
-
-      <div className="flex items-center gap-3">
-        <button
+    <div className="tour-sheet-collapsed flex min-h-0 flex-1 flex-col justify-center gap-1" onClick={onExpand}>
+      <div className="flex min-w-0 items-center gap-2">
+        <motion.button
           type="button"
+          layoutId="tour-player-artwork"
           onClick={onExpand}
-          className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-surface-dim"
+          className="h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-[#e4dee0]"
           aria-label={t('swipeUpForMore')}
+          transition={{ type: 'spring', stiffness: 380, damping: 36 }}
         >
           {imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={imageUrl} alt={imageAlt ?? title} className="h-full w-full object-cover" />
           ) : (
-            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-accent/20 to-accent/5 font-serif text-xl font-bold text-accent/50">
+            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[var(--map-orange)]/20 to-[var(--map-orange)]/5 font-serif text-3xl font-bold text-[var(--map-orange)]/60">
               B
             </div>
           )}
-        </button>
+        </motion.button>
 
         <button
           type="button"
@@ -87,21 +70,18 @@ export const TourSheetCollapsed = ({
           className="min-w-0 flex-1 text-left"
           aria-label={t('swipeUpForMore')}
         >
-          <p className="line-clamp-2 font-serif text-base font-bold leading-tight text-on-surface">
-            {title}
-          </p>
+          <div ref={marqueeRef} className="tour-sheet-title-marquee">
+            <p
+              ref={titleRef}
+              className={`tour-sheet-title-marquee__text font-serif text-base font-bold leading-tight text-[var(--map-text)] ${marqueeDistance > 1 ? 'is-marquee' : ''}`}
+              style={marqueeDistance > 1 ? { '--marquee-distance': `-${marqueeDistance}px` } as React.CSSProperties : undefined}
+            >
+              {title}
+            </p>
+          </div>
+          {chapterLabel && <p className="mt-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.11em] text-[var(--map-text)]/55">{chapterLabel}</p>}
         </button>
 
-        <PlayerTransport
-          isPlaying={isPlaying}
-          hasAudio={hasAudio}
-          isGenerating={isGenerating}
-          canRequestAudio={canRequestAudio}
-          onPlayPause={onPlayPause}
-          onSkipBack={onSkipBack}
-          onSkipForward={onSkipForward}
-          readyGlow={readyGlow}
-        />
       </div>
 
       <PlayerScrubber
@@ -109,41 +89,35 @@ export const TourSheetCollapsed = ({
         duration={duration}
         hasAudio={hasAudio}
         onSeek={onSeek}
+        tone="musicSheet"
       />
 
-      {(meta?.locationLine || meta?.timingLine) && (
-        <div className="rounded-2xl bg-surface-dim/90 px-4 py-3">
-          {meta.locationLine && (
-            <div className="flex items-start gap-3">
-              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-on-surface/40" aria-hidden="true" />
-              <p className="text-sm leading-snug text-on-surface/75">{meta.locationLine}</p>
-            </div>
-          )}
-          {meta.timingLine && meta.timingLine !== 'thin' && (
-            <div className={`flex items-start gap-3 ${meta.locationLine ? 'mt-3 border-t border-on-surface/8 pt-3' : ''}`}>
-              <Clock className="mt-0.5 h-4 w-4 shrink-0 text-on-surface/40" aria-hidden="true" />
-              <p className="text-sm leading-snug text-on-surface/75">
-                {t('walkTime', { minutes: meta.timingLine })}
-              </p>
-            </div>
-          )}
-        </div>
-      )}
+      <div className="flex justify-center" onClick={(event) => event.stopPropagation()}>
+        <PlayerTransport
+          size="sm"
+          tone="musicSheet"
+          isPlaying={isPlaying}
+          hasAudio={hasAudio}
+          isGenerating={isGenerating}
+          canRequestAudio={canRequestAudio}
+          onPlayPause={onPlayPause}
+          onRewind={() => onSeek(Math.max(0, currentTime - 10))}
+          onFastForward={() => onSeek(Math.min(duration, currentTime + 10))}
+          playLayoutId="tour-player-primary-control"
+          readyGlow={readyGlow}
+        />
+      </div>
 
-      <button
-        type="button"
-        onClick={onExpand}
-        className="min-h-[1rem] w-full text-center text-[0.6875rem] leading-tight text-on-surface/50"
-        aria-label={t('swipeUpForMore')}
-      >
-        {generateError ? (
+      {generateError && (
+        <button
+          type="button"
+          onClick={onExpand}
+          className="min-h-[1rem] w-full text-center text-sm leading-tight text-on-surface/50"
+          aria-label={t('swipeUpForMore')}
+        >
           <span className="text-accent">{generateError}</span>
-        ) : showThinSource ? (
-          t('thinSourceNote')
-        ) : (
-          t('swipeUpForMore')
-        )}
-      </button>
+        </button>
+      )}
     </div>
   )
 }

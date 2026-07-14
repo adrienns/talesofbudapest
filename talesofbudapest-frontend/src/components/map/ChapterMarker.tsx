@@ -6,14 +6,17 @@ import type { NarrativeChapter } from '@/types/narrative'
 
 type ChapterMarkerProps = {
   chapter: NarrativeChapter
+  stopNumber: number
   isSelected: boolean
   onSelect: (chapter: NarrativeChapter) => void
 }
 
-export const ChapterMarker = ({ chapter, isSelected, onSelect }: ChapterMarkerProps) => (
+export const ChapterMarker = ({ chapter, stopNumber, isSelected, onSelect }: ChapterMarkerProps) => (
   <Marker
     position={[chapter.lat, chapter.lng]}
-    icon={createChapterIcon(isSelected, chapter.chapterIndex + 1)}
+    icon={createChapterIcon(isSelected, chapter, stopNumber)}
+    zIndexOffset={isSelected ? 1000 : 0}
+    riseOnHover
     eventHandlers={{
       click: () => onSelect(chapter),
     }}

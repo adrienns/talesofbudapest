@@ -1,10 +1,11 @@
 'use client'
 
-import { ArrowLeft, ArrowUp, Check, Clock3, Footprints, MapPin, Minus, Plus } from 'lucide-react'
+import { ArrowLeft, ArrowUp, Check, ChevronLeft, Clock3, Footprints, MapPin, Minus, Plus } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useTranslations } from 'next-intl'
 import { QuickStartTourCarousel } from '@/components/narrative/QuickStartTourCarousel'
-import { BackButton } from '@/components/ui/BackButton'
+import { TourDetailView } from '@/components/narrative/TourDetailView'
+import { IconButton } from '@/components/ui/IconButton'
 import {
   CURATED_STARTERS,
   MAX_TOPICS,
@@ -54,18 +55,18 @@ const pillStyle = (index: number): CSSProperties => {
 
 const QuestionnaireWaveSeparator = () => (
   <div className="q-wave-container" aria-hidden="true">
-    <svg viewBox="0 0 1440 96" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+    <svg viewBox="0 0 1440 100" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
       <defs>
         <filter id="q-wave-shadow" x="-2%" y="-20%" width="104%" height="140%">
           <feDropShadow dx="0" dy="3" stdDeviation="2.5" floodColor="#0D47A1" floodOpacity="0.22" />
         </filter>
       </defs>
       <path
-        d="M0 0H1440V42C1350 38 1170 74 1080 82C990 90 450 10 360 10C270 10 180 52 0 52V0Z"
+        d="M0 0H1440V10C1115 10 985 76 840 76C695 76 565 10 420 10C275 10 145 60 0 60V0Z"
         fill="#E1F3FD"
       />
       <path
-        d="M0 52C180 52 270 10 360 10C450 10 990 90 1080 82C1170 74 1350 38 1440 42"
+        d="M0 60C145 60 275 10 420 10C565 10 695 76 840 76C985 76 1115 10 1440 10"
         stroke="#0D47A1"
         strokeWidth={5}
         strokeLinecap="round"
@@ -89,9 +90,19 @@ export const NarrativeQuestionnaire = ({
   const [minutes, setMinutes] = useState<number>(MIN_TOUR_MINUTES)
   const [nearMe, setNearMe] = useState(true)
   const [customPrompt, setCustomPrompt] = useState('')
+  const [selectedCuratedTour, setSelectedCuratedTour] = useState<CuratedStarter | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const topics = TOUR_TOPICS.filter((topic) => topicIds.includes(topic.id))
+  const quickStartTours = CURATED_STARTERS.map((item) => item.kind === 'fixed'
+    ? {
+        slug: item.slug,
+        title: t(item.titleKey),
+        tagline: t(item.taglineKey),
+        imageSrc: item.imageSrc,
+        imageAlt: t(item.imageAltKey),
+      }
+    : item)
   const liveEstimate = style && topics.length > 0 ? estimateTourMinutes(style, topics) : null
 
   useEffect(() => {
@@ -101,6 +112,7 @@ export const NarrativeQuestionnaire = ({
       setTopicIds([])
       setNearMe(true)
       setCustomPrompt('')
+      setSelectedCuratedTour(null)
     }
   }, [isOpen])
 
@@ -178,9 +190,9 @@ export const NarrativeQuestionnaire = ({
 
   const handleCuratedSelect = useCallback(
     (starter: CuratedStarter) => {
-      onStartCurated(starter)
+      setSelectedCuratedTour(starter)
     },
-    [onStartCurated],
+    [],
   )
 
   if (!isOpen) {
@@ -188,6 +200,7 @@ export const NarrativeQuestionnaire = ({
   }
 
   const stepIndex = STEPS.indexOf(step)
+  const hasQuickStartBackground = step === 'style'
 
   return (
     <div
@@ -196,7 +209,9 @@ export const NarrativeQuestionnaire = ({
       aria-label={t('title')}
       className="fixed inset-0 z-50 flex flex-col bg-[var(--color-ai-chat-bg)] animate-ai-chat-enter motion-reduce:animate-none"
     >
-      <header className="flex items-center justify-between px-4 pt-[max(0.875rem,env(safe-area-inset-top))]">
+      <header className={`flex items-center justify-between px-4 pt-[max(0.875rem,env(safe-area-inset-top))] ${
+        hasQuickStartBackground ? 'bg-[#E1F3FD]' : 'bg-[var(--color-ai-chat-bg)]'
+      }`}>
         <button
           type="button"
           onClick={handleBack}
@@ -218,10 +233,17 @@ export const NarrativeQuestionnaire = ({
           ))}
         </div>
 
-        <BackButton onClick={onClose} ariaLabel={t('close')} />
+        <IconButton
+          icon={ChevronLeft}
+          onClick={onClose}
+          ariaLabel={t('close')}
+          size="lg"
+        />
       </header>
 
-      <div className="flex-1 overflow-y-auto px-5 pt-6">
+      <div className={`flex-1 overflow-y-auto px-5 pt-6 ${
+        hasQuickStartBackground ? 'bg-[#E1F3FD]' : 'bg-[var(--color-ai-chat-bg)]'
+      }`}>
         {step === 'style' && (
           <div
             key="style"
@@ -231,7 +253,7 @@ export const NarrativeQuestionnaire = ({
               <div className="mx-auto max-w-md">
                 <QuickStartTourCarousel
                   label={t('quickStart')}
-                  tours={CURATED_STARTERS}
+                  tours={quickStartTours}
                   onSelect={(slug) => {
                     const starter = CURATED_STARTERS.find((item) => item.slug === slug)
                     if (starter) {
@@ -431,6 +453,14 @@ export const NarrativeQuestionnaire = ({
             </button>
           </form>
         </div>
+      )}
+      {selectedCuratedTour && (
+        <TourDetailView
+          starter={selectedCuratedTour}
+          title={selectedCuratedTour.kind === 'fixed' ? t(selectedCuratedTour.titleKey) : selectedCuratedTour.title}
+          onClose={() => setSelectedCuratedTour(null)}
+          onStart={() => onStartCurated(selectedCuratedTour)}
+        />
       )}
     </div>
   )

@@ -13,6 +13,8 @@ export const colors = {
   outlineVariant: 'color-mix(in srgb, #111318 12%, transparent)',
   accentPulse: 'rgba(192, 78, 31, 0.4)',
   accentPulseSelected: 'rgba(255, 107, 53, 0.55)',
+  mapOrange: '#C0603F',
+  mapTeal: '#5C8D89',
   glass: 'rgba(255, 255, 255, 0.68)',
   glassStrong: 'rgba(255, 255, 255, 0.78)',
   glassField: 'rgba(255, 255, 255, 0.52)',

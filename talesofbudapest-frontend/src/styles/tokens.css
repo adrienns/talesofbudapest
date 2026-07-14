@@ -24,6 +24,19 @@
   --marker-glass-border: color-mix(in srgb, var(--color-marker-pin) 38%, var(--glass-border));
   --color-blue:#3A6073;
 
+  /* Premium map experience — intentionally scoped by map-specific components. */
+  --map-cream: #fffaf3;
+  --map-text: #2d2926;
+  --map-teal: #5c8d89;
+  --map-teal-light: #77a8a3;
+  --map-teal-deep: #47726e;
+  --map-orange: #c0603f;
+  --map-orange-light: #d46c48;
+  --map-orange-deep: #ac5639;
+  --map-glass-border: rgba(255, 255, 255, 0.5);
+  --map-warm-outline: #eae1d3;
+  --map-elevation: rgba(139, 76, 46, 0.1);
+
 
 
   /* Glassmorphism */

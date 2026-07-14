@@ -5,7 +5,7 @@ import { ChapterMarker } from '@/components/map/ChapterMarker'
 import { MapFitBounds } from '@/components/map/MapFitBounds'
 import { MAP_ATTRIBUTION, MAP_CENTER, MAP_TILE_OPTIONS, MAP_TILE_URL } from '@/constants/map'
 import { colors } from '@/constants/designTokens'
-import type { NarrativeChapter } from '@/types/narrative'
+import type { NarrativeChapter, WalkingRoute } from '@/types/narrative'
 import 'leaflet/dist/leaflet.css'
 
 type RoutePreviewMapProps = {
@@ -13,6 +13,7 @@ type RoutePreviewMapProps = {
   selectedChapterId?: string | null
   onChapterSelect?: (chapter: NarrativeChapter) => void
   fitKey: string
+  walkingRoute?: WalkingRoute | null
 }
 
 /** A small, self-contained map for the route preview — no pin fetching or clustering. */
@@ -21,6 +22,7 @@ export const RoutePreviewMap = ({
   selectedChapterId = null,
   onChapterSelect,
   fitKey,
+  walkingRoute = null,
 }: RoutePreviewMapProps) => {
   const positions = chapters.map((chapter) => [chapter.lat, chapter.lng] as [number, number])
 
@@ -45,15 +47,16 @@ export const RoutePreviewMap = ({
 
       {positions.length > 1 && (
         <Polyline
-          positions={positions}
-          pathOptions={{ color: colors.accent, weight: 3, opacity: 0.85, dashArray: '8 8' }}
+          positions={walkingRoute?.geometry ?? positions}
+          pathOptions={{ color: colors.accent, weight: 3, opacity: 0.85, dashArray: walkingRoute ? undefined : '8 8' }}
         />
       )}
 
-      {chapters.map((chapter) => (
+      {chapters.map((chapter, index) => (
         <ChapterMarker
           key={chapter.id}
           chapter={chapter}
+          stopNumber={index + 1}
           isSelected={chapter.id === selectedChapterId}
           onSelect={(selected) => onChapterSelect?.(selected)}
         />

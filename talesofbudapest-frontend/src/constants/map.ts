@@ -10,7 +10,7 @@ export const MAP_TILE_URL =
   'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
 
 export const MAP_ATTRIBUTION =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a> &copy; <a href="https://openrouteservice.org">openrouteservice.org</a> by HeiGIT'
 
 export const MAP_TILE_OPTIONS = {
   maxZoom: MAP_MAX_ZOOM,

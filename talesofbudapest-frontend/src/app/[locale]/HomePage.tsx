@@ -11,13 +11,16 @@ import { NarrativeGeneratingOverlay } from '@/components/narrative/NarrativeGene
 import { ResumeTourBanner } from '@/components/narrative/ResumeTourBanner'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LoadingScreen } from '@/components/ui/LoadingScreen'
-import { BackButton } from '@/components/ui/BackButton'
+import { ChevronLeft } from 'lucide-react'
+import { IconButton } from '@/components/ui/IconButton'
 import { PromptBar } from '@/components/ui/PromptBar'
 import { useConfirmNarrative } from '@/features/narrative/hooks/useConfirmNarrative'
 import { useGenerateNarrative } from '@/features/narrative/hooks/useGenerateNarrative'
 import { useNarrativeContext } from '@/features/narrative/hooks/useNarrativeContext'
 import { useNarratives, type LastNarrativePeek } from '@/features/narrative/hooks/useNarratives'
 import { usePlanNarrative } from '@/features/narrative/hooks/usePlanNarrative'
+import { requestWalkingRoute } from '@/features/narrative/hooks/useWalkingRoute'
+import { useArrivalDetection } from '@/features/narrative/hooks/useArrivalDetection'
 import { useResolveLandmark } from '@/features/landmarks/hooks/useResolveLandmark'
 import { useRouter } from '@/i18n/navigation'
 import { queryKeys } from '@/services/queryKeys'
@@ -25,7 +28,7 @@ import { useNarrativeStore } from '@/stores/narrativeStore'
 import { useTourPreferencesStore } from '@/stores/tourPreferencesStore'
 import { getLandmarkImageUrl } from '@/lib/landmarkImage'
 import type { Landmark, MapPin } from '@/types/landmark'
-import type { DraftNarrative, NarrativeChapter, PlaybackItem } from '@/types/narrative'
+import type { DraftNarrative, NarrativeChapter, PlaybackItem, WalkingRoute } from '@/types/narrative'
 import type { SheetSnap } from '@/types/tourSheet'
 import type { NavTabId } from '@/types/navigation'
 import type { AppLocale } from '@/types/locale'
@@ -64,10 +67,11 @@ const HomePageContent = () => {
   const searchParams = useSearchParams()
   const locale = useLocale() as AppLocale
   const tPlayer = useTranslations('player')
+  const tNavigation = useTranslations('navigation')
   const { resolveLandmark } = useResolveLandmark()
   const queryClient = useQueryClient()
   const narrativeContext = useNarrativeContext()
-  const { generateNarrative } = useGenerateNarrative()
+  const { generateNarrative, loadCuratedTour } = useGenerateNarrative()
   const { planNarrative } = usePlanNarrative()
   const { confirmNarrative } = useConfirmNarrative()
   const { loadNarrativeById, peekLastNarrative, resumeLastNarrative, dismissLastNarrative } =
@@ -94,6 +98,9 @@ const HomePageContent = () => {
   const [isExplorerOpen, setIsExplorerOpen] = useState(true)
 
   const [sheetSnap, setSheetSnap] = useState<SheetSnap>('collapsed')
+  const [temporaryRoute, setTemporaryRoute] = useState<WalkingRoute | null>(null)
+  const [isRerouting, setIsRerouting] = useState(false)
+  const [arrivalMessage, setArrivalMessage] = useState<string | null>(null)
 
   const isPlanning = flowState === 'planning'
   const isGenerating = flowState === 'generating'
@@ -120,16 +127,49 @@ const HomePageContent = () => {
 
   const activeChapter = activeRoute?.chapters[activeChapterIndex] ?? null
 
+  const handleArrival = useCallback((chapter: { title?: string }) => {
+    setArrivalMessage(tNavigation('arrived', { title: chapter.title ?? '' }))
+  }, [tNavigation])
+
+  useArrivalDetection(activeRoute ? activeChapter : null, handleArrival)
+
+  useEffect(() => {
+    setTemporaryRoute(null)
+    setArrivalMessage(null)
+  }, [activeChapter?.id])
+
+  const handleReroute = useCallback(() => {
+    if (!activeChapter || !navigator.geolocation) return
+    setIsRerouting(true)
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const route = await requestWalkingRoute([
+            { lat: position.coords.latitude, lng: position.coords.longitude },
+            { lat: activeChapter.lat, lng: activeChapter.lng },
+          ])
+          setTemporaryRoute(route)
+        } catch {
+          setTemporaryRoute(null)
+        } finally {
+          setIsRerouting(false)
+        }
+      },
+      () => setIsRerouting(false),
+      { enableHighAccuracy: false, maximumAge: 30_000, timeout: 10_000 },
+    )
+  }, [activeChapter])
+
   const playbackItem = useMemo<PlaybackItem | null>(() => {
     if (activeChapter && activeRoute) {
       return {
         id: activeChapter.id,
         title: activeChapter.title,
-        subtitle: tPlayer('customNarrative'),
         chapterLabel: `• ${tPlayer('chapter', { number: String(activeChapter.chapterIndex + 1).padStart(2, '0') })}`,
         audioUrl: activeChapter.audioUrl,
         imageUrl: activeChapter.imageUrl,
         imageAlt: activeChapter.title,
+        script: activeChapter.script ?? null,
         lat: activeChapter.lat,
         lng: activeChapter.lng,
       }
@@ -202,18 +242,22 @@ const HomePageContent = () => {
 
   /** One-tap curated starters skip the preview — the prompt is pre-vetted. */
   const handleStartCurated = async (starter: CuratedStarter) => {
-    setLastPrompt(starter.prompt)
+    setLastPrompt(starter.kind === 'generated' ? starter.prompt : `curated:${starter.slug}`)
     setSelectedLandmark(null)
     setLastNarrativePeek(null)
     setFromQuestionnaire({ styleId: starter.styleId, topicIds: starter.topicIds })
 
     try {
-      await generateNarrative(starter.prompt, {
-        ...narrativeContext,
-        locale,
-        styleId: starter.styleId,
-        topicIds: starter.topicIds,
-      })
+      if (starter.kind === 'fixed') {
+        await loadCuratedTour(starter.slug, locale)
+      } else {
+        await generateNarrative(starter.prompt, {
+          ...narrativeContext,
+          locale,
+          styleId: starter.styleId,
+          topicIds: starter.topicIds,
+        })
+      }
       setActiveTab('narrative')
     } catch {
       // error handled in store
@@ -342,7 +386,7 @@ const HomePageContent = () => {
   const showChrome = !isGenerating && !isPlanning && !isPreviewing
 
   return (
-    <main className="relative h-[100dvh] w-full overflow-hidden bg-background">
+    <main className="map-experience relative h-[100dvh] w-full overflow-hidden bg-background">
       <MapView
         selectedLandmarkId={selectedLandmarkId}
         onLandmarkSelect={handleLandmarkSelect}
@@ -350,7 +394,26 @@ const HomePageContent = () => {
         selectedChapterId={activeChapter?.id ?? null}
         onChapterSelect={handleChapterSelect}
         showLandmarks={!hasActiveRoute}
+        temporaryRoute={temporaryRoute}
       />
+
+      {showChrome && hasActiveRoute && activeChapter && (
+        <div className="absolute right-4 top-[max(4.25rem,env(safe-area-inset-top))] z-30 flex flex-col items-end gap-2">
+          <button
+            type="button"
+            onClick={handleReroute}
+            disabled={isRerouting}
+            className="rounded-full bg-surface px-4 py-2 text-xs font-bold text-on-surface shadow disabled:opacity-60"
+          >
+            {isRerouting ? tNavigation('rerouting') : tNavigation('reroute')}
+          </button>
+          {arrivalMessage && (
+            <p role="status" className="max-w-56 rounded-xl bg-surface px-3 py-2 text-xs font-semibold text-on-surface shadow">
+              {arrivalMessage}
+            </p>
+          )}
+        </div>
+      )}
 
       {isExplorerOpen && (
         <section
@@ -428,9 +491,12 @@ const HomePageContent = () => {
 
       {showChrome && playbackItem && (
         <div className="pointer-events-none absolute inset-x-0 top-0 z-[35] flex justify-start px-4 pt-[max(0.875rem,env(safe-area-inset-top))]">
-          <BackButton
-            className="pointer-events-auto"
+          <IconButton
+            icon={ChevronLeft}
             onClick={handlePlaybackBack}
+            ariaLabel={tPlayer('goBack')}
+            size="lg"
+            className="pointer-events-auto rounded-2xl bg-surface text-on-surface/70 shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
           />
         </div>
       )}
@@ -461,6 +527,7 @@ const HomePageContent = () => {
           activeTab={activeTab}
           onTabChange={handleTabChange}
           onAiGuideClick={() => handleOpenElicitation(false)}
+          variant="map"
         />
       )}
     </main>

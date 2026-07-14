@@ -87,10 +87,8 @@ export const AudioDrawer = ({
     onAudioReady: handleAudioReady,
   })
 
-  const displayImageUrl = playbackItem?.imageUrl ?? null
-  const displayTitle = routeTitle
-    ? `${routeTitle}: ${t('chapter', { number: chapterIndex + 1 })}`
-    : playbackItem?.title ?? ''
+  const displayImageUrl = playbackItem?.imageUrl ?? (activeRoute ? '/quick-start/parliement.webp' : null)
+  const displayTitle = playbackItem?.title ?? routeTitle ?? ''
 
   const handleShare = useCallback(() => {
     if (typeof navigator === 'undefined') {
@@ -143,7 +141,6 @@ export const AudioDrawer = ({
   const chapterLabel =
     playbackItem.chapterLabel ??
     `• ${t('chapter', { number: String(chapterIndex + 1).padStart(2, '0') })}`
-  const subtitle = playbackItem.subtitle ?? t('narrativeArchive')
   const imageAlt = playbackItem.imageAlt ?? playbackItem.title
   const onShare = hasAudio || canRequestAudio ? handleShare : undefined
   const onDownload = hasAudio ? handleDownload : undefined
@@ -172,7 +169,6 @@ export const AudioDrawer = ({
 
   const mediaProps = {
     title: displayTitle,
-    subtitle,
     chapterLabel,
     imageUrl: displayImageUrl,
     imageAlt,
@@ -180,6 +176,12 @@ export const AudioDrawer = ({
     meta,
     onShare,
     onDownload,
+    routeStops: activeRoute?.chapters.map((chapter) => ({
+      id: chapter.id,
+      title: chapter.title,
+      imageUrl: chapter.imageUrl,
+    })),
+    currentStopIndex: chapterIndex,
   }
 
   return (

@@ -23,7 +23,7 @@ export const LandmarkMarker = memo(function LandmarkMarker({
 }: LandmarkMarkerProps) {
   const icon = useMemo(() => {
     if (variant === 'dot') {
-      return createLandmarkDotIcon(isSelected)
+      return createLandmarkDotIcon(isSelected, landmark.map_theme)
     }
 
     return createLandmarkIcon(landmark, isSelected)
