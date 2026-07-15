@@ -154,33 +154,51 @@ const fragment = `<div id="langextract-facts-browser">
 </div>
 
 <style>
-  #langextract-facts-browser { color: var(--foreground); }
+  :root { color-scheme: dark; --lfb-bg: #101113; --lfb-panel: #1a1c20; --lfb-panel-hover: #23262c; --lfb-text: #f4f4f5; --lfb-muted: #a1a1aa; --lfb-border: #30343b; --lfb-blue: #7dc1ff; --lfb-blue-bg: #082e50; --lfb-focus: #94caff; }
+  html, body { background: var(--lfb-bg); color: var(--lfb-text); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; min-height: 100%; }
+  #langextract-facts-browser, #langextract-facts-browser * { box-sizing: border-box; }
+  #langextract-facts-browser { color: var(--lfb-text); margin: 0 auto; max-width: 78rem; padding: 1.5rem; }
+  #langextract-facts-browser .viz-grid { display: grid; gap: .8rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #langextract-facts-browser .card { background: var(--lfb-panel); border: 1px solid var(--lfb-border); border-radius: .8rem; }
+  #langextract-facts-browser .viz-stat { display: grid; gap: .2rem; min-height: 7rem; padding: 1rem; }
+  #langextract-facts-browser .viz-stat-value { font-size: 1.8rem; font-variant-numeric: tabular-nums; font-weight: 700; }
+  #langextract-facts-browser .text-muted { color: var(--lfb-muted); }
+  #langextract-facts-browser .text-small { font-size: .875rem; }
+  #langextract-facts-browser .viz-controls { display: grid; gap: .75rem; grid-template-columns: auto auto minmax(15rem, 1fr) minmax(9rem, .7fr) minmax(9rem, .7fr); }
+  #langextract-facts-browser .form-label { color: var(--lfb-text); display: grid; font-size: .875rem; font-weight: 600; gap: .35rem; }
+  #langextract-facts-browser .form-control, #langextract-facts-browser .form-select { background: var(--lfb-panel); border: 1px solid var(--lfb-border); border-radius: .55rem; color: var(--lfb-text); font: inherit; min-height: 2.5rem; padding: .45rem .65rem; width: 100%; }
+  #langextract-facts-browser .form-control:focus, #langextract-facts-browser .form-select:focus, #langextract-facts-browser .btn:focus-visible { border-color: var(--lfb-focus); box-shadow: 0 0 0 2px rgb(148 202 255 / .25); outline: 0; }
+  #langextract-facts-browser .btn { background: var(--lfb-panel); border: 1px solid var(--lfb-border); border-radius: .55rem; color: var(--lfb-text); cursor: pointer; font: inherit; min-height: 2.5rem; padding: .45rem .7rem; }
+  #langextract-facts-browser .btn:hover { background: var(--lfb-panel-hover); }
+  #langextract-facts-browser .btn-primary, #langextract-facts-browser .viz-badge { background: var(--lfb-blue-bg); border-color: transparent; color: var(--lfb-blue); }
+  #langextract-facts-browser .btn-ghost { background: transparent; color: var(--lfb-blue); display: inline; min-height: auto; padding: .05rem .2rem; text-align: left; }
+  #langextract-facts-browser .viz-badge { border-radius: 999px; display: inline-block; font-size: .82rem; font-weight: 650; line-height: 1.35; padding: .2rem .55rem; }
   #langextract-facts-browser .lfb-stats { margin-bottom: 1rem; }
   #langextract-facts-browser .lfb-controls { align-items: end; margin-bottom: .75rem; }
   #langextract-facts-browser .lfb-search { flex: 1 1 16rem; }
   #langextract-facts-browser .lfb-meta { margin: .5rem 0; }
-  #langextract-facts-browser .lfb-results { border-top: 1px solid var(--border); }
-  #langextract-facts-browser details { border-bottom: 1px solid var(--border); padding: .7rem 0; }
+  #langextract-facts-browser .lfb-results { border-top: 1px solid var(--lfb-border); }
+  #langextract-facts-browser details { border-bottom: 1px solid var(--lfb-border); padding: .7rem 0; }
   #langextract-facts-browser summary { cursor: pointer; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .75rem; align-items: start; }
-  #langextract-facts-browser summary::marker { color: var(--muted-foreground); }
+  #langextract-facts-browser summary::marker { color: var(--lfb-muted); }
   #langextract-facts-browser .lfb-statement { font-weight: 500; overflow-wrap: anywhere; }
   #langextract-facts-browser .lfb-detail { display: grid; gap: .65rem; padding: .75rem 0 .2rem; }
-  #langextract-facts-browser .lfb-label { color: var(--muted-foreground); margin-right: .35rem; }
+  #langextract-facts-browser .lfb-label { color: var(--lfb-muted); margin-right: .35rem; }
   #langextract-facts-browser .lfb-tags, #langextract-facts-browser .lfb-entity-line { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
-  #langextract-facts-browser .lfb-evidence { border-left: 2px solid var(--viz-series-1); padding-left: .75rem; }
+  #langextract-facts-browser .lfb-evidence { border-left: 2px solid var(--lfb-blue); padding-left: .75rem; }
   #langextract-facts-browser .lfb-quote { white-space: pre-wrap; overflow-wrap: anywhere; }
-  #langextract-facts-browser .lfb-empty { padding: 2rem 0; color: var(--muted-foreground); text-align: center; }
-  #langextract-facts-browser .lfb-entity-row { border-bottom: 1px solid var(--border); display: grid; gap: .4rem; padding: .7rem 0; }
-  #langextract-facts-browser dialog { background: transparent; border: 0; color: var(--foreground); margin: auto; max-height: none; max-width: min(42rem, calc(100% - 2rem)); overflow: visible; padding: 0; width: 100%; }
+  #langextract-facts-browser .lfb-empty { padding: 2rem 0; color: var(--lfb-muted); text-align: center; }
+  #langextract-facts-browser .lfb-entity-row { border-bottom: 1px solid var(--lfb-border); display: grid; gap: .4rem; padding: .7rem 0; }
+  #langextract-facts-browser dialog { background: transparent; border: 0; color: var(--lfb-text); margin: auto; max-height: none; max-width: min(42rem, calc(100% - 2rem)); overflow: visible; padding: 0; width: 100%; }
   #langextract-facts-browser dialog::backdrop { background: rgb(0 0 0 / .58); }
   #langextract-facts-browser .lfb-dialog-panel { display: grid; grid-template-rows: auto minmax(0, 1fr); max-height: min(42rem, calc(100vh - 2rem)); overflow: hidden; padding: 0; }
-  #langextract-facts-browser .lfb-dialog-head { align-items: start; border-bottom: 1px solid var(--border); display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr) auto; padding: 1rem; }
+  #langextract-facts-browser .lfb-dialog-head { align-items: start; border-bottom: 1px solid var(--lfb-border); display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr) auto; padding: 1rem; }
   #langextract-facts-browser .lfb-dialog-head h3 { margin: 0 0 .25rem; overflow-wrap: anywhere; }
   #langextract-facts-browser .lfb-dialog-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: .75rem 1rem 1rem; }
-  #langextract-facts-browser .lfb-mention { border-bottom: 1px solid var(--border); display: grid; gap: .35rem; padding: .75rem 0; }
+  #langextract-facts-browser .lfb-mention { border-bottom: 1px solid var(--lfb-border); display: grid; gap: .35rem; padding: .75rem 0; }
   #langextract-facts-browser .lfb-mention:last-child { border-bottom: 0; }
-  #langextract-facts-browser mark { background: var(--accent); color: var(--accent-foreground); }
-  @media (max-width: 520px) { #langextract-facts-browser summary { grid-template-columns: 1fr; } }
+  #langextract-facts-browser mark { background: #245377; color: var(--lfb-text); }
+  @media (max-width: 760px) { #langextract-facts-browser { padding: 1rem; } #langextract-facts-browser .viz-grid, #langextract-facts-browser .viz-controls { grid-template-columns: 1fr; } #langextract-facts-browser summary { grid-template-columns: 1fr; } }
 </style>
 
 <script>
