@@ -315,13 +315,20 @@ export const applyResolvedReferences = ({ items, references, mentions, sourceId 
   });
 };
 
-export const aggregateUsage = (calls) => ({
-  prompt_tokens: calls.reduce((sum, call) => sum + Number(call.usage?.prompt_tokens ?? 0), 0),
-  completion_tokens: calls.reduce((sum, call) => sum + Number(call.usage?.completion_tokens ?? 0), 0),
-  total_tokens: calls.reduce((sum, call) => sum + Number(call.usage?.total_tokens ?? 0), 0),
-  cost: calls.reduce((sum, call) => sum + Number(call.usage?.cost ?? 0), 0),
-  call_count: calls.filter((call) => !call.cache_hit).length,
-  cache_hits: calls.filter((call) => call.cache_hit).length,
-});
+export const aggregateUsage = (calls) => {
+  const paid = calls.filter((call) => !call.cache_hit);
+  const cached = calls.filter((call) => call.cache_hit);
+  return {
+    prompt_tokens: paid.reduce((sum, call) => sum + Number(call.usage?.prompt_tokens ?? 0), 0),
+    completion_tokens: paid.reduce((sum, call) => sum + Number(call.usage?.completion_tokens ?? 0), 0),
+    total_tokens: paid.reduce((sum, call) => sum + Number(call.usage?.total_tokens ?? 0), 0),
+    cost: paid.reduce((sum, call) => sum + Number(call.usage?.cost ?? 0), 0),
+    saved_prompt_tokens: cached.reduce((sum, call) => sum + Number(call.usage?.prompt_tokens ?? 0), 0),
+    saved_completion_tokens: cached.reduce((sum, call) => sum + Number(call.usage?.completion_tokens ?? 0), 0),
+    saved_cost: cached.reduce((sum, call) => sum + Number(call.usage?.cost ?? 0), 0),
+    call_count: paid.length,
+    cache_hits: cached.length,
+  };
+};
 
 export const batchesOf = (items, size) => Array.from({ length: Math.ceil(items.length / size) }, (_, index) => items.slice(index * size, (index + 1) * size));

@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   applyCoverage,
   applyResolvedReferences,
+  aggregateUsage,
   assignMentionIds,
   buildClauseLedger,
   itemHasResolvedReferences,
@@ -135,4 +136,17 @@ test('audit statements with shifted compact IDs realign to the exact lexical cla
   const shifted = [{ clause_ids: [clauses[0].clause_id], statement_en: 'Ritual curses cannot be imposed on scholars.' }];
   const [aligned] = realignModelItemsToClauses({ items: shifted, availableClauses: clauses, allClauses: clauses });
   assert.equal(aligned.clause_ids[0], clauses[1].clause_id);
+});
+
+test('cache hits report saved cost without consuming the run budget', () => {
+  const usage = aggregateUsage([
+    { cache_hit: false, usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120, cost: 0.002 } },
+    { cache_hit: true, usage: { prompt_tokens: 300, completion_tokens: 40, total_tokens: 340, cost: 0.006 } },
+  ]);
+  assert.equal(usage.cost, 0.002);
+  assert.equal(usage.saved_cost, 0.006);
+  assert.equal(usage.prompt_tokens, 100);
+  assert.equal(usage.saved_prompt_tokens, 300);
+  assert.equal(usage.call_count, 1);
+  assert.equal(usage.cache_hits, 1);
 });

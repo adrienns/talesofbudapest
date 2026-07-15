@@ -100,7 +100,9 @@ const entities = [...entityGroups.values()].map((group) => ({
 const data = {
   run: {
     source: run.source_id, pages: run.pages, model: run.model, cost: run.usage.cost,
-    average_cost: report.usage.average_total_cost_usd_per_page ?? report.usage.average_cost_usd_per_page,
+    average_cost: report.usage.average_uncached_equivalent_cost_usd_per_page ?? report.usage.average_total_cost_usd_per_page ?? report.usage.average_cost_usd_per_page,
+    actual_average_cost: report.usage.average_total_cost_usd_per_page ?? report.usage.average_cost_usd_per_page,
+    cache_hits: Number(report.usage.cache_hits ?? 0) + Number(report.reference_resolution?.usage?.cache_hits ?? 0),
     grounding_rate: report.extraction.grounded_rate, schema_rate: report.extraction.schema_valid_rate,
     unresolved: report.extraction.unresolved_references,
   },
@@ -113,7 +115,7 @@ const fragment = `<div id="langextract-facts-browser">
   <div class="viz-grid lfb-stats" aria-label="Extraction summary">
     <div class="card viz-stat"><div class="text-muted">Extracted facts</div><div class="viz-stat-value" id="lfb-total"></div><div class="text-small">pages 46–48</div></div>
     <div class="card viz-stat"><div class="text-muted">Exact grounding</div><div class="viz-stat-value" id="lfb-grounding"></div><div class="text-small" id="lfb-schema"></div></div>
-    <div class="card viz-stat"><div class="text-muted">API cost / page</div><div class="viz-stat-value" id="lfb-cost"></div><div class="text-small" id="lfb-unresolved"></div></div>
+    <div class="card viz-stat"><div class="text-muted">New-page cost</div><div class="viz-stat-value" id="lfb-cost"></div><div class="text-small" id="lfb-unresolved"></div></div>
   </div>
 
   <div class="viz-controls lfb-controls" aria-label="Browser controls">
@@ -198,7 +200,9 @@ const fragment = `<div id="langextract-facts-browser">
   root.querySelector('#lfb-grounding').textContent = Math.round(DATA.run.grounding_rate * 100) + '%';
   root.querySelector('#lfb-schema').textContent = Math.round(DATA.run.schema_rate * 100) + '% compact-schema valid';
   root.querySelector('#lfb-cost').textContent = '$' + Number(DATA.run.average_cost).toFixed(4);
-  root.querySelector('#lfb-unresolved').textContent = DATA.run.unresolved + ' references need fallback';
+  root.querySelector('#lfb-unresolved').textContent = DATA.run.cache_hits
+    ? '$' + Number(DATA.run.actual_average_cost).toFixed(4) + '/page paid in last cached run · ' + DATA.run.cache_hits + ' cache hits'
+    : DATA.run.unresolved + ' references need fallback';
 
   const entityButton = (key, text) => key && byEntity.has(key)
     ? '<button type="button" class="btn btn-ghost" data-entity-key="' + esc(key) + '">' + esc(text) + '</button>'
