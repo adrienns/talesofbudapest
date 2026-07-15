@@ -601,6 +601,20 @@ USD 0.05 API ceiling, writes only private JSONL artifacts, and never writes to
 the database. Use `--mentions-only` for a fully local run or `--preflight-only`
 to store mentions and check live model pricing without an extraction request.
 
+### Implemented LangExtract grounding pilot
+
+The LangExtract pilot uses Qwen for compact historical items and Gemini only
+for unresolved reference groups. Easy references are resolved locally first;
+remaining questions are sent in batches of at most 12. Exact model requests
+are cached by model, prompt, parameters, and response schema. A repeated run
+therefore reuses only previously validated JSON and reports cached tokens and
+cost as savings rather than charging them to the new run. Use `--no-cache` for
+a deliberately fresh response or `--cache-file PATH` for an isolated cache.
+
+The default 6,000-character Qwen chunk remains intentional. An 8,000-character
+experiment reduced the nominal request count but returned invalid JSON twice,
+so it was rejected rather than trading reliability for a smaller call count.
+
 ### Implemented semi-open V2
 
 V2 runs beside the pilot and keeps the earlier commands unchanged:

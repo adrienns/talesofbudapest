@@ -35,6 +35,8 @@ VALID_KINDS = {"E", "A"}
 VALID_POLARITIES = {"+", "N", "?"}
 VALID_MODALITIES = {"asserted", "reported", "believed", "planned", "hypothetical", "uncertain"}
 REFERENCE_PREFIX = re.compile(r"^(he|his|him|she|her|hers|they|their|them|it|its)\b", re.IGNORECASE)
+CACHE_VERSION = "historical-langextract-v1"
+REQUEST_TIMEOUT_SECONDS = 180.0
 
 
 @dataclasses.dataclass(frozen=True)
@@ -46,6 +48,60 @@ class Coordinate:
 
 class BudgetExceeded(RuntimeError):
     pass
+
+
+class JsonlResponseCache:
+    """Small durable cache keyed by the complete model request."""
+
+    def __init__(self, path: Path, enabled: bool = True) -> None:
+        self.path = path
+        self.enabled = enabled
+        self._lock = threading.Lock()
+        self._rows: dict[str, dict[str, Any]] = {}
+        if not enabled or not path.exists():
+            return
+        for line in path.read_text("utf-8", errors="ignore").splitlines():
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if row.get("cache_key") and isinstance(row.get("output"), str):
+                self._rows[row["cache_key"]] = row
+
+    @staticmethod
+    def key(operation: str, request: dict[str, Any]) -> str:
+        canonical = json.dumps(
+            {"version": CACHE_VERSION, "operation": operation, "request": request},
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    def get(self, operation: str, request: dict[str, Any]) -> dict[str, Any] | None:
+        if not self.enabled:
+            return None
+        return self._rows.get(self.key(operation, request))
+
+    def put(self, operation: str, request: dict[str, Any], output: str, usage: dict[str, Any]) -> None:
+        if not self.enabled:
+            return
+        cache_key = self.key(operation, request)
+        row = {
+            "cache_key": cache_key,
+            "operation": operation,
+            "model": request.get("model"),
+            "output": output,
+            "usage": usage,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+        with self._lock:
+            if cache_key in self._rows:
+                return
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with self.path.open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps(row, ensure_ascii=False) + "\n")
+            self._rows[cache_key] = row
 
 
 def unwrap_json_output(output: str) -> str:
@@ -61,17 +117,32 @@ def unwrap_json_output(output: str) -> str:
 class MeteredOpenAIModel(OpenAILanguageModel):
     """OpenAI-compatible LangExtract provider that retains OpenRouter usage."""
 
-    def __init__(self, *args: Any, max_cost_usd: float, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, max_cost_usd: float, cache: JsonlResponseCache, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        # A stalled response must not hold the whole-book checkpoint forever.
+        # No automatic transport retry: a timed-out provider may still bill it.
+        self._client = OpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            organization=self.organization,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+            max_retries=0,
+        )
         self.max_cost_usd = max_cost_usd
+        self.cache = cache
         self.usage = {
             "calls": 0,
+            "cache_hits": 0,
+            "cache_misses": 0,
             "invalid_json_retries": 0,
             "invalid_json_failures": 0,
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "total_tokens": 0,
             "cost": 0.0,
+            "saved_prompt_tokens": 0,
+            "saved_completion_tokens": 0,
+            "saved_cost": 0.0,
         }
         self._usage_lock = threading.Lock()
 
@@ -83,7 +154,24 @@ class MeteredOpenAIModel(OpenAILanguageModel):
                     raise BudgetExceeded(f"LangExtract pilot reached ${self.max_cost_usd:.4f} cap")
             try:
                 retry_prompt = prompt if attempt == 0 else f"{prompt}\n\nRETRY: Return complete, shorter JSON. Close every string, array, and object."
-                response = self._client.chat.completions.create(**self._build_chat_completions_params(retry_prompt, config))
+                request = self._build_chat_completions_params(retry_prompt, config)
+                cached = self.cache.get("primary", request)
+                if cached:
+                    try:
+                        clean_output = unwrap_json_output(cached["output"])
+                    except json.JSONDecodeError:
+                        cached = None
+                    else:
+                        cached_usage = cached.get("usage") or {}
+                        with self._usage_lock:
+                            self.usage["cache_hits"] += 1
+                            self.usage["saved_prompt_tokens"] += int(cached_usage.get("prompt_tokens") or 0)
+                            self.usage["saved_completion_tokens"] += int(cached_usage.get("completion_tokens") or 0)
+                            self.usage["saved_cost"] += float(cached_usage.get("cost") or 0)
+                        return lx_types.ScoredOutput(score=1.0, output=clean_output)
+                with self._usage_lock:
+                    self.usage["cache_misses"] += 1
+                response = self._client.chat.completions.create(**request)
                 dumped = response.model_dump()
                 usage = dumped.get("usage") or {}
                 cost = usage.get("cost") or usage.get("cost_details", {}).get("upstream_inference_cost") or 0.0
@@ -98,6 +186,17 @@ class MeteredOpenAIModel(OpenAILanguageModel):
                         raise BudgetExceeded(f"LangExtract pilot exceeded ${self.max_cost_usd:.4f} cap")
                 try:
                     clean_output = unwrap_json_output(last_output)
+                    self.cache.put(
+                        "primary",
+                        request,
+                        clean_output,
+                        {
+                            "prompt_tokens": int(usage.get("prompt_tokens") or 0),
+                            "completion_tokens": int(usage.get("completion_tokens") or 0),
+                            "total_tokens": int(usage.get("total_tokens") or 0),
+                            "cost": float(cost),
+                        },
+                    )
                     return lx_types.ScoredOutput(score=1.0, output=clean_output)
                 except json.JSONDecodeError:
                     if attempt == 0:
@@ -442,13 +541,19 @@ def apply_reference_guards(items: list[dict[str, Any]], pages: dict[int, str]) -
         pre_target = context.split("[[", 1)[0][-350:]
         kinship_scope = f"{literal} {pre_target}"
         if not standalone and re.search(r"\b(father|mother|son|daughter|brother|sister|husband|wife)\b", kinship_scope, re.IGNORECASE):
-            item["reference_antecedent"] = None
-            item["reference_status"] = "ambiguous"
-            item["reference_resolution_source"] = None
             flags = item.setdefault("risk_flags", [])
             if "kinship_coreference" not in flags:
                 flags.append("kinship_coreference")
-            guarded["kinship_escalated"] += 1
+            source = item.get("reference_resolution_source")
+            quality_resolved = (
+                item.get("reference_status") == "resolved_reference"
+                and source not in {None, "primary_model", "local_discourse_carry_forward"}
+            )
+            if not quality_resolved:
+                item["reference_antecedent"] = None
+                item["reference_status"] = "ambiguous"
+                item["reference_resolution_source"] = None
+                guarded["kinship_escalated"] += 1
 
     # Cheap discourse memory: an unresolved pronoun immediately following an
     # explicitly resolved person inherits that person. This is generic across
@@ -503,101 +608,158 @@ def resolve_reference_antecedents(
     api_key: str,
     model_id: str,
     max_cost_usd: float,
+    cache: JsonlResponseCache,
+    batch_size: int = 12,
 ) -> dict[str, Any]:
+    pre_guards = apply_reference_guards(items, pages)
     groups: dict[tuple[int, int, int, str], list[dict[str, Any]]] = {}
     for item in items:
         key = reference_group_key(item)
         literal = item.get("literal_subject") or ""
         standalone = bool(re.fullmatch(r"he|his|him|she|her|hers|they|their|them|it|its", literal, re.IGNORECASE))
-        trusted_primary = standalone and item.get("reference_resolution_source") == "primary_model" and item.get("reference_antecedent")
-        if key is not None and item.get("reference_status") != "not_applicable" and not trusted_primary:
+        primary_possessive = (
+            not standalone
+            and item.get("reference_resolution_source") == "primary_model"
+            and item.get("reference_antecedent")
+        )
+        needs_remote = item.get("reference_status") == "ambiguous" or primary_possessive
+        if key is not None and needs_remote:
             groups.setdefault(key, []).append(item)
     if not groups:
-        return {"model": model_id, "groups": 0, "resolved": 0, "ambiguous": 0, "not_applicable": 0, "usage": {"calls": 0, "cost": 0.0}}
+        return {
+            "model": model_id,
+            "groups": 0,
+            "batches": 0,
+            "resolved": 0,
+            "ambiguous": 0,
+            "not_applicable": 0,
+            "usage": {"calls": 0, "cache_hits": 0, "cache_misses": 0, "cost": 0.0, "saved_cost": 0.0},
+            "guards": pre_guards,
+        }
 
-    id_to_key: dict[str, tuple[int, int, int, str]] = {}
-    request_rows = []
-    context_ids: dict[tuple[int, int, int], str] = {}
-    context_rows = []
-    for index, (key, group_items) in enumerate(groups.items(), start=1):
-        request_id = f"r{index:03d}"
-        id_to_key[request_id] = key
-        literal = group_items[0].get("literal_subject") or "-"
-        span_key = key[:3]
-        if span_key not in context_ids:
-            context_id = f"c{len(context_ids) + 1:03d}"
-            context_ids[span_key] = context_id
-            context_rows.append(f"{context_id}|{reference_context(pages, key).replace('|', '/')}")
-        request_rows.append(f"{request_id}|{context_ids[span_key]}|{literal.replace('|', '/')}")
-
-    prompt = """Resolve only the antecedent of the leading pronoun or possessive in each literal subject.
+    instruction = """Resolve only the antecedent of the leading pronoun or possessive in each literal subject.
 The context target is inside [[double brackets]]. A possessive phrase has a grammatical subject and a different reference antecedent: in 'His tomb', return the person denoted by His, not the tomb. For standalone He/They, return the entity denoted by the pronoun. Never repeat the literal pronoun or possessive phrase as the answer. Return - for an expletive with no referent and ? if genuinely ambiguous. Use only explicitly visible context.
 
 Examples: 'His tomb' after 'Efraim died' -> Efraim. 'his non-Jewish contemporaries' in a paragraph about Shabbetai Tzvi -> Shabbetai Tzvi. Standalone 'He' after 'R. Noah' -> R. Noah.
 
 Return every ID exactly once as ID|antecedent. No JSON, markdown, explanation, or extra pipes.
-
-CONTEXTS:
-""" + "\n".join(context_rows) + "\n\nREQUESTS:\n" + "\n".join(request_rows)
-    client = OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
-    response = client.chat.completions.create(
-        model=model_id,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0,
-        max_tokens=700,
+"""
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://openrouter.ai/api/v1",
+        timeout=REQUEST_TIMEOUT_SECONDS,
+        max_retries=0,
     )
-    dumped = response.model_dump()
-    usage = dumped.get("usage") or {}
-    cost = float(usage.get("cost") or usage.get("cost_details", {}).get("upstream_inference_cost") or 0.0)
-    if cost > max_cost_usd:
-        raise BudgetExceeded(f"reference fallback cost ${cost:.6f} exceeded ${max_cost_usd:.6f} cap")
-    raw_output = response.choices[0].message.content or ""
-    answers: dict[str, str] = {}
-    for match in re.finditer(r"(?im)^\s*(?:[-*]\s*)?(r\d{3})\s*\|\s*([^|\r\n]+)", raw_output.replace("```", "")):
-        request_id = match.group(1).lower()
-        if request_id in id_to_key and request_id not in answers:
-            answers[request_id] = match.group(2).strip().strip("`\"'")
-    if not answers:
-        try:
-            parsed_output = json.loads(raw_output)
-        except json.JSONDecodeError:
-            parsed_output = None
-        if isinstance(parsed_output, dict):
-            for key, value in parsed_output.items():
-                request_id = str(key).lower()
-                if request_id in id_to_key:
-                    answers[request_id] = str(value).strip()
-    for request_id, answer in list(answers.items()):
-        literal = id_to_key[request_id][3]
-        answer_folded = re.sub(r"\W+", "", answer.lower())
-        literal_folded = re.sub(r"\W+", "", literal.lower())
-        if answer_folded == literal_folded or re.fullmatch(r"he|his|him|she|her|hers|they|their|them|it|its", answer, re.IGNORECASE):
-            answers[request_id] = "?"
-
-    resolved = ambiguous = not_applicable = 0
-    for request_id, key in id_to_key.items():
-        antecedent = answers.get(request_id, "?")
-        if antecedent == "-":
-            status = "not_applicable"
-            stored_antecedent = None
-            not_applicable += 1
-        elif antecedent == "?":
-            status = "ambiguous"
-            stored_antecedent = None
-            ambiguous += 1
+    totals = {
+        "calls": 0,
+        "cache_hits": 0,
+        "cache_misses": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "cost": 0.0,
+        "saved_prompt_tokens": 0,
+        "saved_completion_tokens": 0,
+        "saved_cost": 0.0,
+    }
+    unparsed_previews = []
+    group_entries = list(groups.items())
+    for batch_start in range(0, len(group_entries), max(1, batch_size)):
+        batch = group_entries[batch_start:batch_start + max(1, batch_size)]
+        id_to_key: dict[str, tuple[int, int, int, str]] = {}
+        request_rows = []
+        context_ids: dict[tuple[int, int, int], str] = {}
+        context_rows = []
+        for index, (key, group_items) in enumerate(batch, start=1):
+            request_id = f"r{index:03d}"
+            id_to_key[request_id] = key
+            literal = group_items[0].get("literal_subject") or "-"
+            span_key = key[:3]
+            if span_key not in context_ids:
+                context_id = f"c{len(context_ids) + 1:03d}"
+                context_ids[span_key] = context_id
+                context_rows.append(f"{context_id}|{reference_context(pages, key).replace('|', '/')}")
+            request_rows.append(f"{request_id}|{context_ids[span_key]}|{literal.replace('|', '/')}")
+        prompt = instruction + "\nCONTEXTS:\n" + "\n".join(context_rows) + "\n\nREQUESTS:\n" + "\n".join(request_rows)
+        request = {
+            "model": model_id,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0,
+            "max_tokens": min(400, max(80, 40 + len(batch) * 24)),
+        }
+        cached = cache.get("reference", request)
+        raw_output = cached["output"] if cached else ""
+        usage = (cached or {}).get("usage") or {}
+        if cached:
+            totals["cache_hits"] += 1
+            totals["saved_prompt_tokens"] += int(usage.get("prompt_tokens") or 0)
+            totals["saved_completion_tokens"] += int(usage.get("completion_tokens") or 0)
+            totals["saved_cost"] += float(usage.get("cost") or 0)
         else:
-            status = "resolved_reference"
-            stored_antecedent = antecedent
-            resolved += 1
-        for item in groups[key]:
-            item["reference_antecedent"] = stored_antecedent
-            item["reference_status"] = status
-            item["reference_resolution_source"] = model_id
-            literal = item.get("literal_subject") or ""
-            if stored_antecedent and re.fullmatch(r"he|his|him|she|her|hers|they|their|them|it|its", literal, re.IGNORECASE):
-                item["resolved_subject"] = stored_antecedent
+            totals["cache_misses"] += 1
+            response = client.chat.completions.create(**request)
+            dumped = response.model_dump()
+            usage = dumped.get("usage") or {}
+            raw_output = response.choices[0].message.content or ""
+            cost = float(usage.get("cost") or usage.get("cost_details", {}).get("upstream_inference_cost") or 0.0)
+            totals["calls"] += 1
+            totals["prompt_tokens"] += int(usage.get("prompt_tokens") or 0)
+            totals["completion_tokens"] += int(usage.get("completion_tokens") or 0)
+            totals["total_tokens"] += int(usage.get("total_tokens") or 0)
+            totals["cost"] += cost
+            if totals["cost"] > max_cost_usd:
+                raise BudgetExceeded(f"reference fallback cost ${totals['cost']:.6f} exceeded ${max_cost_usd:.6f} cap")
 
-    guards = apply_reference_guards(items, pages)
+        answers: dict[str, str] = {}
+        for match in re.finditer(r"(?im)^\s*(?:[-*]\s*)?(r\d{3})\s*\|\s*([^|\r\n]+)", raw_output.replace("```", "")):
+            request_id = match.group(1).lower()
+            if request_id in id_to_key and request_id not in answers:
+                answers[request_id] = match.group(2).strip().strip("`\"'")
+        if not answers:
+            try:
+                parsed_output = json.loads(raw_output)
+            except json.JSONDecodeError:
+                parsed_output = None
+            if isinstance(parsed_output, dict):
+                for key, value in parsed_output.items():
+                    request_id = str(key).lower()
+                    if request_id in id_to_key:
+                        answers[request_id] = str(value).strip()
+        if not answers:
+            unparsed_previews.append(raw_output[:300])
+        elif not cached:
+            cache.put(
+                "reference",
+                request,
+                raw_output,
+                {
+                    "prompt_tokens": int(usage.get("prompt_tokens") or 0),
+                    "completion_tokens": int(usage.get("completion_tokens") or 0),
+                    "total_tokens": int(usage.get("total_tokens") or 0),
+                    "cost": cost,
+                },
+            )
+        for request_id, answer in list(answers.items()):
+            literal = id_to_key[request_id][3]
+            answer_folded = re.sub(r"\W+", "", answer.lower())
+            literal_folded = re.sub(r"\W+", "", literal.lower())
+            if answer_folded == literal_folded or re.fullmatch(r"he|his|him|she|her|hers|they|their|them|it|its", answer, re.IGNORECASE):
+                answers[request_id] = "?"
+
+        for request_id, key in id_to_key.items():
+            antecedent = answers.get(request_id, "?")
+            status = "not_applicable" if antecedent == "-" else "ambiguous" if antecedent == "?" else "resolved_reference"
+            stored_antecedent = None if antecedent in {"-", "?"} else antecedent
+            for item in groups[key]:
+                item["reference_antecedent"] = stored_antecedent
+                item["reference_status"] = status
+                item["reference_resolution_source"] = model_id
+                literal = item.get("literal_subject") or ""
+                if stored_antecedent and re.fullmatch(r"he|his|him|she|her|hers|they|their|them|it|its", literal, re.IGNORECASE):
+                    item["resolved_subject"] = stored_antecedent
+
+    post_guards = apply_reference_guards(items, pages)
+    guards = {key: pre_guards.get(key, 0) + post_guards.get(key, 0) for key in set(pre_guards) | set(post_guards)}
     resolved = ambiguous = not_applicable = 0
     for group_items in groups.values():
         statuses = {item.get("reference_status") for item in group_items}
@@ -610,18 +772,13 @@ CONTEXTS:
     return {
         "model": model_id,
         "groups": len(groups),
+        "batches": (len(groups) + max(1, batch_size) - 1) // max(1, batch_size),
         "resolved": resolved,
         "ambiguous": ambiguous,
         "not_applicable": not_applicable,
-        "usage": {
-            "calls": 1,
-            "prompt_tokens": int(usage.get("prompt_tokens") or 0),
-            "completion_tokens": int(usage.get("completion_tokens") or 0),
-            "total_tokens": int(usage.get("total_tokens") or 0),
-            "cost": cost,
-        },
+        "usage": totals,
         "guards": guards,
-        "unparsed_preview": raw_output[:500] if not answers else None,
+        "unparsed_preview": unparsed_previews[0] if unparsed_previews else None,
     }
 
 
@@ -642,14 +799,21 @@ def validate_existing_references(source_id: str) -> None:
     print(json.dumps({"guards": guards, "unresolved": report["extraction"]["unresolved_references"]}, indent=2))
 
 
-def repair_existing_references(source_id: str, api_key: str, model_id: str, max_cost_usd: float) -> None:
+def repair_existing_references(
+    source_id: str,
+    api_key: str,
+    model_id: str,
+    max_cost_usd: float,
+    cache: JsonlResponseCache,
+    batch_size: int,
+) -> None:
     item_path = EXTRACTIONS / f"{source_id}.langextract-pilot.jsonl"
     report_path = EXTRACTIONS / f"{source_id}.langextract-pilot.report.json"
     rows = [json.loads(line) for line in item_path.read_text("utf-8").splitlines() if line.strip()]
     run = next(row for row in rows if row.get("record_type") == "run")
     items = [row for row in rows if row.get("record_type") == "item"]
     pages = parse_pages((TEXT_DIR / f"{source_id}.pages.txt").read_text("utf-8"))
-    summary = resolve_reference_antecedents(items, pages, api_key, model_id, max_cost_usd)
+    summary = resolve_reference_antecedents(items, pages, api_key, model_id, max_cost_usd, cache, batch_size)
     run["reference_fallback"] = summary
     item_path.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in [run, *items]) + "\n", "utf-8")
     report = json.loads(report_path.read_text("utf-8"))
@@ -728,22 +892,33 @@ def main() -> None:
     parser.add_argument("--context-source-chars", type=int, default=2600)
     parser.add_argument("--reference-model", default="google/gemini-2.5-flash")
     parser.add_argument("--max-reference-cost-usd", type=float, default=0.004)
+    parser.add_argument("--reference-batch-size", type=int, default=12)
+    parser.add_argument("--cache-file", default=str(EXTRACTIONS / "historical-langextract-model-cache.jsonl"))
+    parser.add_argument("--no-cache", action="store_true")
     parser.add_argument("--skip-reference-fallback", action="store_true")
     parser.add_argument("--repair-references-only", action="store_true")
     parser.add_argument("--validate-references-only", action="store_true")
     args = parser.parse_args()
-    if args.page_count < 1 or args.max_cost_usd <= 0 or args.max_reference_cost_usd <= 0:
+    if args.page_count < 1 or args.max_cost_usd <= 0 or args.max_reference_cost_usd <= 0 or args.reference_batch_size < 1:
         raise SystemExit("invalid page count or cost cap")
 
+    cache = JsonlResponseCache(Path(args.cache_file).expanduser().resolve(), enabled=not args.no_cache)
+    if args.validate_references_only:
+        validate_existing_references(args.source)
+        return
     load_dotenv(BACKEND / ".env")
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
         raise SystemExit("OPENROUTER_API_KEY is required")
-    if args.validate_references_only:
-        validate_existing_references(args.source)
-        return
     if args.repair_references_only:
-        repair_existing_references(args.source, api_key, args.reference_model, args.max_reference_cost_usd)
+        repair_existing_references(
+            args.source,
+            api_key,
+            args.reference_model,
+            args.max_reference_cost_usd,
+            cache,
+            args.reference_batch_size,
+        )
         return
 
     pages = parse_pages((TEXT_DIR / f"{args.source}.pages.txt").read_text("utf-8"))
@@ -759,6 +934,7 @@ def main() -> None:
         max_workers=1,
         max_output_tokens=args.max_output_tokens,
         max_cost_usd=args.max_cost_usd,
+        cache=cache,
     )
 
     started = time.time()
@@ -819,6 +995,8 @@ def main() -> None:
             api_key,
             args.reference_model,
             min(args.max_reference_cost_usd, remaining_budget),
+            cache,
+            args.reference_batch_size,
         )
 
     run_id = hashlib.sha256(f"{args.source}:{time.time_ns()}".encode()).hexdigest()[:20]
@@ -832,6 +1010,7 @@ def main() -> None:
             "pages": sorted(target_pages), "model": args.model, "usage": model.usage,
             "normalization_repairs": repairs, "publication_status": "private",
             "reference_fallback": reference_summary,
+            "cache": {"enabled": cache.enabled, "path": str(cache.path)},
         }, ensure_ascii=False) + "\n")
         for item in items:
             stream.write(json.dumps({"record_type": "item", "run_id": run_id, **item}, ensure_ascii=False) + "\n")
@@ -859,12 +1038,27 @@ def main() -> None:
         "regressions_passed": sum(regressions.values()),
         "regressions_total": len(regressions),
         "reference_resolution": reference_summary,
+        "cache": {"enabled": cache.enabled, "path": str(cache.path)},
         "usage": {
             **model.usage,
             "reference_cost": reference_summary["usage"]["cost"],
+            "reference_saved_cost": reference_summary["usage"].get("saved_cost", 0.0),
             "total_cost": model.usage["cost"] + reference_summary["usage"]["cost"],
+            "total_saved_cost": model.usage["saved_cost"] + reference_summary["usage"].get("saved_cost", 0.0),
+            "uncached_equivalent_cost": (
+                model.usage["cost"]
+                + reference_summary["usage"]["cost"]
+                + model.usage["saved_cost"]
+                + reference_summary["usage"].get("saved_cost", 0.0)
+            ),
             "average_cost_usd_per_page": model.usage["cost"] / args.page_count,
             "average_total_cost_usd_per_page": (model.usage["cost"] + reference_summary["usage"]["cost"]) / args.page_count,
+            "average_uncached_equivalent_cost_usd_per_page": (
+                model.usage["cost"]
+                + reference_summary["usage"]["cost"]
+                + model.usage["saved_cost"]
+                + reference_summary["usage"].get("saved_cost", 0.0)
+            ) / args.page_count,
         },
         "v2_baseline": latest_v2_baseline(args.source, target_pages),
         "accuracy_gate": {

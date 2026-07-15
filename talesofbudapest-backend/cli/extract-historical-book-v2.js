@@ -484,8 +484,6 @@ const main = async () => {
     const cached = cache.get(cacheKey);
     if (cached) {
       validateProtocol({ response: cached.payload, expectedClauseIds, expectedVerdictIds });
-      spent += Number(cached.usage?.cost ?? 0);
-      if (spent > MAX_COST_USD) throw new BudgetExceeded(`Cached ${operation} cost exceeds the run budget`);
       calls.push({ operation, model, usage: cached.usage ?? null, cache_hit: true });
       return cached.payload;
     }

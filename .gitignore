@@ -13,6 +13,8 @@ infra/backups/
 infra/supabase-upstream/docker/.env
 rag/.venv/
 talesofbudapest-backend/.venv-historical-nlp/
+**/__pycache__/
+talesofbudapest-backend/ingest/
 # Generated poll snapshots; retain the directory placeholder only.
 ingest/output/*.json
 ingest/output/**/*.json
