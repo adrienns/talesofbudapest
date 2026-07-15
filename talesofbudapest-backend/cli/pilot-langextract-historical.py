@@ -349,7 +349,12 @@ def evidence_for_span(start: int, end: int, coordinates: list[Coordinate | None]
             "page_ref": row["page"],
             "start_offset": row["start_offset"],
             "end_offset": row["end_offset"],
-            "quote": pages[row["page"]][row["start_offset"]:row["end_offset"]],
+            # Offsets remain immutable raw OCR offsets, but every consumer sees
+            # the normalized reading view. Never show or prompt on `syna-\n`
+            # followed by `gogue` when the actual word is "synagogue".
+            "quote": "".join(normalize_slice(
+                row["page"], pages[row["page"]], row["start_offset"], row["end_offset"]
+            )[0]),
         }
         for row in grouped
     ]
@@ -474,10 +479,13 @@ def reference_group_key(item: dict[str, Any]) -> tuple[int, int, int, str] | Non
 def reference_context(pages: dict[int, str], key: tuple[int, int, int, str]) -> str:
     page, start, end, _ = key
     page_text = pages.get(page, "")
-    prefix = page_text[max(0, start - 750):start]
+    prefix = "".join(normalize_slice(page, page_text, max(0, start - 750), start)[0])
+    target = "".join(normalize_slice(page, page_text, start, end)[0])
+    suffix = "".join(normalize_slice(page, page_text, end, min(len(page_text), end + 160))[0])
     if start < 350 and pages.get(page - 1):
-        prefix = pages[page - 1][-750:] + " " + prefix
-    return re.sub(r"\s+", " ", f"{prefix} [[{page_text[start:end]}]] {page_text[end:min(len(page_text), end + 160)]}").strip()
+        previous = pages[page - 1]
+        prefix = "".join(normalize_slice(page - 1, previous, max(0, len(previous) - 750), len(previous))[0]) + " " + prefix
+    return re.sub(r"\s+", " ", f"{prefix} [[{target}]] {suffix}").strip()
 
 
 def apply_reference_guards(items: list[dict[str, Any]], pages: dict[int, str]) -> dict[str, int]:
