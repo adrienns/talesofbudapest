@@ -18,6 +18,10 @@ const fold = (value) => String(value ?? '').normalize('NFKD').replace(/[\u0300-\
 const itemRows = readJsonl(path.join(extractionDir, `${sourceId}.langextract-pilot.jsonl`));
 const run = itemRows.find((row) => row.record_type === 'run');
 const report = JSON.parse(fs.readFileSync(path.join(extractionDir, `${sourceId}.langextract-pilot.report.json`), 'utf8'));
+if (!run) throw new Error(`No run header in ${sourceId}.langextract-pilot.jsonl`);
+if (report.run_id !== run.run_id) {
+  throw new Error(`Refusing to mix runs: JSONL=${run.run_id}, report=${report.run_id}. Regenerate both from the same extraction run.`);
+}
 const items = itemRows.filter((row) => row.record_type === 'item');
 const mentionRuns = readJsonl(path.join(extractionDir, `${sourceId}.mentions.jsonl`));
 const mentionRun = mentionRuns.filter((row) => (row.pdf_pages ?? []).some((page) => run.pages.includes(page))).at(-1);
@@ -99,7 +103,7 @@ const entities = [...entityGroups.values()].map((group) => ({
 
 const data = {
   run: {
-    source: run.source_id, pages: run.pages, model: run.model, cost: run.usage.cost,
+    id: run.run_id, source: run.source_id, pages: run.pages, model: run.model, cost: run.usage.cost,
     average_cost: report.usage.average_uncached_equivalent_cost_usd_per_page ?? report.usage.average_total_cost_usd_per_page ?? report.usage.average_cost_usd_per_page,
     actual_average_cost: report.usage.average_total_cost_usd_per_page ?? report.usage.average_cost_usd_per_page,
     cache_hits: Number(report.usage.cache_hits ?? 0) + Number(report.reference_resolution?.usage?.cache_hits ?? 0),
@@ -250,7 +254,7 @@ const fragment = `<div id="langextract-facts-browser">
     const page = els.page.value;
     if (view === 'facts') {
       const rows = DATA.items.filter((item) => (els.kind.value === 'all' || item.kind === els.kind.value) && (page === 'all' || item.evidence.some((entry) => String(entry.page_ref) === page)) && (!query || [item.statement, item.type, item.literal_subject, item.resolved_subject, item.reference_antecedent, ...item.evidence.map((entry) => entry.quote)].filter(Boolean).join(' ').toLowerCase().includes(query)));
-      els.meta.textContent = rows.length + ' facts shown · ' + DATA.run.source + ' · ' + DATA.run.model;
+      els.meta.textContent = rows.length + ' facts shown · ' + DATA.run.source + ' · run ' + DATA.run.id.slice(0, 8);
       els.results.innerHTML = rows.length ? rows.map(renderFact).join('') : '<div class="lfb-empty">No matching facts</div>';
     } else {
       const rows = DATA.entities.filter((entity) => (!query || [entity.label, entity.type, ...entity.aliases].join(' ').toLowerCase().includes(query)) && (page === 'all' || entity.mentions.some((mention) => String(mention.page) === page)));

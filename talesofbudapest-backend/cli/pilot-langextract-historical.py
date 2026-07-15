@@ -984,7 +984,7 @@ def main() -> None:
                 "publication_status": "private",
             })
 
-    reference_summary = {"model": args.reference_model, "groups": 0, "resolved": 0, "ambiguous": 0, "not_applicable": 0, "usage": {"calls": 0, "cost": 0.0}}
+    reference_summary = {"model": args.reference_model, "groups": 0, "resolved": 0, "ambiguous": 0, "not_applicable": 0, "usage": {"calls": 0, "cost": 0.0, "saved_cost": 0.0}}
     if not args.skip_reference_fallback:
         remaining_budget = args.max_cost_usd - float(model.usage.get("cost") or 0)
         if remaining_budget <= 0:
