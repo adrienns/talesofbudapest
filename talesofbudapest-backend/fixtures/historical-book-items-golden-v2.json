@@ -1,0 +1,26 @@
+{
+  "source_id": "jewish-budapest",
+  "version": 2,
+  "annotation_status": "incomplete_human_adjudication_required",
+  "description": "Exhaustive clause-level V2 gold manifest. Existing V1 high-value events are development seeds only and must be relabeled together with assertions and negative clauses before annotation_status becomes complete.",
+  "seed_fixture": "historical-book-events-golden.json",
+  "locked_config": null,
+  "splits": {
+    "development": [40, 46, 47, 48, 60, 73, 74, 75, 80, 97, 98, 99, 100, 103, 104, 105, 120, 140, 160, 180, 200, 220, 240, 280, 300, 320, 340, 360, 380, 400, 420, 440],
+    "heldout": [50, 70, 90, 110, 130, 150, 170, 190, 210, 230, 250, 290, 330, 370, 410, 470]
+  },
+  "minimums": {
+    "total_items": 300,
+    "heldout_items": 150,
+    "layer_gate_minimum_items": 50
+  },
+  "annotation_rules": [
+    "Human adjudicate every clause, including clauses with no item.",
+    "Record events plus state, rule_custom, relationship, belief_report, and description assertions.",
+    "Every item needs stable clause_ids and page-level exact evidence.",
+    "Heldout pages must not be used for prompt, threshold, schema, or routing changes.",
+    "Set annotation_status to complete only after exhaustive adjudication and minimum counts pass."
+  ],
+  "clauses": [],
+  "items": []
+}
