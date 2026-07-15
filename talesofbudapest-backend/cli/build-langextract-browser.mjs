@@ -50,13 +50,12 @@ const mentionContext = (mention) => items.flatMap((item) => item.evidence ?? [])
 
 const addMentionEntities = (mention, itemIds = []) => {
   const label = mention.normalized_text ?? mention.text;
-  const key = `mention::${fold(label)}`;
   if (!fold(label)) return;
   const evidence = {
     page: mention.page, start: mention.start_offset, end: mention.end_offset, text: mention.text,
     confidence: mention.confidence ?? null, quote: mentionContext(mention), item_ids: itemIds,
   };
-  upsertEntity(key, label, mention.type ?? 'entity', mention.text, evidence);
+  upsertEntity(`mention::${fold(label)}`, label, mention.type ?? 'entity', mention.text, evidence);
   // This is a type bucket, not a claim that all mentions are the same named
   // building. It gives a useful all-synagogues view without false resolution.
   if (SYNAGOGUE_PATTERN.test(label)) {
@@ -95,11 +94,24 @@ const itemViews = items.map((item) => {
   }
   const evidence = (item.evidence ?? []).map((entry) => ({
     ...entry,
-    entities: localMentions.filter((mention) => mention.page === entry.page_ref && mention.start_offset < entry.end_offset && mention.end_offset > entry.start_offset)
-      .map((mention) => ({
-        key: SYNAGOGUE_PATTERN.test(mention.normalized_text ?? mention.text) ? 'class::synagogue' : `mention::${fold(mention.normalized_text ?? mention.text)}`,
-        text: mention.text, type: mention.type, start: mention.start_offset, end: mention.end_offset,
-      })),
+    entities: (() => {
+      let cursor = 0;
+      return localMentions.filter((mention) => mention.page === entry.page_ref && mention.start_offset < entry.end_offset && mention.end_offset > entry.start_offset)
+        .sort((a, b) => a.start_offset - b.start_offset)
+        .map((mention) => {
+          const display = String(mention.normalized_text ?? mention.text).replace(/\s+/g, ' ').trim();
+          const index = entry.quote.toLocaleLowerCase().indexOf(display.toLocaleLowerCase(), cursor);
+          if (index >= 0) cursor = index + display.length;
+          return {
+            key: SYNAGOGUE_PATTERN.test(mention.normalized_text ?? mention.text) ? 'class::synagogue' : `mention::${fold(mention.normalized_text ?? mention.text)}`,
+            text: display, type: mention.type,
+            // Evidence quotes are cleaned, so raw OCR offsets cannot position
+            // highlights after a joined word such as syna-\ngogue.
+            start: index >= 0 ? entry.start_offset + index : mention.start_offset,
+            end: index >= 0 ? entry.start_offset + index + display.length : mention.end_offset,
+          };
+        });
+    })(),
   }));
   return {
     id: item.item_id, kind: item.kind, type: item.open_type, polarity: item.polarity, modality: item.modality,
