@@ -581,6 +581,50 @@ near-zero tolerance.
 
 ## 18. Final decision summary
 
+### Implemented NLP-first pilot
+
+The bounded private pilot is available as:
+
+```bash
+cd talesofbudapest-backend
+npm run setup:historical:nlp
+npm run extract:historical:nlp -- --source jewish-budapest --from-page 46 --page-count 3
+```
+
+It runs `fastino/gliner2-multi-v1` locally for exact-offset mentions, persists
+the mention artifact, derives eligible event schemas from the detected types,
+and then sends the pages plus mention IDs to a schema-constrained extractor.
+Generated participants are rejected unless their local mention span lies
+inside the exact evidence quote. A different model family verifies surviving
+candidates. The command is capped at three pages, defaults to a conservative
+USD 0.05 API ceiling, writes only private JSONL artifacts, and never writes to
+the database. Use `--mentions-only` for a fully local run or `--preflight-only`
+to store mentions and check live model pricing without an extraction request.
+
+### Implemented semi-open V2
+
+V2 runs beside the pilot and keeps the earlier commands unchanged:
+
+```bash
+cd talesofbudapest-backend
+npm run extract:historical:v2 -- --source jewish-budapest --from-page 46 --page-count 3 --preflight-only
+npm run extract:historical:v2 -- --source jewish-budapest --from-page 46 --page-count 3 --resume
+npm run eval:historical:v2 -- --split heldout
+```
+
+The local stage ledgers every clause, preserves raw offsets, adds adjacent-page
+boundary context, and treats retrieved schemas as hints with an open fallback.
+The model wire format uses short temporary IDs and compact tab-separated rows;
+stored artifacts expand them into stable item and coverage records. Flash-Lite
+extracts, Qwen independently audits, and Flash adjudicates only unmatched or
+risky items. Results remain private in `historical-items-v2.jsonl` and
+`historical-coverage-v2.jsonl`.
+
+The evaluator fails closed. It cannot pass until the 48-page gold fixture has
+exhaustive human clause adjudication, at least 300 items (150 held out), and a
+locked extraction configuration. Gates are strict precision and recall above
+0.95 and average API cost at most USD 0.002 per source page.
+
 We will not rescan or OCR a book when extraction logic changes. We will retain
 an immutable source-text layer and version every downstream interpretation.
 

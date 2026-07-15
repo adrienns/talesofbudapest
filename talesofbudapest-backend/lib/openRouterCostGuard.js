@@ -41,7 +41,10 @@ export const pricingForModels = (modelIds, catalog) => modelIds.map((modelId) =>
     modelId,
     prompt: priceNumber(model.pricing?.prompt, 'prompt', modelId),
     completion: priceNumber(model.pricing?.completion, 'completion', modelId),
-    request: priceNumber(model.pricing?.request, 'request', modelId),
+    // OpenRouter omits `request` when no per-request fee applies. Token prices remain
+    // mandatory above; treating only this omitted optional dimension as zero preserves
+    // the conservative ceiling for every billed dimension.
+    request: priceNumber(model.pricing?.request ?? '0', 'request', modelId),
   };
   if (modelId.endsWith(':free') && (pricing.prompt !== 0 || pricing.completion !== 0 || pricing.request !== 0)) {
     throw new Error(`Refusing extraction: ${modelId} is no longer free in the live OpenRouter catalog`);

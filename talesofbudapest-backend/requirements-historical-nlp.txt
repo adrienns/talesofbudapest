@@ -1,0 +1,4 @@
+# Local inference extra includes PyTorch and Transformers. Keep this separate from
+# the Node backend install because it is only needed by the historical-book NLP job.
+gliner2[local]>=1.3.1,<2
+langextract[openai]==1.6.0
