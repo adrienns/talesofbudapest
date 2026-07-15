@@ -132,10 +132,21 @@ const data = {
   entities,
 };
 const encodedData = Buffer.from(JSON.stringify(data), 'utf8').toString('base64');
+const documentTitle = `Historical facts · ${run.source_id} · pages ${run.pages.join('–')}`;
+const pageLabel = run.pages.join('–');
 
-const fragment = `<div id="langextract-facts-browser">
+const fragment = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:;">
+  <title>${documentTitle}</title>
+</head>
+<body>
+<main id="langextract-facts-browser">
   <div class="viz-grid lfb-stats" aria-label="Extraction summary">
-    <div class="card viz-stat"><div class="text-muted">Extracted facts</div><div class="viz-stat-value" id="lfb-total"></div><div class="text-small">pages 46–48</div></div>
+    <div class="card viz-stat"><div class="text-muted">Extracted facts</div><div class="viz-stat-value" id="lfb-total"></div><div class="text-small">pages ${pageLabel}</div></div>
     <div class="card viz-stat"><div class="text-muted">Exact grounding</div><div class="viz-stat-value" id="lfb-grounding"></div><div class="text-small" id="lfb-schema"></div></div>
     <div class="card viz-stat"><div class="text-muted">New-page cost</div><div class="viz-stat-value" id="lfb-cost"></div><div class="text-small" id="lfb-unresolved"></div></div>
   </div>
@@ -169,7 +180,7 @@ const fragment = `<div id="langextract-facts-browser">
       </div>
     </div>
   </dialog>
-</div>
+</main>
 
 <style>
   :root { color-scheme: dark; --lfb-bg: #101113; --lfb-panel: #1a1c20; --lfb-panel-hover: #23262c; --lfb-text: #f4f4f5; --lfb-muted: #a1a1aa; --lfb-border: #30343b; --lfb-blue: #7dc1ff; --lfb-blue-bg: #082e50; --lfb-focus: #94caff; }
@@ -317,6 +328,8 @@ const fragment = `<div id="langextract-facts-browser">
   render();
 })();
 </script>
+</body>
+</html>
 `;
 
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
