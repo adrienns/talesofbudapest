@@ -90,6 +90,13 @@ GENERIC_MENTIONS = {
 
 HEURISTIC_PATTERNS = [
     ("person", re.compile(r"\b(?:R\.|Rabbi|Dr\.|Count|Baron|Professor|General)\s+[A-ZÀ-Ž][A-Za-zÀ-ž'’.-]+(?:\s+(?:ben\s+)?[A-ZÀ-Ž][A-Za-zÀ-ž'’.-]+){0,4}")),
+    # Book-specific city anchors: GLiNER can skip Buda when it is embedded in
+    # a dense historical claim, but it is unambiguously a place in this corpus.
+    ("place", re.compile(r"\b(?:Buda|Pest|Budapest|Óbuda|Obuda)\b", re.IGNORECASE)),
+    # Keep generic synagogue references as exact building mentions. They are
+    # intentionally not resolved to one named building; the browser aggregates
+    # them as a searchable building class.
+    ("building", re.compile(r"\bsynagog(?:ue|ues)\b", re.IGNORECASE)),
     ("organisation", re.compile(r"\b(?:[A-ZÀ-Ž][A-Za-zÀ-ž'’.-]+\s+){1,5}(?:community|Society|Academy|University|Diet|Parliament|Council|synagogue|school|parish|authorities|leadership)\b")),
     ("work", re.compile(r"\b(?:Sefer|Sha'ar|Mahane|Panim|Mishneh|Yemei)\s+[A-ZÀ-Ža-zà-ž][A-Za-zÀ-ž'’ -]{1,50}")),
     ("group", re.compile(r"\b(?:the\s+)?(?:fanatic\s+)?followers of the (?:new\s+)?Messiah\b", re.IGNORECASE)),
