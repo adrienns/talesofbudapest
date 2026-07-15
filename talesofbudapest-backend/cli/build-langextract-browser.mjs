@@ -26,6 +26,7 @@ const items = itemRows.filter((row) => row.record_type === 'item');
 const mentionRuns = readJsonl(path.join(extractionDir, `${sourceId}.mentions.jsonl`));
 const mentionRun = mentionRuns.filter((row) => (row.pdf_pages ?? []).some((page) => run.pages.includes(page))).at(-1);
 const localMentions = mentionRun?.mentions ?? [];
+const SYNAGOGUE_PATTERN = /\bsynagog(?:ue|ues)\b/i;
 
 const entityGroups = new Map();
 const upsertEntity = (key, label, type, alias, mention) => {
@@ -41,13 +42,30 @@ const upsertEntity = (key, label, type, alias, mention) => {
   entityGroups.set(key, group);
 };
 
-for (const mention of localMentions) {
-  const key = `mention::${fold(mention.normalized_text ?? mention.text)}`;
-  if (!fold(mention.normalized_text ?? mention.text)) continue;
-  upsertEntity(key, mention.normalized_text ?? mention.text, mention.type ?? 'entity', mention.text, {
+const mentionContext = (mention) => items.flatMap((item) => item.evidence ?? []).find((evidence) => (
+  evidence.page_ref === mention.page
+  && evidence.start_offset < mention.end_offset
+  && evidence.end_offset > mention.start_offset
+))?.quote ?? mention.text;
+
+const addMentionEntities = (mention, itemIds = []) => {
+  const label = mention.normalized_text ?? mention.text;
+  const key = `mention::${fold(label)}`;
+  if (!fold(label)) return;
+  const evidence = {
     page: mention.page, start: mention.start_offset, end: mention.end_offset, text: mention.text,
-    confidence: mention.confidence ?? null, quote: mention.text, item_ids: [],
-  });
+    confidence: mention.confidence ?? null, quote: mentionContext(mention), item_ids: itemIds,
+  };
+  upsertEntity(key, label, mention.type ?? 'entity', mention.text, evidence);
+  // This is a type bucket, not a claim that all mentions are the same named
+  // building. It gives a useful all-synagogues view without false resolution.
+  if (SYNAGOGUE_PATTERN.test(label)) {
+    upsertEntity('class::synagogue', 'Synagogue', 'building class', mention.text, evidence);
+  }
+};
+
+for (const mention of localMentions) {
+  addMentionEntities(mention);
 }
 
 const pronouns = new Set(['he', 'his', 'him', 'she', 'her', 'hers', 'they', 'their', 'them', 'it', 'its']);
@@ -79,7 +97,7 @@ const itemViews = items.map((item) => {
     ...entry,
     entities: localMentions.filter((mention) => mention.page === entry.page_ref && mention.start_offset < entry.end_offset && mention.end_offset > entry.start_offset)
       .map((mention) => ({
-        key: `mention::${fold(mention.normalized_text ?? mention.text)}`,
+        key: SYNAGOGUE_PATTERN.test(mention.normalized_text ?? mention.text) ? 'class::synagogue' : `mention::${fold(mention.normalized_text ?? mention.text)}`,
         text: mention.text, type: mention.type, start: mention.start_offset, end: mention.end_offset,
       })),
   }));
@@ -269,9 +287,10 @@ const fragment = `<div id="langextract-facts-browser">
   };
   const render = () => {
     const query = els.search.value.trim().toLowerCase();
+    const queryTerms = query === 'synagogue' ? ['synagogue', 'synagogues'] : [query];
     const page = els.page.value;
     if (view === 'facts') {
-      const rows = DATA.items.filter((item) => (els.kind.value === 'all' || item.kind === els.kind.value) && (page === 'all' || item.evidence.some((entry) => String(entry.page_ref) === page)) && (!query || [item.statement, item.type, item.literal_subject, item.resolved_subject, item.reference_antecedent, ...item.evidence.map((entry) => entry.quote)].filter(Boolean).join(' ').toLowerCase().includes(query)));
+      const rows = DATA.items.filter((item) => (els.kind.value === 'all' || item.kind === els.kind.value) && (page === 'all' || item.evidence.some((entry) => String(entry.page_ref) === page)) && (!query || queryTerms.some((term) => [item.statement, item.type, item.literal_subject, item.resolved_subject, item.reference_antecedent, ...item.evidence.map((entry) => entry.quote)].filter(Boolean).join(' ').toLowerCase().includes(term))));
       els.meta.textContent = rows.length + ' facts shown · ' + DATA.run.source + ' · run ' + DATA.run.id.slice(0, 8);
       els.results.innerHTML = rows.length ? rows.map(renderFact).join('') : '<div class="lfb-empty">No matching facts</div>';
     } else {
