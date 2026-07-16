@@ -12,9 +12,11 @@ test('pricing guard fails closed when a catalog price is absent', () => {
   assert.throws(() => pricingForModels(['example/paid'], [{
     id: 'example/paid', pricing: { prompt: '0.000001', request: '0' },
   }]), /Missing OpenRouter completion price/);
-  assert.throws(() => pricingForModels(['example/free:free'], [{
+  // OpenRouter omits `request` when no per-request fee applies; the guard
+  // deliberately treats only that optional dimension as zero.
+  assert.equal(pricingForModels(['example/free:free'], [{
     id: 'example/free:free', pricing: { prompt: '0', completion: '0' },
-  }]), /Missing OpenRouter request price/);
+  }])[0].request, 0);
 });
 
 test('unbounded extraction requires confirmation and limit zero cannot bypass it', () => {

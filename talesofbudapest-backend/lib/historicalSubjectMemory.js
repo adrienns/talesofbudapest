@@ -6,9 +6,17 @@ const TITLES = new Set(['r', 'rabbi', 'dr', 'mr', 'mrs', 'ms', 'professor', 'pro
 const ROLE_WORDS = new Set(['rabbi', 'scholar', 'author', 'writer', 'architect', 'doctor', 'teacher', 'mayor', 'ruler', 'king', 'queen']);
 const BUILDING_WORDS = new Set(['synagogue', 'temple', 'school', 'building', 'house', 'hospital', 'cemetery', 'church', 'hall', 'museum', 'library', 'institute']);
 const GROUP_WORDS = new Set(['community', 'family', 'group', 'people', 'they', 'followers', 'students', 'workers']);
+// Ordinary narrative object heads that GLiNER misses but the subject memory
+// must track so possessives and definite descriptions stay resolvable.
+const TRACKABLE_HEADS = new Set([...BUILDING_WORDS, 'tomb', 'grave', 'tombstone', 'monument', 'statue', 'bath', 'bridge', 'mill', 'factory', 'shop', 'press', 'yeshiva', 'mikveh', 'quarter', 'district', 'street', 'tower', 'wall', 'gate', 'book']);
+const PRONOUN_EXPECTED = {
+  he: 'person', him: 'person', his: 'person', she: 'person', her: 'person', hers: 'person',
+  they: 'group', them: 'group', their: 'group', theirs: 'group',
+  it: 'thing', its: 'thing',
+};
 
 const hash = (value) => crypto.createHash('sha256').update(String(value)).digest('hex').slice(0, 20);
-const words = (value) => String(value ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/gu, '')
+const words = (value) => String(value ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').replace(/(?:['’]s)\b/giu, '')
   .toLowerCase().match(/[a-z0-9]+/gu) ?? [];
 const phrase = (value) => words(value).join(' ');
 const entityClass = (type) => PERSON_TYPES.has(type) ? 'person' : type === 'group' || type === 'organisation' || type === 'family' ? 'group' : 'thing';
@@ -131,17 +139,165 @@ const expectedFor = (surface) => {
 
 const roleFor = (surface) => words(surface).find((word) => ROLE_WORDS.has(word) || BUILDING_WORDS.has(word)) ?? null;
 
+const byRecency = (a, b) => (b.last_page ?? -1) - (a.last_page ?? -1) || (b.last_offset ?? -1) - (a.last_offset ?? -1);
+const entityMatchesHead = (entity, head) => !head || entity.roles.has(head) || entity.head === head || words(entity.label).includes(head);
+
+/**
+ * Typed resolution with explicit ambiguity. The focus stack is the discourse
+ * rule, not a guess; away from focus, two comparably recent compatible
+ * candidates are reported as ambiguous instead of silently picked.
+ */
+const resolveTyped = (state, { expected, head = null }) => {
+  const seen = new Set();
+  const matches = [];
+  const consider = (id, isFocus) => {
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    const entity = state.entities.get(id);
+    if (!compatible(entity, expected)) return;
+    if (!entityMatchesHead(entity, head)) return;
+    matches.push({ entity, isFocus });
+  };
+  consider(state.focus.active, true);
+  consider(state.focus[expected], true);
+  for (const row of [...state.entities.values()].sort(byRecency)) consider(row.entity_id, false);
+  if (!matches.length) return { status: 'unresolved' };
+  if (matches[0].isFocus || matches.length === 1) return { status: 'resolved', entity: matches[0].entity };
+  const leaderPage = matches[0].entity.last_page ?? -1;
+  const runnerPage = matches[1].entity.last_page ?? -1;
+  if (leaderPage - runnerPage >= 2) return { status: 'resolved', entity: matches[0].entity };
+  return { status: 'ambiguous', candidates: matches.slice(0, 4).map((match) => match.entity) };
+};
+
+const mintLedgerMention = (state, phraseRow, type) => ({
+  mention_id: `m_${hash(`${state.source_id}${phraseRow.page}${phraseRow.start_offset}${phraseRow.end_offset}ledger`)}`,
+  page: phraseRow.page,
+  start_offset: phraseRow.start_offset,
+  end_offset: phraseRow.end_offset,
+  text: phraseRow.source_text ?? phraseRow.text,
+  normalized_text: phraseRow.text,
+  type,
+  source: 'noun_ledger',
+});
+
+const ensureTrackedEntity = (state, { key, type, head, ownerEntityId = null }) => {
+  const id = entityId(state.source_id, entityClass(type), key);
+  let entity = state.entities.get(id);
+  if (!entity) {
+    entity = {
+      entity_id: id, type, entity_class: entityClass(type), label: head,
+      aliases: new Set([head]), roles: new Set([head]), head, owner_entity_id: ownerEntityId,
+      mention_ids: [], last_mention_id: null, last_page: null, last_offset: null, origin: 'noun_ledger',
+    };
+    state.entities.set(id, entity);
+  }
+  return entity;
+};
+
+const trackedTypeFor = (head) => BUILDING_WORDS.has(head) ? 'building' : GROUP_WORDS.has(head) ? 'group' : 'thing';
+
+const registerLedgerEntity = ({ state, clause, phraseRow, head, ownerEntityId, ledgerMentions }) => {
+  const type = trackedTypeFor(head);
+  const key = ownerEntityId ? `${ownerEntityId}:owned:${head}` : `tracked:${head}`;
+  const entity = ensureTrackedEntity(state, { key, type, head, ownerEntityId });
+  const mention = mintLedgerMention(state, phraseRow, type);
+  mention.subject_entity_id = entity.entity_id;
+  if (!entity.mention_ids.includes(mention.mention_id)) entity.mention_ids.push(mention.mention_id);
+  ledgerMentions.set(mention.mention_id, mention);
+  touch(state, entity, mention, clause);
+  return entity;
+};
+
+const processLedgerPhrase = ({ state, clause, phraseRow, overlapsExplicit, references, ambiguities, ledgerMentions }) => {
+  const first = words(phraseRow.text)[0];
+  const head = words(phraseRow.head ?? '')[0] ?? null;
+  const kind = phraseRow.reference_kind;
+  const pushReference = (entity) => {
+    if (!entity.last_mention_id) return;
+    references.push({
+      clause_id: clause.clause_id, antecedent_mention_id: entity.last_mention_id,
+      resolved_entity_id: entity.entity_id, surface: phraseRow.text,
+      resolution_source: 'deterministic_subject_memory',
+    });
+  };
+  const pushAmbiguity = (candidates, expected) => ambiguities.push({
+    clause_id: clause.clause_id, page_ref: clause.page_ref, surface: phraseRow.text,
+    expected, reference_kind: kind, start_offset: phraseRow.start_offset,
+    candidate_entity_ids: candidates.map((entity) => entity.entity_id),
+  });
+
+  if (kind === 'pronoun') {
+    const expected = PRONOUN_EXPECTED[first];
+    if (!expected) return;
+    const result = resolveTyped(state, { expected });
+    if (result.status === 'resolved') { pushReference(result.entity); touch(state, result.entity, null, clause); }
+    else if (result.status === 'ambiguous') pushAmbiguity(result.candidates, expected);
+    return;
+  }
+  if (kind === 'possessive') {
+    const ownerExpected = PRONOUN_EXPECTED[first];
+    if (!ownerExpected) return;
+    const owner = resolveTyped(state, { expected: ownerExpected });
+    if (owner.status === 'ambiguous') { pushAmbiguity(owner.candidates, ownerExpected); return; }
+    if (owner.status !== 'resolved') return;
+    pushReference(owner.entity);
+    touch(state, owner.entity, null, clause);
+    // The owned object is its own entity; "his tomb" never merges a tomb
+    // into its owner.
+    if (head && (TRACKABLE_HEADS.has(head) || GROUP_WORDS.has(head))) {
+      registerLedgerEntity({ state, clause, phraseRow, head, ownerEntityId: owner.entity.entity_id, ledgerMentions });
+    }
+    return;
+  }
+  if (kind === 'definite') {
+    const expected = phraseRow.type === 'person' ? 'person' : phraseRow.type === 'group' ? 'group' : 'thing';
+    const discriminating = head && (ROLE_WORDS.has(head) || TRACKABLE_HEADS.has(head) || GROUP_WORDS.has(head));
+    const result = resolveTyped(state, { expected, head: discriminating ? head : null });
+    if (result.status === 'resolved') { pushReference(result.entity); touch(state, result.entity, null, clause); return; }
+    if (result.status === 'ambiguous') { pushAmbiguity(result.candidates, expected); return; }
+    if (discriminating && !ROLE_WORDS.has(head) && !overlapsExplicit) {
+      registerLedgerEntity({ state, clause, phraseRow, head, ownerEntityId: null, ledgerMentions });
+    }
+    return;
+  }
+  // Plain noun phrase: a first mention such as "a tomb" introduces a
+  // provisional tracked entity so a later "the tomb" / "it" can resolve.
+  if (!phraseRow.named && !overlapsExplicit && head && (TRACKABLE_HEADS.has(head) || GROUP_WORDS.has(head))) {
+    registerLedgerEntity({ state, clause, phraseRow, head, ownerEntityId: null, ledgerMentions });
+  }
+};
+
 /** Process clauses in source order. References see prior clauses/pages only. */
-export const resolveSubjectReferences = ({ state, clauses, mentionById }) => {
+export const resolveSubjectReferences = ({ state, clauses, mentionById, nounPhrases = [] }) => {
   const transitions = [];
   const references = [];
+  const ambiguities = [];
+  const ledgerMentions = new Map();
   for (const clause of [...clauses].sort((a, b) => a.page_ref - b.page_ref || a.start_offset - b.start_offset)) {
+    const floor = Math.max(state.last_page ?? -Infinity, state.highest_page ?? -Infinity);
+    if (clause.page_ref <= (state.last_page ?? -Infinity) || clause.page_ref < floor) {
+      throw new Error(`subject memory already advanced past page ${clause.page_ref}; pages must be processed in ascending order`);
+    }
+    state.highest_page = Math.max(state.highest_page ?? -Infinity, clause.page_ref);
     const before = { ...state.focus };
-    for (const expression of referenceExpressions(clause.text)) {
-      const expected = expectedFor(expression.surface);
-      const antecedent = pickFocus(state, expected, roleFor(expression.surface));
-      if (!antecedent?.last_mention_id) continue;
-      references.push({ clause_id: clause.clause_id, antecedent_mention_id: antecedent.last_mention_id, resolved_entity_id: antecedent.entity_id, surface: expression.surface, resolution_source: 'deterministic_subject_memory' });
+    const clauseEnd = clause.end_offset ?? Infinity;
+    const phrases = nounPhrases
+      .filter((row) => row.page === clause.page_ref && row.start_offset >= clause.start_offset && row.start_offset < clauseEnd)
+      .sort((a, b) => a.start_offset - b.start_offset);
+    if (phrases.length) {
+      const explicitSpans = clause.mention_ids.map((id) => mentionById.get(id)).filter(Boolean)
+        .map((mention) => [mention.start_offset, mention.end_offset]);
+      for (const phraseRow of phrases) {
+        const overlapsExplicit = explicitSpans.some(([start, end]) => phraseRow.start_offset < end && phraseRow.end_offset > start);
+        processLedgerPhrase({ state, clause, phraseRow, overlapsExplicit, references, ambiguities, ledgerMentions });
+      }
+    } else {
+      for (const expression of referenceExpressions(clause.text)) {
+        const expected = expectedFor(expression.surface);
+        const antecedent = pickFocus(state, expected, roleFor(expression.surface));
+        if (!antecedent?.last_mention_id) continue;
+        references.push({ clause_id: clause.clause_id, antecedent_mention_id: antecedent.last_mention_id, resolved_entity_id: antecedent.entity_id, surface: expression.surface, resolution_source: 'deterministic_subject_memory' });
+      }
     }
     const candidates = clause.mention_ids.map((id) => mentionById.get(id)).filter(Boolean)
       .map((mention) => ({ mention, entity: state.entities.get(mention.subject_entity_id) }))
@@ -152,9 +308,13 @@ export const resolveSubjectReferences = ({ state, clauses, mentionById }) => {
     const subject = candidates.find(({ mention }) => !/\b(?:in|at|from|to|near|within|of)\s*$/iu.test(clause.text.slice(0, Math.max(0, mention.start_offset - clause.start_offset))))
       ?? candidates[0];
     if (subject) touch(state, subject.entity, subject.mention, clause);
-    transitions.push({ clause_id: clause.clause_id, page_ref: clause.page_ref, before_focus: before, after_focus: { ...state.focus }, references: references.filter((row) => row.clause_id === clause.clause_id) });
+    transitions.push({
+      clause_id: clause.clause_id, page_ref: clause.page_ref, before_focus: before, after_focus: { ...state.focus },
+      references: references.filter((row) => row.clause_id === clause.clause_id),
+      ambiguous_references: ambiguities.filter((row) => row.clause_id === clause.clause_id),
+    });
   }
-  return { references, transitions };
+  return { references, transitions, ambiguities, ledgerMentions: [...ledgerMentions.values()] };
 };
 
 export const subjectContext = (state) => {
