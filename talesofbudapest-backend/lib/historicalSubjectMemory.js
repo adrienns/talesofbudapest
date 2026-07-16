@@ -264,6 +264,14 @@ const processLedgerPhrase = ({ state, clause, phraseRow, overlapsExplicit, refer
   }
   if (kind === 'definite') {
     const expected = phraseRow.type === 'person' ? 'person' : phraseRow.type === 'group' ? 'group' : 'thing';
+    // A definite phrase naming a known alias ("the Orczy House") resolves by
+    // exact alias before any head-based candidate search.
+    const aliasKey = phrase(String(phraseRow.text).replace(/^(?:the|this|that|these|those)\s+/iu, ''));
+    const aliasMatches = [...(state.aliasIndex.get(aliasKey) ?? [])]
+      .map((id) => state.entities.get(id))
+      .filter((entity) => compatible(entity, expected));
+    if (aliasMatches.length === 1) { pushReference(aliasMatches[0]); touch(state, aliasMatches[0], null, clause); return; }
+    if (aliasMatches.length > 1) { pushAmbiguity(aliasMatches.slice(0, 4), expected); return; }
     const discriminating = head && (ROLE_WORDS.has(head) || TRACKABLE_HEADS.has(head) || GROUP_WORDS.has(head));
     const result = resolveTyped(state, { expected, head: discriminating ? head : null, page: clause.page_ref });
     if (result.status === 'resolved') { pushReference(result.entity); touch(state, result.entity, null, clause); return; }
