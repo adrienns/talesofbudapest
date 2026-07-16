@@ -1,0 +1,470 @@
+{
+ "source_id": "jewish-budapest",
+ "note": "CANDIDATES ONLY. A human must trim this into data/<source>.chapters.json with entries {title, from_page, to_page}. Batch runner cold-starts subject memory at each chapter.",
+ "generated_at": "2026-07-16T15:57:32.189Z",
+ "candidate_count": 77,
+ "candidates": [
+  {
+   "page": 3,
+   "line_index": 0,
+   "heading": "Jewish Budapest",
+   "next_line_preview": ""
+  },
+  {
+   "page": 4,
+   "line_index": 2,
+   "heading": "Kahle/Austin Foundation",
+   "next_line_preview": "https://archive.org/details/jewishbudapestmo0000unse"
+  },
+  {
+   "page": 5,
+   "line_index": 0,
+   "heading": "Donal”",
+   "next_line_preview": "Monuments, Rites, History"
+  },
+  {
+   "page": 7,
+   "line_index": 0,
+   "heading": "Preface to the Series",
+   "next_line_preview": "The present volume is part of a series that, when completed,"
+  },
+  {
+   "page": 8,
+   "line_index": 0,
+   "heading": "Acknowledgments",
+   "next_line_preview": "This book was prepared and written in the Center of Jewish S"
+  },
+  {
+   "page": 11,
+   "line_index": 0,
+   "heading": "Contents",
+   "next_line_preview": "A Hakdome 1"
+  },
+  {
+   "page": 15,
+   "line_index": 0,
+   "heading": "A Hakdome",
+   "next_line_preview": "Buda, Obuda, Pest: the population of the historical Budapest"
+  },
+  {
+   "page": 24,
+   "line_index": 1,
+   "heading": "“Prefect of the Jews”",
+   "next_line_preview": "14. Portrait of"
+  },
+  {
+   "page": 51,
+   "line_index": 1,
+   "heading": "DIN PD ONT TNT AW NI VAD NID",
+   "next_line_preview": "the Lady Freudel, daughter of R. David, the memory of the ju"
+  },
+  {
+   "page": 55,
+   "line_index": 0,
+   "heading": "II. Obuda",
+   "next_line_preview": "The Golden age of the Jewish community of Obuda came in the "
+  },
+  {
+   "page": 62,
+   "line_index": 1,
+   "heading": "WaT WOOT",
+   "next_line_preview": "— a"
+  },
+  {
+   "page": 68,
+   "line_index": 2,
+   "heading": "M. Guttman in Obuda",
+   "next_line_preview": "(28 Zsigmond utca),"
+  },
+  {
+   "page": 72,
+   "line_index": 1,
+   "heading": "Hevrah Kaddisha of",
+   "next_line_preview": "Obuda"
+  },
+  {
+   "page": 110,
+   "line_index": 1,
+   "heading": "Mark Rézsavolgyi in",
+   "next_line_preview": "the former Jewish"
+  },
+  {
+   "page": 119,
+   "line_index": 0,
+   "heading": "IV. The Jewish Triangle in Pest",
+   "next_line_preview": "By the mid-nineteenth century a dense Jewish quarter evolved"
+  },
+  {
+   "page": 136,
+   "line_index": 2,
+   "heading": "General Jewish",
+   "next_line_preview": "Congress, 1868/69"
+  },
+  {
+   "page": 150,
+   "line_index": 1,
+   "heading": "Mozes Feldmann",
+   "next_line_preview": "166. Portrait of"
+  },
+  {
+   "page": 171,
+   "line_index": 0,
+   "heading": "V. Erzsébetvaros",
+   "next_line_preview": "This district was the scene of Jewish life in Pest. Back in "
+  },
+  {
+   "page": 180,
+   "line_index": 1,
+   "heading": "NACH JONTEF STELLY",
+   "next_line_preview": "decorated with colorful banners. Part of the ceremony is rea"
+  },
+  {
+   "page": 212,
+   "line_index": 1,
+   "heading": "Talmud Association's",
+   "next_line_preview": "house in Vasvari Pal"
+  },
+  {
+   "page": 215,
+   "line_index": 0,
+   "heading": "VI. Jozsetvaros",
+   "next_line_preview": "In the inner parts of Jozsefvdros there was no Jewish quarte"
+  },
+  {
+   "page": 228,
+   "line_index": 2,
+   "heading": "Vil. Terézvaros",
+   "next_line_preview": "(1) Sugar ut / Andrassy ut"
+  },
+  {
+   "page": 243,
+   "line_index": 1,
+   "heading": "Interior of the",
+   "next_line_preview": "Medieval Jewish"
+  },
+  {
+   "page": 245,
+   "line_index": 2,
+   "heading": "Obuda.”",
+   "next_line_preview": "Illustration on the"
+  },
+  {
+   "page": 247,
+   "line_index": 2,
+   "heading": "Belay Py",
+   "next_line_preview": ": z"
+  },
+  {
+   "page": 248,
+   "line_index": 0,
+   "heading": "II:6. “The Israelite",
+   "next_line_preview": "Temple in Pest.”"
+  },
+  {
+   "page": 249,
+   "line_index": 0,
+   "heading": "V:1. Position of the",
+   "next_line_preview": "vands when reciting"
+  },
+  {
+   "page": 251,
+   "line_index": 2,
+   "heading": "Rumbach Sebestyén",
+   "next_line_preview": "utca synagogue"
+  },
+  {
+   "page": 255,
+   "line_index": 2,
+   "heading": "Wahrmann Palace",
+   "next_line_preview": "TerEzvARos 241"
+  },
+  {
+   "page": 256,
+   "line_index": 0,
+   "heading": "VIl-6. Courtyard of",
+   "next_line_preview": "the Dessewffy utca"
+  },
+  {
+   "page": 258,
+   "line_index": 0,
+   "heading": "VIll:8. From the",
+   "next_line_preview": "collections of the"
+  },
+  {
+   "page": 259,
+   "line_index": 0,
+   "heading": "Vill:10. Memorial",
+   "next_line_preview": "inscription above the"
+  },
+  {
+   "page": 260,
+   "line_index": 0,
+   "heading": "X:2. Interior of the",
+   "next_line_preview": "Nagy Fuvaros utea"
+  },
+  {
+   "page": 261,
+   "line_index": 2,
+   "heading": "Ere YSZAZ KORONA®R Se",
+   "next_line_preview": "ezen 100 KORONA KOLGSONOSSZEG RESZET KEPEZI AZON 100.000 KoR"
+  },
+  {
+   "page": 262,
+   "line_index": 2,
+   "heading": "Lipat Herman's",
+   "next_line_preview": "0 illustrate"
+  },
+  {
+   "page": 263,
+   "line_index": 1,
+   "heading": "SLL?",
+   "next_line_preview": "SPO OCOL LISTE A LILF"
+  },
+  {
+   "page": 264,
+   "line_index": 2,
+   "heading": "Nasgse4",
+   "next_line_preview": "<op <"
+  },
+  {
+   "page": 266,
+   "line_index": 0,
+   "heading": "XIll:17. Funeral",
+   "next_line_preview": "prayers on the wall of"
+  },
+  {
+   "page": 267,
+   "line_index": 0,
+   "heading": "VIII. The Pest Jewish Community",
+   "next_line_preview": "After the General Congress of 1868/69 the whole of Budapest "
+  },
+  {
+   "page": 281,
+   "line_index": 2,
+   "heading": "AFTER WORLD Wak II",
+   "next_line_preview": "22 Akacfa utca: Or Chadas Templomegyesiilet (New Light Templ"
+  },
+  {
+   "page": 282,
+   "line_index": 2,
+   "heading": "Prayer-room of the",
+   "next_line_preview": "Hazkarah Prayer-"
+  },
+  {
+   "page": 300,
+   "line_index": 0,
+   "heading": "A PEST] IZR. HITKOZSEG REALGIMNAZIUMANAK",
+   "next_line_preview": "_ AJANDEKA A"
+  },
+  {
+   "page": 304,
+   "line_index": 2,
+   "heading": "Janos Komor",
+   "next_line_preview": "328. Design by Dezsé"
+  },
+  {
+   "page": 333,
+   "line_index": 0,
+   "heading": "IX. Lipdtvaros, Uj-Lipdtvaros",
+   "next_line_preview": "One of the main commercial centers had been, partly because "
+  },
+  {
+   "page": 343,
+   "line_index": 0,
+   "heading": "Mishneh Torah",
+   "next_line_preview": "The main work of Maimonides (R. Moshe ben Maimon / RamBaM), "
+  },
+  {
+   "page": 359,
+   "line_index": 0,
+   "heading": "“Tomorrow",
+   "next_line_preview": "It was before the Passover and while the Hasidim were drawin"
+  },
+  {
+   "page": 375,
+   "line_index": 2,
+   "heading": "Béla Imrédy, Royal Prime Minister of Hungary.”",
+   "next_line_preview": "On September 23, 1938, in the Gresham Palace (2 Mérleg utca)"
+  },
+  {
+   "page": 382,
+   "line_index": 0,
+   "heading": "Karoly Pap (1897-1945)",
+   "next_line_preview": "Pap was the son of a rabbi. His father, Miksa Pollak (1868-A"
+  },
+  {
+   "page": 386,
+   "line_index": 1,
+   "heading": "Samu Stern",
+   "next_line_preview": "are still there in the garden.) The Majestic, constructed sh"
+  },
+  {
+   "page": 428,
+   "line_index": 1,
+   "heading": "Domonkos, the",
+   "next_line_preview": "commander of the"
+  },
+  {
+   "page": 430,
+   "line_index": 1,
+   "heading": "Zsigmond Groszmann",
+   "next_line_preview": "tions. Even when there was no electricity in the building an"
+  },
+  {
+   "page": 432,
+   "line_index": 1,
+   "heading": "Danielssohn",
+   "next_line_preview": "During the night of December 20 the area of the ghetto was h"
+  },
+  {
+   "page": 440,
+   "line_index": 0,
+   "heading": "XIII. Jewish Cemeteries",
+   "next_line_preview": "(1) Death"
+  },
+  {
+   "page": 460,
+   "line_index": 0,
+   "heading": "XIV. Jewish Life in Budapest Today",
+   "next_line_preview": "(1) Some Recent Events"
+  },
+  {
+   "page": 482,
+   "line_index": 0,
+   "heading": "XV. The Invisible Jewish Budapest",
+   "next_line_preview": "This is the most difficult chapter of this book."
+  },
+  {
+   "page": 486,
+   "line_index": 1,
+   "heading": "Béla Lajta for",
+   "next_line_preview": "Goldmark’s opera"
+  },
+  {
+   "page": 487,
+   "line_index": 2,
+   "heading": "Bacher’s (1913)",
+   "next_line_preview": "Zsid6 Gimndzium: on the corner of"
+  },
+  {
+   "page": 502,
+   "line_index": 0,
+   "heading": "Pest",
+   "next_line_preview": "5-7 Munkacsy Mihaly utca (earlier Epreskert utca): the build"
+  },
+  {
+   "page": 506,
+   "line_index": 1,
+   "heading": "Home of the Hevrah",
+   "next_line_preview": "Kaddishah"
+  },
+  {
+   "page": 508,
+   "line_index": 1,
+   "heading": "Blind. Menorah and",
+   "next_line_preview": "inscriptio"
+  },
+  {
+   "page": 510,
+   "line_index": 1,
+   "heading": "Blind of the Pest",
+   "next_line_preview": "Hevrah Kaddishah"
+  },
+  {
+   "page": 511,
+   "line_index": 0,
+   "heading": "Nagytétény",
+   "next_line_preview": "56/B-58 Nagytétényi ut: Warehouse of the National Technical "
+  },
+  {
+   "page": 513,
+   "line_index": 0,
+   "heading": "MA Andras Markus",
+   "next_line_preview": "MéJ Mult és J6vé"
+  },
+  {
+   "page": 516,
+   "line_index": 0,
+   "heading": "Synagogues] (Budapest: Budapesti Térténeti Mu-",
+   "next_line_preview": "zeum, 1987)."
+  },
+  {
+   "page": 550,
+   "line_index": 2,
+   "heading": "Activity of the National Jewish Aid Committee)]",
+   "next_line_preview": "(Budapest: no publisher [American Joint Distribution"
+  },
+  {
+   "page": 553,
+   "line_index": 0,
+   "heading": "Eds., Obuda évszdzadai (Centuries of Obuda] (Buda-",
+   "next_line_preview": "pest: Kortars Kiad6, 1995), pp. 533 f."
+  },
+  {
+   "page": 555,
+   "line_index": 0,
+   "heading": "“reb Jacob Frid”, “reb Hofman”, “reb Tzvi Engel",
+   "next_line_preview": "Segal”, etc. The lots were drawn in order to deter-"
+  },
+  {
+   "page": 560,
+   "line_index": 0,
+   "heading": "XVII. Bibliography",
+   "next_line_preview": "A hatdr és a hatdrolt. Toprengések a magyar-zsid6"
+  },
+  {
+   "page": 564,
+   "line_index": 0,
+   "heading": "Exhibition in Budapest Alive] (Wallenberg-fiize-",
+   "next_line_preview": "tek, 1) (Budapest: no publisher, 1994) [Catalog"
+  },
+  {
+   "page": 570,
+   "line_index": 0,
+   "heading": "Komarik, Dénes, Feszl Frigyes (1821-1884)",
+   "next_line_preview": "[Frigyes Feszl (1821-1884)] (Budapest: Akadémiai"
+  },
+  {
+   "page": 580,
+   "line_index": 0,
+   "heading": "Index",
+   "next_line_preview": "The indexes below were generated by the word processor, and "
+  },
+  {
+   "page": 582,
+   "line_index": 0,
+   "heading": "Bogdan, Arabella (Satanella)",
+   "next_line_preview": "(Spiegler): 163"
+  },
+  {
+   "page": 584,
+   "line_index": 1,
+   "heading": "Frid, Jacob: XIII:10",
+   "next_line_preview": "Fried, Mark: 198"
+  },
+  {
+   "page": 587,
+   "line_index": 1,
+   "heading": "Samuel Benjamin",
+   "next_line_preview": "Kicse / Koce / Kittsee, Izsak /"
+  },
+  {
+   "page": 590,
+   "line_index": 0,
+   "heading": "Pongrdcz, Ferenc, Count",
+   "next_line_preview": "(1911-2): 418"
+  },
+  {
+   "page": 604,
+   "line_index": 0,
+   "heading": "Lauder Javne Zsid6 K6z6sségi",
+   "next_line_preview": "Iskola (Jewish Community"
+  },
+  {
+   "page": 613,
+   "line_index": 1,
+   "heading": "The Smell of Humans",
+   "next_line_preview": "A Memoir of the Holocaust in Hungary"
+  }
+ ]
+}

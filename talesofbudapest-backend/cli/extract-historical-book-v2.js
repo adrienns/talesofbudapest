@@ -96,7 +96,7 @@ const PRIMARY_CACHE_VERSION = V3 ? 'historical-stateful-v3.0' : 'historical-semi
 // which cascaded into audit mismatches and mass quality escalation. Measured
 // natural output on dense dev pages is ~70 completion tokens per clause for
 // the primary (I+R rows) and ~20 for the audit.
-const primaryTokenLimit = (clauseCount) => V3 ? Number(process.env.KG_V3_PRIMARY_TOKENS ?? Math.min(3000, Math.max(800, 300 + clauseCount * 65))) : PRIMARY_MAX_TOKENS;
+const primaryTokenLimit = (clauseCount) => V3 ? Number(process.env.KG_V3_PRIMARY_TOKENS ?? Math.min(4200, Math.max(800, 300 + clauseCount * 65))) : PRIMARY_MAX_TOKENS;
 const auditTokenLimit = (clauseCount) => V3 ? Math.min(1500, Math.max(560, 200 + clauseCount * 20)) : AUDIT_MAX_TOKENS;
 const qualityTokenLimit = () => V3 ? 700 : QUALITY_MAX_TOKENS;
 // Compact TSV is mostly ASCII English. Two bytes/token remains deliberately
@@ -926,7 +926,14 @@ const main = async () => {
       ambiguous_references: ambiguousReferences,
       adjudication_requests: adjudicationRequests,
     });
-    await saveSubjectMemory(SUBJECT_MEMORY_OUTPUT, subjectState, lastPage);
+    // Persist subject memory only when the full pipeline ran. A run that died
+    // mid-loop holds partial resolution state; saving it would poison the
+    // warm-start chain for the next sequential page.
+    if (status === 'complete' || status === 'failed_cost_gate') {
+      await saveSubjectMemory(SUBJECT_MEMORY_OUTPUT, subjectState, lastPage);
+    } else {
+      console.warn(`subject memory NOT persisted (status ${status}); next run cold-starts from the last complete state.`);
+    }
   }
   console.log(`${status}: ${supportedItems.length}/${allItems.length} supported; ${auditedCoverage.length} clauses; ${usage.call_count} paid calls; ${usage.cache_hits} cache hits; ${formatUsd(usage.cost)} total; ${formatUsd(averageCost)}/page.`);
   if (status !== 'complete') process.exitCode = 1;

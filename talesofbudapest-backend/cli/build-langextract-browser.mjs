@@ -10,6 +10,7 @@ const extractionDir = path.join(workspace, 'ingest/corpus/restricted/extractions
 const sourceFlag = process.argv.indexOf('--source');
 const sourceId = sourceFlag >= 0 ? process.argv[sourceFlag + 1] : (process.env.HISTORICAL_SOURCE_ID || 'jewish-budapest');
 const v3 = process.argv.includes('--v3');
+const annotate = process.argv.includes('--annotate');
 const outputFlag = process.argv.indexOf('--output');
 const outputPath = outputFlag >= 0 ? path.resolve(process.argv[outputFlag + 1]) : path.join(extractionDir, v3 ? 'historical-facts-browser-v3.html' : 'historical-facts-browser.fragment.html');
 
@@ -137,6 +138,9 @@ const itemViews = items.map((item) => {
     subject_resolution_source: item.subject_resolution_source ?? item.reference_resolution_source ?? null,
     subject_ambiguous: item.subject_ambiguous ?? false,
     discourse_chain: item.discourse_chain ?? [],
+    clause_ids: item.clause_ids ?? [],
+    assertion_kind: item.assertion_kind ?? null,
+    canonical_type: item.canonical_type ?? null,
   };
 });
 
@@ -168,6 +172,7 @@ const data = {
   },
   items: itemViews,
   entities,
+  annotate,
 };
 const encodedData = Buffer.from(JSON.stringify(data), 'utf8').toString('base64');
 const documentTitle = `Historical facts · ${run.source_id} · pages ${runPages.join('–')}`;
@@ -203,6 +208,7 @@ const fragment = `<!doctype html>
     </label>
   </div>
 
+  ${annotate ? '<div class="lfb-annotate-bar"><button type="button" class="btn btn-primary" id="lfb-gold-export-btn">Export gold annotations</button><textarea id="lfb-gold-export" hidden rows="6" class="form-control"></textarea></div>' : ''}
   <div class="text-small text-muted lfb-meta" id="lfb-meta"></div>
   <div class="lfb-results" id="lfb-results" aria-live="polite"></div>
 
@@ -265,6 +271,9 @@ const fragment = `<!doctype html>
   #langextract-facts-browser .lfb-mention { border-bottom: 1px solid var(--lfb-border); display: grid; gap: .35rem; padding: .75rem 0; }
   #langextract-facts-browser .lfb-mention:last-child { border-bottom: 0; }
   #langextract-facts-browser mark { background: #245377; color: var(--lfb-text); }
+  #langextract-facts-browser .lfb-annotate { display: flex; gap: .4rem; align-items: center; }
+  #langextract-facts-browser .lfb-annotate .lfb-gold-note { max-width: 22rem; }
+  #langextract-facts-browser .lfb-annotate-bar { margin: .5rem 0; display: grid; gap: .4rem; }
   @media (max-width: 760px) { #langextract-facts-browser { padding: 1rem; } #langextract-facts-browser .viz-grid, #langextract-facts-browser .viz-controls { grid-template-columns: 1fr; } #langextract-facts-browser summary { grid-template-columns: 1fr; } }
 </style>
 
@@ -319,7 +328,7 @@ const fragment = `<!doctype html>
       ? '<div class="lfb-entity-line"><span class="lfb-label">Reference</span><span>' + esc((item.literal_subject || '').match(/^[^\\s]+/)?.[0] || item.literal_subject || '—') + ' →</span>' + entityButton(item.reference_key, item.reference_antecedent) + '</div>'
       : item.reference_status === 'ambiguous' ? '<div><span class="lfb-label">Reference</span>needs fallback</div>' : '';
     const evidence = item.evidence.map((entry) => '<div class="lfb-evidence"><div class="text-small"><span class="lfb-label">Page</span>' + esc(entry.page_ref) + ' · offsets ' + esc(entry.start_offset) + '–' + esc(entry.end_offset) + '</div><div class="lfb-quote">' + highlightedQuote(entry) + '</div></div>').join('');
-    return '<details><summary><span class="lfb-statement">' + esc(item.statement) + '</span><span class="viz-badge">' + esc(label(item.kind)) + '</span></summary><div class="lfb-detail"><div class="lfb-tags"><span class="viz-badge">' + esc(label(item.type)) + '</span><span class="viz-badge">' + esc(label(item.modality)) + '</span>' + (item.polarity === 'negated' ? '<span class="viz-badge">negated</span>' : '') + (item.reference_status === 'ambiguous' ? '<span class="viz-badge">needs reference fallback</span>' : '') + (item.subject_ambiguous ? '<span class="viz-badge">ambiguous subject</span>' : '') + (item.subject_resolution_source ? '<span class="viz-badge">' + esc(label(item.subject_resolution_source)) + '</span>' : '') + '</div>' + subject + reference + evidence + '<div class="text-small text-muted">' + esc(item.id) + '</div></div></details>';
+    return '<details><summary><span class="lfb-statement">' + esc(item.statement) + '</span><span class="viz-badge">' + esc(label(item.kind)) + '</span></summary><div class="lfb-detail"><div class="lfb-tags"><span class="viz-badge">' + esc(label(item.type)) + '</span><span class="viz-badge">' + esc(label(item.modality)) + '</span>' + (item.polarity === 'negated' ? '<span class="viz-badge">negated</span>' : '') + (item.reference_status === 'ambiguous' ? '<span class="viz-badge">needs reference fallback</span>' : '') + (item.subject_ambiguous ? '<span class="viz-badge">ambiguous subject</span>' : '') + (item.subject_resolution_source ? '<span class="viz-badge">' + esc(label(item.subject_resolution_source)) + '</span>' : '') + '</div>' + subject + reference + evidence + annotationControls(item) + '<div class="text-small text-muted">' + esc(item.id) + '</div></div></details>';
   };
   const renderEntity = (entity) => '<div class="lfb-entity-row"><div class="lfb-entity-line">' + entityButton(entity.key, entity.label) + '<span class="viz-badge">' + esc(label(entity.type)) + '</span><span class="text-small text-muted">' + entity.mentions.length + ' mentions · ' + entity.item_ids.length + ' facts</span></div><div class="text-small text-muted">' + esc(entity.aliases.join(' · ') || entity.label) + '</div></div>';
   const openEntity = (key) => {
@@ -336,6 +345,56 @@ const fragment = `<!doctype html>
     }).join('') || '<div class="lfb-empty">No grounded mentions</div>';
     els.dialog.showModal();
   };
+  // --- Gold annotation mode (only active with --annotate) ---
+  const goldKey = 'lfb-gold-' + DATA.run.source + '-' + DATA.run.id;
+  const goldState = (() => { try { return new Map(Object.entries(JSON.parse(localStorage.getItem(goldKey) || '{}'))); } catch { return new Map(); } })();
+  const saveGold = () => { try { localStorage.setItem(goldKey, JSON.stringify(Object.fromEntries(goldState))); } catch {} };
+  const annotationControls = (item) => {
+    if (!DATA.annotate) return '';
+    const verdict = goldState.get(item.id)?.verdict ?? '';
+    return '<div class="lfb-annotate" data-item-id="' + esc(item.id) + '">'
+      + '<button type="button" class="btn' + (verdict === 'accepted' ? ' btn-primary' : '') + '" data-gold="accepted">Accept</button>'
+      + '<button type="button" class="btn' + (verdict === 'rejected' ? ' btn-primary' : '') + '" data-gold="rejected">Reject</button>'
+      + '<input class="form-control lfb-gold-note" placeholder="note / correction" value="' + esc(goldState.get(item.id)?.note ?? '') + '">'
+      + '</div>';
+  };
+  const exportGold = () => {
+    const annotations = DATA.items.flatMap((item) => {
+      const state = goldState.get(item.id);
+      if (!state?.verdict) return [];
+      return [{
+        item_id: item.id, verdict: state.verdict, note: state.note ?? null,
+        page: item.evidence?.[0]?.page_ref ?? null, kind: item.kind,
+        assertion_kind: item.assertion_kind, canonical_type: item.canonical_type,
+        clause_ids: item.clause_ids, statement: item.statement,
+      }];
+    });
+    const payload = JSON.stringify({ source_id: DATA.run.source, run_id: DATA.run.id, gold_source: 'human-browser', generated_at: new Date().toISOString(), annotations }, null, 1);
+    const area = root.querySelector('#lfb-gold-export');
+    area.value = payload; area.hidden = false; area.focus(); area.select();
+    try {
+      const anchor = document.createElement('a');
+      anchor.href = URL.createObjectURL(new Blob([payload], { type: 'application/json' }));
+      anchor.download = DATA.run.source + '.gold-annotations.json';
+      anchor.click();
+    } catch {}
+  };
+  root.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-gold]');
+    if (!button || !root.contains(button)) return;
+    const wrap = button.closest('[data-item-id]');
+    const current = goldState.get(wrap.dataset.itemId) ?? {};
+    goldState.set(wrap.dataset.itemId, { ...current, verdict: button.dataset.gold });
+    saveGold(); render();
+  });
+  root.addEventListener('input', (event) => {
+    const note = event.target.closest('.lfb-gold-note');
+    if (!note || !root.contains(note)) return;
+    const wrap = note.closest('[data-item-id]');
+    const current = goldState.get(wrap.dataset.itemId) ?? {};
+    goldState.set(wrap.dataset.itemId, { ...current, note: note.value });
+    saveGold();
+  });
   const render = () => {
     const query = els.search.value.trim().toLowerCase();
     const queryTerms = query === 'synagogue' ? ['synagogue', 'synagogues'] : [query];
@@ -365,6 +424,7 @@ const fragment = `<!doctype html>
   root.addEventListener('click', (event) => { const button = event.target.closest('[data-entity-key]'); if (button && root.contains(button)) openEntity(button.dataset.entityKey); });
   els.dialogClose.addEventListener('click', () => els.dialog.close());
   els.dialog.addEventListener('click', (event) => { if (event.target === els.dialog) els.dialog.close(); });
+  root.querySelector('#lfb-gold-export-btn')?.addEventListener('click', exportGold);
   render();
 })();
 </script>

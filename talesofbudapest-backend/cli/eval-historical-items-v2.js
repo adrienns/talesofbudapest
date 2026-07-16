@@ -99,6 +99,12 @@ const main = async () => {
   const missingAdjudicatedPages = [...selectedPages].filter((page) => !adjudicatedPages.has(page));
   if (missingAdjudicatedPages.length) blockers.push(`${missingAdjudicatedPages.length} selected pages lack clause-level gold adjudication`);
   if ((fixture.clauses ?? []).some((clause) => !clause.clause_id || !['covered', 'background_only', 'reference_only', 'ambiguous'].includes(clause.disposition))) blockers.push('one or more gold clauses lack a valid disposition');
+  // Model-generated gold (e.g. Fable) is legitimate for development
+  // reporting, but promotion gates require human-adjudicated held-out gold.
+  if (V3 && SPLIT !== 'development') {
+    const nonHuman = fixture.items.filter((item) => selectedPages.has(item.page ?? item.pages?.[0]) && item.gold_source && !String(item.gold_source).startsWith('human'));
+    if (nonHuman.length) blockers.push(`${nonHuman.length} held-out gold items are not human-adjudicated (gold_source must be human for promotion)`);
+  }
   if (V3 && !(fixture.references ?? []).length) blockers.push('V3 gold has no adjudicated reference chains');
   if (V3 && !(fixture.transitions ?? []).length) blockers.push('V3 gold has no adjudicated subject transitions');
   if (V3 && !(fixture.layout_zones ?? []).length) blockers.push('V3 gold has no adjudicated layout zones');
