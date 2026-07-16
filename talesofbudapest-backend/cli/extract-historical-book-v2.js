@@ -169,7 +169,7 @@ const VERIFY_PROMPT = `Verify compact candidate items against supplied exact cla
 Output exactly one TSV row per candidate and nothing else: item_id<TAB>judgment.
 Judgment is S supported, P partially supported, U unsupported, A ambiguous, or X contradicted.
 Example actual row: hi_example1\tS
-No header, field names, reasons, JSON, markdown, or commentary. Judge semantic support, participant roles, polarity, modality, attribution, and scope. Clauses may carry resolutions [[surface,antecedent]...]: treat them as authoritative, so a candidate naming the antecedent where the clause shows only a pronoun is still supported. A statement logically equivalent to the clause content (paraphrase, double negation) is supported. No outside knowledge. Classify every candidate ID exactly once.`;
+No header, field names, reasons, JSON, markdown, or commentary. Judge semantic support, participant roles, polarity, modality, attribution, and scope. Clauses may carry resolutions [[surface,antecedent]...]: treat them as authoritative, so a candidate naming the antecedent where the clause shows only a pronoun is still supported. A statement logically equivalent to the clause content (paraphrase, double negation) is supported, but a candidate ADDING anything absent from the clauses (names, dates, verse or chapter numbers, places) is unsupported even when plausible. No outside knowledge. Classify every candidate ID exactly once.`;
 
 const QUALITY_PROMPT = `Adjudicate difficult historical extraction candidates using only supplied clauses and boundary context.
 
@@ -183,7 +183,7 @@ Rules:
 - Search supplied risky clauses for omissions too. I lines contain only new or corrected grounded items.
 - Resolve cross-page pronouns only from boundary context. The target clause must still assert the item.
 - Clause resolutions [[surface,antecedent]...] are authoritative: a candidate naming the antecedent where the clause shows a pronoun is supported.
-- A statement logically equivalent to the clause content is supported: paraphrase, double negation, or a fact asserted jointly by directly adjacent supplied clauses.
+- A statement logically equivalent to the clause content is supported: paraphrase, double negation, or a fact asserted jointly by directly adjacent supplied clauses. A candidate ADDING anything absent from the clauses (names, dates, verse or chapter numbers, places) is unsupported even when plausible.
 - A candidate with he/she/they/his/her/their or a lowercase page-start continuation is not supported when its antecedent participant is missing. Reject it and emit a corrected I row with the boundary/earlier mention_id.
 - Preserve open types, negation, attribution, uncertainty, plans, and disputed beliefs.
 - clause_ids and mention_ids must be copied exactly. No outside knowledge. No rewritten evidence.
