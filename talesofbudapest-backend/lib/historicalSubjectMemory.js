@@ -106,7 +106,11 @@ export const createSubjectState = ({ sourceId, entities, aliasIndex, persisted =
   return state;
 };
 
-const compatible = (entity, expected) => entity && (!expected || entity.entity_class === expected || (expected === 'thing' && entity.entity_class === 'thing'));
+// Dates and abstract event nuggets are never discourse subjects; letting them
+// hold focus produced nonsense antecedents such as "July 17, 1806".
+const NON_FOCUS_TYPES = new Set(['date', 'event']);
+const focusable = (entity) => entity && !NON_FOCUS_TYPES.has(entity.type);
+const compatible = (entity, expected) => entity && focusable(entity) && (!expected || entity.entity_class === expected || (expected === 'thing' && entity.entity_class === 'thing'));
 const pickFocus = (state, expected, role = null) => {
   const ordered = [state.focus.active, state.focus[expected], ...[...state.entities.values()].sort((a, b) => (b.last_page ?? -1) - (a.last_page ?? -1) || (b.last_offset ?? -1) - (a.last_offset ?? -1)).map((row) => row.entity_id)];
   for (const id of ordered) {
@@ -147,7 +151,7 @@ const entityMatchesHead = (entity, head) => !head || entity.roles.has(head) || e
  * rule, not a guess; away from focus, two comparably recent compatible
  * candidates are reported as ambiguous instead of silently picked.
  */
-const resolveTyped = (state, { expected, head = null }) => {
+const resolveTyped = (state, { expected, head = null, page = null }) => {
   const seen = new Set();
   const matches = [];
   const consider = (id, isFocus) => {
@@ -156,6 +160,14 @@ const resolveTyped = (state, { expected, head = null }) => {
     const entity = state.entities.get(id);
     if (!compatible(entity, expected)) return;
     if (!entityMatchesHead(entity, head)) return;
+    // Away from the focus stack, only recently discussed entities are
+    // antecedent candidates; an untouched mention qualifies only through a
+    // discriminating head (e.g. "the synagogue" after a named synagogue).
+    if (!isFocus) {
+      const recent = entity.last_page != null && (page == null || page - entity.last_page <= 2);
+      if (!recent && !(head && entityMatchesHead(entity, head))) return;
+      if (entity.last_page == null && !head) return;
+    }
     matches.push({ entity, isFocus });
   };
   consider(state.focus.active, true);
@@ -217,6 +229,7 @@ const processLedgerPhrase = ({ state, clause, phraseRow, overlapsExplicit, refer
     references.push({
       clause_id: clause.clause_id, antecedent_mention_id: entity.last_mention_id,
       resolved_entity_id: entity.entity_id, surface: phraseRow.text,
+      start_offset: phraseRow.start_offset,
       resolution_source: 'deterministic_subject_memory',
     });
   };
@@ -229,7 +242,7 @@ const processLedgerPhrase = ({ state, clause, phraseRow, overlapsExplicit, refer
   if (kind === 'pronoun') {
     const expected = PRONOUN_EXPECTED[first];
     if (!expected) return;
-    const result = resolveTyped(state, { expected });
+    const result = resolveTyped(state, { expected, page: clause.page_ref });
     if (result.status === 'resolved') { pushReference(result.entity); touch(state, result.entity, null, clause); }
     else if (result.status === 'ambiguous') pushAmbiguity(result.candidates, expected);
     return;
@@ -237,7 +250,7 @@ const processLedgerPhrase = ({ state, clause, phraseRow, overlapsExplicit, refer
   if (kind === 'possessive') {
     const ownerExpected = PRONOUN_EXPECTED[first];
     if (!ownerExpected) return;
-    const owner = resolveTyped(state, { expected: ownerExpected });
+    const owner = resolveTyped(state, { expected: ownerExpected, page: clause.page_ref });
     if (owner.status === 'ambiguous') { pushAmbiguity(owner.candidates, ownerExpected); return; }
     if (owner.status !== 'resolved') return;
     pushReference(owner.entity);
@@ -252,7 +265,7 @@ const processLedgerPhrase = ({ state, clause, phraseRow, overlapsExplicit, refer
   if (kind === 'definite') {
     const expected = phraseRow.type === 'person' ? 'person' : phraseRow.type === 'group' ? 'group' : 'thing';
     const discriminating = head && (ROLE_WORDS.has(head) || TRACKABLE_HEADS.has(head) || GROUP_WORDS.has(head));
-    const result = resolveTyped(state, { expected, head: discriminating ? head : null });
+    const result = resolveTyped(state, { expected, head: discriminating ? head : null, page: clause.page_ref });
     if (result.status === 'resolved') { pushReference(result.entity); touch(state, result.entity, null, clause); return; }
     if (result.status === 'ambiguous') { pushAmbiguity(result.candidates, expected); return; }
     if (discriminating && !ROLE_WORDS.has(head) && !overlapsExplicit) {
@@ -296,12 +309,12 @@ export const resolveSubjectReferences = ({ state, clauses, mentionById, nounPhra
         const expected = expectedFor(expression.surface);
         const antecedent = pickFocus(state, expected, roleFor(expression.surface));
         if (!antecedent?.last_mention_id) continue;
-        references.push({ clause_id: clause.clause_id, antecedent_mention_id: antecedent.last_mention_id, resolved_entity_id: antecedent.entity_id, surface: expression.surface, resolution_source: 'deterministic_subject_memory' });
+        references.push({ clause_id: clause.clause_id, antecedent_mention_id: antecedent.last_mention_id, resolved_entity_id: antecedent.entity_id, surface: expression.surface, start_offset: clause.start_offset + expression.index, resolution_source: 'deterministic_subject_memory' });
       }
     }
     const candidates = clause.mention_ids.map((id) => mentionById.get(id)).filter(Boolean)
       .map((mention) => ({ mention, entity: state.entities.get(mention.subject_entity_id) }))
-      .filter((row) => row.entity && (row.entity.entity_class === 'person' || row.entity.entity_class === 'thing' || row.entity.entity_class === 'group'))
+      .filter((row) => row.entity && focusable(row.entity) && (row.entity.entity_class === 'person' || row.entity.entity_class === 'thing' || row.entity.entity_class === 'group'))
       .sort((left, right) => left.mention.start_offset - right.mention.start_offset);
     // Prefer an early non-prepositional mention. A nearby place must not displace
     // a named narrator such as "In Buda, R. Efraim...".
