@@ -63,10 +63,14 @@ const V3 = args.includes('--v3');
 const EXPERIMENT_ID = option('--experiment-id', null);
 // TSV extraction needs answers, not chains of thought: reasoning tokens count
 // against max_tokens and truncate the protocol on reasoning-first models.
+// Some endpoints (GPT-OSS) cannot disable reasoning, only lower it, so the
+// extractor and auditor each get their own setting.
 const REASONING = option('--reasoning', null); // off | low | medium | high
-const REASONING_PARAM = REASONING === null ? undefined
-  : REASONING === 'off' ? { enabled: false }
-  : { effort: REASONING };
+const PRIMARY_REASONING = option('--primary-reasoning', REASONING);
+const AUDIT_REASONING = option('--audit-reasoning', REASONING);
+const reasoningParam = (value) => value === null ? undefined
+  : value === 'off' ? { enabled: false }
+  : { effort: value };
 
 const INPUT = path.join(__dirname, `../../ingest/corpus/restricted/text/${SOURCE_ID}.pages.txt`);
 const OUTPUT_DIR = path.join(__dirname, '../../ingest/corpus/restricted/extractions');
@@ -592,7 +596,7 @@ const main = async () => {
     // schema version, model, and output limit: a changed prior-page subject
     // state invalidates the next page's cache entry.
     const cacheKey = sha256(JSON.stringify(V3
-      ? { operation, model, prompt_version: promptVersion, request: requestText, max_tokens: maxTokens, body_sha: normalizedBodySha, state_hash: stateHash, experiment_id: EXPERIMENT_ID, reasoning: REASONING }
+      ? { operation, model, prompt_version: promptVersion, request: requestText, max_tokens: maxTokens, body_sha: normalizedBodySha, state_hash: stateHash, experiment_id: EXPERIMENT_ID, reasoning: [PRIMARY_REASONING, AUDIT_REASONING] }
       : { operation, model, prompt_version: promptVersion, request: requestText }));
     const cached = cache.get(cacheKey);
     if (cached) {
@@ -615,9 +619,11 @@ const main = async () => {
         messages: [{ role: 'system', content: attempt ? `${system}\nRETRY: obey TSV exactly; classify every candidate in grouped V rows first.` : system }, { role: 'user', content: JSON.stringify(payload) }],
         max_tokens: attemptTokens,
         temperature: 0,
-        // The quality judge keeps its default reasoning behavior; the flag
-        // only governs the routine extractor and auditor.
-        reasoning: /historical\.v2\.(?:quality|reflection)/u.test(operation) ? undefined : REASONING_PARAM,
+        // The quality judge keeps its default reasoning behavior; the flags
+        // only govern the routine extractor and auditor/verifier.
+        reasoning: /historical\.v2\.(?:quality|reflection)/u.test(operation) ? undefined
+          : operation === 'historical.v2.primary' ? reasoningParam(PRIMARY_REASONING)
+          : reasoningParam(AUDIT_REASONING),
       });
       const charged = Number(completion.usage?.cost ?? ceiling);
       spent += charged;
