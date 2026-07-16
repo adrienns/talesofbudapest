@@ -7,6 +7,13 @@ import dotenv from 'dotenv';
 import { createChatCompletion, getOpenRouterApiKey } from '../lib/openRouterClient.js';
 import { estimateExtractionCeiling, fetchOpenRouterCatalog, formatUsd, pricingForModels } from '../lib/openRouterCostGuard.js';
 import {
+  buildSubjectEntityIndex,
+  createSubjectState,
+  resolveSubjectReferences,
+  serializeSubjectState,
+  subjectContext,
+} from '../lib/historicalSubjectMemory.js';
+import {
   HISTORICAL_V2_PROMPT_VERSION,
   HISTORICAL_V2_SCHEMA_VERSION,
   SCHEMA_REGISTRY,
@@ -48,12 +55,15 @@ const NLP_THRESHOLD = Number(option('--nlp-threshold', process.env.KG_NLP_THRESH
 const NLP_PYTHON = option('--nlp-python', process.env.KG_NLP_PYTHON ?? path.join(__dirname, '../.venv-historical-nlp/bin/python'));
 const PREFLIGHT_ONLY = args.includes('--preflight-only');
 const RESUME = args.includes('--resume');
+const V3 = args.includes('--v3');
 
 const INPUT = path.join(__dirname, `../../ingest/corpus/restricted/text/${SOURCE_ID}.pages.txt`);
 const OUTPUT_DIR = path.join(__dirname, '../../ingest/corpus/restricted/extractions');
-const ITEM_OUTPUT = path.join(OUTPUT_DIR, `${SOURCE_ID}.historical-items-v2.jsonl`);
-const COVERAGE_OUTPUT = path.join(OUTPUT_DIR, `${SOURCE_ID}.historical-coverage-v2.jsonl`);
-const CACHE_OUTPUT = path.join(OUTPUT_DIR, `${SOURCE_ID}.historical-v2-model-cache.jsonl`);
+const ITEM_OUTPUT = path.join(OUTPUT_DIR, `${SOURCE_ID}.historical-items-${V3 ? 'v3' : 'v2'}.jsonl`);
+const COVERAGE_OUTPUT = path.join(OUTPUT_DIR, `${SOURCE_ID}.historical-coverage-${V3 ? 'v3' : 'v2'}.jsonl`);
+const CACHE_OUTPUT = path.join(OUTPUT_DIR, `${SOURCE_ID}.historical-${V3 ? 'v3' : 'v2'}-model-cache.jsonl`);
+const SUBJECT_TRANSITIONS_OUTPUT = path.join(OUTPUT_DIR, `${SOURCE_ID}.historical-subject-transitions-v3.jsonl`);
+const SUBJECT_MEMORY_OUTPUT = path.resolve(option('--state-file', path.join(OUTPUT_DIR, `${SOURCE_ID}.historical-subject-memory-v3.json`)));
 
 const PRIMARY_MAX_TOKENS = 2500;
 const AUDIT_MAX_TOKENS = 1800;
@@ -61,7 +71,16 @@ const VERIFY_MAX_TOKENS = 240;
 const VERIFY_BATCH_SIZE = 8;
 const QUALITY_MAX_TOKENS = 2200;
 const MAX_QUALITY_CLAUSES = 12;
-const PRIMARY_CACHE_VERSION = 'historical-semi-open-v2.8';
+const PRIMARY_CACHE_VERSION = V3 ? 'historical-stateful-v3.0' : 'historical-semi-open-v2.8';
+const primaryTokenLimit = (clauseCount) => V3 ? Math.min(1300, Math.max(520, 140 + clauseCount * 16)) : PRIMARY_MAX_TOKENS;
+const auditTokenLimit = (clauseCount) => V3 ? Math.min(900, Math.max(420, 120 + clauseCount * 11)) : AUDIT_MAX_TOKENS;
+const qualityTokenLimit = () => V3 ? 700 : QUALITY_MAX_TOKENS;
+// Compact TSV is mostly ASCII English. Two bytes/token remains deliberately
+// pessimistic while avoiding V2's invalid one-byte-per-token reservation.
+const v3InputTokens = (request) => Math.ceil(Buffer.byteLength(request, 'utf8') / 2);
+const estimatedCeiling = ({ requests, modelPricing, maxOutputTokens }) => V3
+  ? { usd: requests.reduce((sum, request) => sum + (v3InputTokens(request) * modelPricing.prompt) + (maxOutputTokens * modelPricing.completion) + modelPricing.request, 0) }
+  : estimateExtractionCeiling({ requests, modelPricing: [modelPricing], maxOutputTokens });
 
 const PRIMARY_LINE_PROTOCOL = `Output plain TSV lines, no JSON, markdown, header, tabs inside text, or commentary.
 R<TAB>clause_id<TAB>antecedent_mention_id<TAB>surface_or_CONTINUATION
@@ -82,7 +101,7 @@ const ITEM_EXAMPLES = `Valid examples (actual tab-separated rows):
 I\tE\t-\tdeath\tbirth_or_death\tcl_example1\tm_example1=person\t+A-\tR. Example died during the epidemic.
 I\tA\tC\tprivate_prayer_restriction\t-\tcl_example2\tm_example2=authority\tNR-\tPrivate prayer was not customary.
 Never print K, A, F, ITEM, field names, or a row for a clause with no item. Every item row starts with I.`;
-const WIRE_PAGE = `Input PAGE={"p":page_ref,"b":{"prev":[boundary_text,mentions],"next":[boundary_text,mentions]},"c":[[clause_id,text,mentions,suggested_schemas]...]}; mentions=[[mention_id,text,type]...].`;
+const WIRE_PAGE = `Input PAGE={"p":page_ref,"s":current_subjects,"b":{"prev":[boundary_text,mentions],"next":[boundary_text,mentions]},"c":[[clause_id,text,mentions,suggested_schemas]...]}; mentions=[[mention_id,text,type]...]. s is compact source-local subject memory: [entity_id,label,type,aliases,roles].`;
 
 const PRIMARY_PROMPT = `Extract an exhaustive, source-grounded ledger from one historical-book page.
 
@@ -97,6 +116,7 @@ Rules:
 - clause_ids and mention_ids must be copied exactly. Evidence is attached later from clause offsets; never write quotations.
 - suggested schemas are hints, never gates. Use canonical_type null and a precise new open_type when needed.
 - Boundary context resolves names and pronouns only. An item must be asserted by target clause_ids.
+- Current subject memory is authoritative context, not evidence. Treat aliases such as full name, first name, R. Name, and "the rabbi" as one entity only when s presents them together. Never invent a different subject.
 - Every acting, speaking, believing, described, or referenced person/group/organization must be a participant. For he/she/they/his/her/their and lowercase page-start continuations, copy the antecedent mention_id from boundary or earlier clauses. Never leave a resolvable subject or attribution unlinked.
 - Emit one R row for every resolvable contextual reference, once per clause/reference. This clause-level map is mandatory even when several I rows share that clause.
 - R surface must be the exact contextual expression: He, She, They, His, Her, Their, This, That, the former, the latter, or CONTINUATION. Never write "clause" as the surface.
@@ -163,6 +183,22 @@ const readJsonl = async (file) => {
     if (error?.code === 'ENOENT') return [];
     throw error;
   }
+};
+
+const readSubjectMemory = async (file, sourceId, expectedPreviousPage) => {
+  try {
+    const value = JSON.parse(await fs.readFile(file, 'utf8'));
+    if (value?.source_id !== sourceId || value?.version !== 1 || value?.last_page !== expectedPreviousPage) return null;
+    return value;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw error;
+  }
+};
+
+const saveSubjectMemory = async (file, state, lastPage) => {
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(file, `${JSON.stringify(serializeSubjectState(state, lastPage), null, 2)}\n`, 'utf8');
 };
 
 const runLocalNlp = (pages) => new Promise((resolve, reject) => {
@@ -256,6 +292,7 @@ const wireBoundary = (payload, wireIds) => ({
 
 const wirePage = (payload, wireIds) => ({
   p: payload.page_ref,
+  s: payload.subject_context ?? [],
   b: wireBoundary(payload, wireIds),
   c: payload.clauses.map((clause) => wireClause(clause, wireIds)),
 });
@@ -406,7 +443,7 @@ const main = async () => {
   const lastPage = targetNumbers.at(-1);
   const contextPages = allPages.filter((page) => page.page >= firstPage - 1 && page.page <= lastPage + 1);
   const sourceSha = sha256(targetPages.map((page) => `${page.page}\u001f${page.text}`).join('\u001e'));
-  const config = { primary_model: PRIMARY_MODEL, audit_model: AUDIT_MODEL, quality_model: QUALITY_MODEL, nlp_model: NLP_MODEL, nlp_threshold: NLP_THRESHOLD, prompt_version: HISTORICAL_V2_PROMPT_VERSION };
+  const config = { primary_model: PRIMARY_MODEL, audit_model: AUDIT_MODEL, quality_model: QUALITY_MODEL, nlp_model: NLP_MODEL, nlp_threshold: NLP_THRESHOLD, prompt_version: HISTORICAL_V2_PROMPT_VERSION, subject_memory: V3 ? 'stateful-v3' : null };
   const runKey = sha256(JSON.stringify({ source_id: SOURCE_ID, pages: targetNumbers, source_sha: sourceSha, config }));
 
   if (RESUME) {
@@ -419,12 +456,16 @@ const main = async () => {
 
   console.log(`Local NLP: ${contextPages.length} pages including boundary context.`);
   const nlp = await runLocalNlp(contextPages);
-  const mentions = assignMentionIds(SOURCE_ID, nlp.mentions ?? []);
+  const indexedMentions = buildSubjectEntityIndex({ sourceId: SOURCE_ID, mentions: assignMentionIds(SOURCE_ID, nlp.mentions ?? []) });
+  const mentions = indexedMentions.mentions;
   const targetReadingPages = (nlp.reading_pages ?? []).filter((page) => targetSet.has(page.page));
   const clauses = buildClauseLedger({ sourceId: SOURCE_ID, targetPages, readingPages: targetReadingPages, mentions });
   if (!clauses.length) throw new Error('Local clause ledger is empty');
   const mentionById = new Map(mentions.map((mention) => [mention.mention_id, mention]));
   const clauseById = new Map(clauses.map((clause) => [clause.clause_id, clause]));
+  const persistedSubjectMemory = V3 ? await readSubjectMemory(SUBJECT_MEMORY_OUTPUT, SOURCE_ID, firstPage - 1) : null;
+  const subjectState = V3 ? createSubjectState({ sourceId: SOURCE_ID, entities: indexedMentions.entities, aliasIndex: indexedMentions.aliasIndex, persisted: persistedSubjectMemory }) : null;
+  const subjectTransitions = [];
   const wireIds = createWireIds(clauses, mentions);
   const pagePayloads = targetNumbers.map((page) => pagePayload({ page, clauses, mentionById, mentions, allPages }));
   const pagePayloadByPage = new Map(pagePayloads.map((payload) => [payload.page_ref, payload]));
@@ -445,10 +486,10 @@ const main = async () => {
   const pricing = new Map(pricingForModels([PRIMARY_MODEL, AUDIT_MODEL, QUALITY_MODEL], catalog).map((item) => [item.modelId, item]));
   const primaryRequests = pagePayloads.map((payload) => `${PRIMARY_PROMPT}\n${JSON.stringify(wirePage(payload, wireIds))}`);
   const auditSkeletons = batchesOf(pagePayloads, 2).map((payloads) => `${AUDIT_PROMPT}\n${JSON.stringify({ pages: payloads.map((payload) => wireAuditPage(payload, wireIds)) })}`);
-  const primaryCeiling = estimateExtractionCeiling({ requests: primaryRequests, modelPricing: [pricing.get(PRIMARY_MODEL)], maxOutputTokens: PRIMARY_MAX_TOKENS }).usd;
-  const auditCeiling = estimateExtractionCeiling({ requests: auditSkeletons, modelPricing: [pricing.get(AUDIT_MODEL)], maxOutputTokens: AUDIT_MAX_TOKENS }).usd;
+  const primaryCeiling = pagePayloads.reduce((sum, payload, index) => sum + estimatedCeiling({ requests: [primaryRequests[index]], modelPricing: pricing.get(PRIMARY_MODEL), maxOutputTokens: primaryTokenLimit(payload.clauses.length) }).usd, 0);
+  const auditCeiling = batchesOf(pagePayloads, 2).reduce((sum, payloads, index) => sum + estimatedCeiling({ requests: [auditSkeletons[index]], modelPricing: pricing.get(AUDIT_MODEL), maxOutputTokens: auditTokenLimit(payloads.flatMap((payload) => payload.clauses).length) }).usd, 0);
   const qualityReservePayload = { clauses: clauses.slice(0, Math.max(1, Math.ceil(clauses.length * 0.1))).slice(0, MAX_QUALITY_CLAUSES).map((clause) => wireClause({ ...clause, mentions: mentionsForClause(clause, mentionById) }, wireIds)), candidates: [] };
-  const qualityReserve = estimateExtractionCeiling({ requests: [`${QUALITY_PROMPT}\n${JSON.stringify(qualityReservePayload)}`], modelPricing: [pricing.get(QUALITY_MODEL)], maxOutputTokens: QUALITY_MAX_TOKENS }).usd;
+  const qualityReserve = estimatedCeiling({ requests: [`${QUALITY_PROMPT}\n${JSON.stringify(qualityReservePayload)}`], modelPricing: pricing.get(QUALITY_MODEL), maxOutputTokens: qualityTokenLimit() }).usd;
   console.log(`Routine ceiling ${formatUsd(primaryCeiling + auditCeiling)}; quality reserve ${formatUsd(qualityReserve)}; hard cap ${formatUsd(MAX_COST_USD)}.`);
   if (primaryCeiling + auditCeiling > MAX_COST_USD) throw new Error(`Routine conservative ceiling ${formatUsd(primaryCeiling + auditCeiling)} exceeds hard cap ${formatUsd(MAX_COST_USD)}`);
 
@@ -458,11 +499,12 @@ const main = async () => {
     source_id: SOURCE_ID,
     pdf_pages: targetNumbers,
     source_text_sha256: sourceSha,
-    schema_version: HISTORICAL_V2_SCHEMA_VERSION,
+    schema_version: V3 ? 'historical-items-v3' : HISTORICAL_V2_SCHEMA_VERSION,
     config,
     max_cost_usd: MAX_COST_USD,
     publication_status: 'private',
     mentions,
+    entity_aliases: V3 ? [...indexedMentions.entities.values()].map((entity) => ({ ...entity, aliases: [...entity.aliases], roles: [...entity.roles] })) : undefined,
   };
 
   if (PREFLIGHT_ONLY) {
@@ -487,7 +529,7 @@ const main = async () => {
       calls.push({ operation, model, usage: cached.usage ?? null, cache_hit: true });
       return cached.payload;
     }
-    const ceiling = estimateExtractionCeiling({ requests: [requestText], modelPricing: [pricing.get(model)], maxOutputTokens: maxTokens }).usd;
+    const ceiling = estimatedCeiling({ requests: [requestText], modelPricing: pricing.get(model), maxOutputTokens: maxTokens }).usd;
     if (spent + ceiling > MAX_COST_USD) throw new BudgetExceeded(`${operation} ceiling ${formatUsd(ceiling)} exceeds remaining ${formatUsd(MAX_COST_USD - spent)}`);
     let completion;
     let parsed;
@@ -559,10 +601,15 @@ const main = async () => {
 
   try {
     for (const payload of pagePayloads) {
+      const currentSubjectContext = V3 ? subjectContext(subjectState) : [];
+      const deterministicSubjects = V3 ? resolveSubjectReferences({ state: subjectState, clauses: payload.clauses, mentionById }) : { references: [], transitions: [] };
+      subjectTransitions.push(...deterministicSubjects.transitions);
+      const deterministicReferenceKeys = new Set(deterministicSubjects.references.map((reference) => `${reference.clause_id}\u001f${String(reference.surface).toLowerCase()}`));
+      referenceRows.push(...deterministicSubjects.references);
       const expectedClauseIds = payload.clauses.map((clause) => clause.clause_id);
       const response = await callProtocol({
         operation: 'historical.v2.primary', model: PRIMARY_MODEL, system: PRIMARY_PROMPT,
-        payload: wirePage(payload, wireIds), maxTokens: PRIMARY_MAX_TOKENS, expectedClauseIds,
+        payload: wirePage({ ...payload, subject_context: currentSubjectContext }, wireIds), maxTokens: primaryTokenLimit(payload.clauses.length), expectedClauseIds,
       });
       const deterministicContinuationClauses = new Set(boundaryContinuationReferences.map((reference) => reference.clause_id));
       referenceRows.push(...response.references.filter((reference) => {
@@ -570,6 +617,7 @@ const main = async () => {
         const mention = mentionById.get(reference.antecedent_mention_id);
         return clause && mention && /^(?:he|she|they|his|her|their|this|that|the former|the latter|continuation)$/iu.test(reference.surface.trim())
           && Math.abs(mention.page - clause.page_ref) <= 1
+          && !deterministicReferenceKeys.has(`${reference.clause_id}\u001f${String(reference.surface).toLowerCase()}`)
           && !(clause.risk_flags.includes('cross_page_continuation') && deterministicContinuationClauses.has(clause.clause_id));
       }));
       primaryItems.push(...normalizeModelItems({ rawItems: response.items, clauses, mentions, sourceId: SOURCE_ID, discoverySource: 'primary' }));
@@ -585,7 +633,7 @@ const main = async () => {
       const audit = await callProtocol({
         operation: 'historical.v2.audit', model: AUDIT_MODEL, system: AUDIT_PROMPT,
         payload: { pages: payloadBatch.map((payload) => wireAuditPage(payload, wireIds)) },
-        maxTokens: AUDIT_MAX_TOKENS,
+        maxTokens: auditTokenLimit(payloadBatch.flatMap((entry) => entry.clauses).length),
       });
       const alignedAuditItems = realignModelItemsToClauses({ items: audit.items, availableClauses: clauses.filter((clause) => pageSet.has(clause.page_ref)), allClauses: clauses });
       const independentItems = dedupeHistoricalItems(applyResolvedReferences({
@@ -622,7 +670,7 @@ const main = async () => {
           boundary: [...new Set(riskClauses.map((clause) => clause.page_ref))].map((page) => [page, wireBoundary(pagePayloadByPage.get(page), wireIds)]),
           candidates: batch.map((item, index) => wireKnownItem(item, wireIds, `q${index.toString(36)}`)),
         },
-        maxTokens: QUALITY_MAX_TOKENS,
+        maxTokens: qualityTokenLimit(),
         expectedClauseIds: riskClauses.map((clause) => clause.clause_id),
         expectedVerdictIds: [...itemAliases.keys()],
       });
@@ -670,7 +718,16 @@ const main = async () => {
     const referencesResolved = itemHasResolvedReferences(item, clauseById, mentionById);
     const verdict = judgment?.verdict === 'supported' && referencesResolved ? 'supported' : judgment?.verdict === 'supported' ? 'ambiguous' : judgment?.verdict ?? 'ambiguous';
     const reason = referencesResolved ? judgment?.reason ?? 'Independent agreement not completed.' : 'Pronoun or page-boundary antecedent was not linked to an entity mention.';
-    return { ...item, verification: { verdict, reason } };
+    const reference = item.clause_ids.flatMap((id) => referenceRows.filter((row) => row.clause_id === id)).find((row) => row.resolved_entity_id);
+    const transition = item.clause_ids.map((id) => subjectTransitions.find((row) => row.clause_id === id)).find(Boolean);
+    return {
+      ...item,
+      ...(V3 ? {
+        subject_entity_id: reference?.resolved_entity_id ?? transition?.after_focus?.active ?? null,
+        subject_resolution_source: reference?.resolution_source ?? (transition?.after_focus?.active ? 'deterministic_subject_focus' : null),
+      } : {}),
+      verification: { verdict, reason },
+    };
   });
   const supportedItems = allItems.filter((item) => item.verification.verdict === 'supported');
   const auditedCoverage = applyCoverage({ clauses, items: supportedItems, coverageRows, auditStatus: status === 'complete' ? 'agreed' : 'escalated' })
@@ -701,6 +758,14 @@ const main = async () => {
       ambiguous: auditedCoverage.filter((clause) => clause.disposition === 'ambiguous').length,
     },
   });
+  if (V3) {
+    await appendJsonl(SUBJECT_TRANSITIONS_OUTPUT, {
+      ...baseRecord, status, extracted_at: completedAt,
+      transitions: subjectTransitions,
+      resolved_references: referenceRows.filter((reference) => reference.resolution_source === 'deterministic_subject_memory'),
+    });
+    await saveSubjectMemory(SUBJECT_MEMORY_OUTPUT, subjectState, lastPage);
+  }
   console.log(`${status}: ${supportedItems.length}/${allItems.length} supported; ${auditedCoverage.length} clauses; ${usage.call_count} paid calls; ${usage.cache_hits} cache hits; ${formatUsd(usage.cost)} total; ${formatUsd(averageCost)}/page.`);
   if (status !== 'complete') process.exitCode = 1;
 };

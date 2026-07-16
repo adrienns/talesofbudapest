@@ -302,7 +302,7 @@ export const applyResolvedReferences = ({ items, references, mentions, sourceId 
     const participants = [...item.participants];
     for (const reference of linked) {
       if (!participants.some((participant) => participant.mention_id === reference.antecedent_mention_id)) {
-        participants.push({ mention_id: reference.antecedent_mention_id, role: 'resolved_reference', resolved_entity_id: null });
+        participants.push({ mention_id: reference.antecedent_mention_id, role: 'resolved_reference', resolved_entity_id: reference.resolved_entity_id ?? null });
       }
     }
     const normalized = {

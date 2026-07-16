@@ -7,25 +7,34 @@ import { fileURLToPath } from 'node:url';
 const backend = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const workspace = path.resolve(backend, '..');
 const extractionDir = path.join(workspace, 'ingest/corpus/restricted/extractions');
-const sourceId = process.env.HISTORICAL_SOURCE_ID || 'jewish-budapest';
+const sourceFlag = process.argv.indexOf('--source');
+const sourceId = sourceFlag >= 0 ? process.argv[sourceFlag + 1] : (process.env.HISTORICAL_SOURCE_ID || 'jewish-budapest');
+const v3 = process.argv.includes('--v3');
 const outputFlag = process.argv.indexOf('--output');
-const outputPath = outputFlag >= 0 ? path.resolve(process.argv[outputFlag + 1]) : path.join(extractionDir, 'historical-facts-browser.fragment.html');
+const outputPath = outputFlag >= 0 ? path.resolve(process.argv[outputFlag + 1]) : path.join(extractionDir, v3 ? 'historical-facts-browser-v3.html' : 'historical-facts-browser.fragment.html');
 
 const readJsonl = (file) => fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).flatMap((line) => {
   try { return [JSON.parse(line)]; } catch { return []; }
 });
 const fold = (value) => String(value ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\b(?:r|rabbi|dr|mr|mrs|saint|st)\.?\s+/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
-const itemRows = readJsonl(path.join(extractionDir, `${sourceId}.langextract-pilot.jsonl`));
-const run = itemRows.find((row) => row.record_type === 'run');
-const report = JSON.parse(fs.readFileSync(path.join(extractionDir, `${sourceId}.langextract-pilot.report.json`), 'utf8'));
-if (!run) throw new Error(`No run header in ${sourceId}.langextract-pilot.jsonl`);
-if (report.run_id !== run.run_id) {
-  throw new Error(`Refusing to mix runs: JSONL=${run.run_id}, report=${report.run_id}. Regenerate both from the same extraction run.`);
-}
-const items = itemRows.filter((row) => row.record_type === 'item');
-const mentionRuns = readJsonl(path.join(extractionDir, `${sourceId}.mentions.jsonl`));
-const mentionRun = mentionRuns.filter((row) => (row.pdf_pages ?? []).some((page) => run.pages.includes(page))).at(-1);
-const localMentions = mentionRun?.mentions ?? [];
+const itemRows = readJsonl(path.join(extractionDir, v3 ? `${sourceId}.historical-items-v3.jsonl` : `${sourceId}.langextract-pilot.jsonl`));
+const run = v3
+  ? itemRows.filter((row) => row.status === 'complete' || row.status === 'failed_cost_gate' || row.status === 'preflight').at(-1)
+  : itemRows.find((row) => row.record_type === 'run');
+const report = v3 ? null : JSON.parse(fs.readFileSync(path.join(extractionDir, `${sourceId}.langextract-pilot.report.json`), 'utf8'));
+if (!run) throw new Error(`No V${v3 ? '3 extraction record' : ' run header'} for ${sourceId}`);
+if (!v3 && report.run_id !== run.run_id) throw new Error(`Refusing to mix runs: JSONL=${run.run_id}, report=${report.run_id}. Regenerate both from the same extraction run.`);
+const runPages = run.pdf_pages ?? run.pages ?? [];
+// Keep citations/captions in JSONL for audit, but do not present pure source
+// credits as historical facts. Older artifacts have no disposition and remain
+// visible for backward compatibility.
+const items = v3
+  ? (run.items ?? []).filter((item) => item.verification?.verdict !== 'unsupported')
+  : itemRows.filter((row) => row.record_type === 'item' && row.disposition !== 'reference_only' && row.verification?.verdict !== 'unsupported');
+const mentionRuns = v3 ? [] : readJsonl(path.join(extractionDir, `${sourceId}.mentions.jsonl`));
+const mentionRun = mentionRuns.filter((row) => (row.pdf_pages ?? []).some((page) => runPages.includes(page))).at(-1);
+const localMentions = v3 ? (run.mentions ?? []) : (mentionRun?.mentions ?? []);
+const v3Entities = new Map((run.entity_aliases ?? []).map((entity) => [entity.entity_id, entity]));
 const SYNAGOGUE_PATTERN = /\bsynagog(?:ue|ues)\b/i;
 
 const entityGroups = new Map();
@@ -55,7 +64,10 @@ const addMentionEntities = (mention, itemIds = []) => {
     page: mention.page, start: mention.start_offset, end: mention.end_offset, text: mention.text,
     confidence: mention.confidence ?? null, quote: mentionContext(mention), item_ids: itemIds,
   };
-  upsertEntity(`mention::${fold(label)}`, label, mention.type ?? 'entity', mention.text, evidence);
+  const entity = mention.subject_entity_id ? v3Entities.get(mention.subject_entity_id) : null;
+  const key = mention.subject_entity_id ?? `mention::${fold(label)}`;
+  upsertEntity(key, entity?.label ?? label, entity?.type ?? mention.type ?? 'entity', mention.text, evidence);
+  if (entity) for (const alias of entity.aliases ?? []) upsertEntity(key, entity.label, entity.type, alias, null);
   // This is a type bucket, not a claim that all mentions are the same named
   // building. It gives a useful all-synagogues view without false resolution.
   if (SYNAGOGUE_PATTERN.test(label)) {
@@ -69,8 +81,8 @@ for (const mention of localMentions) {
 
 const pronouns = new Set(['he', 'his', 'him', 'she', 'her', 'hers', 'they', 'their', 'them', 'it', 'its']);
 const itemViews = items.map((item) => {
-  const resolved = item.resolved_subject;
-  const subjectKey = resolved && !pronouns.has(fold(resolved)) ? `subject::${fold(resolved)}` : null;
+  const resolved = item.resolved_subject ?? v3Entities.get(item.subject_entity_id)?.label ?? null;
+  const subjectKey = item.subject_entity_id ?? (resolved && !pronouns.has(fold(resolved)) ? `subject::${fold(resolved)}` : null);
   if (subjectKey) {
     for (const evidence of item.evidence ?? []) {
       upsertEntity(subjectKey, resolved, 'resolved subject', item.literal_subject, {
@@ -80,7 +92,7 @@ const itemViews = items.map((item) => {
     }
     entityGroups.get(subjectKey).item_ids.add(item.item_id);
   }
-  const antecedent = item.reference_antecedent;
+  const antecedent = item.reference_antecedent ?? resolved;
   const referenceKey = antecedent && !pronouns.has(fold(antecedent)) ? `subject::${fold(antecedent)}` : null;
   if (referenceKey) {
     for (const evidence of item.evidence ?? []) {
@@ -103,7 +115,7 @@ const itemViews = items.map((item) => {
           const index = entry.quote.toLocaleLowerCase().indexOf(display.toLocaleLowerCase(), cursor);
           if (index >= 0) cursor = index + display.length;
           return {
-            key: SYNAGOGUE_PATTERN.test(mention.normalized_text ?? mention.text) ? 'class::synagogue' : `mention::${fold(mention.normalized_text ?? mention.text)}`,
+            key: mention.subject_entity_id ?? (SYNAGOGUE_PATTERN.test(mention.normalized_text ?? mention.text) ? 'class::synagogue' : `mention::${fold(mention.normalized_text ?? mention.text)}`),
             text: display, type: mention.type,
             // Evidence quotes are cleaned, so raw OCR offsets cannot position
             // highlights after a joined word such as syna-\ngogue.
@@ -118,6 +130,7 @@ const itemViews = items.map((item) => {
     statement: item.statement_en, literal_subject: item.literal_subject, resolved_subject: item.resolved_subject,
     reference_antecedent: item.reference_antecedent, reference_status: item.reference_status,
     risk_flags: item.risk_flags ?? [], subject_key: subjectKey, reference_key: referenceKey, evidence,
+    subject_resolution_source: item.subject_resolution_source ?? item.reference_resolution_source ?? null,
   };
 });
 
@@ -133,19 +146,19 @@ const entities = [...entityGroups.values()].map((group) => ({
 
 const data = {
   run: {
-    id: run.run_id, source: run.source_id, pages: run.pages, model: run.model, cost: run.usage.cost,
-    average_cost: report.usage.average_uncached_equivalent_cost_usd_per_page ?? report.usage.average_total_cost_usd_per_page ?? report.usage.average_cost_usd_per_page,
-    actual_average_cost: report.usage.average_total_cost_usd_per_page ?? report.usage.average_cost_usd_per_page,
-    cache_hits: Number(report.usage.cache_hits ?? 0) + Number(report.reference_resolution?.usage?.cache_hits ?? 0),
-    grounding_rate: report.extraction.grounded_rate, schema_rate: report.extraction.schema_valid_rate,
-    unresolved: report.extraction.unresolved_references,
+    id: run.run_id, source: run.source_id, pages: runPages, model: run.model ?? run.config?.primary_model, cost: run.usage?.cost ?? 0,
+    average_cost: v3 ? run.average_cost_usd_per_page ?? 0 : (report.usage.average_uncached_equivalent_cost_usd_per_page ?? report.usage.average_total_cost_usd_per_page ?? report.usage.average_cost_usd_per_page),
+    actual_average_cost: v3 ? run.average_cost_usd_per_page ?? 0 : (report.usage.average_total_cost_usd_per_page ?? report.usage.average_cost_usd_per_page),
+    cache_hits: v3 ? Number(run.usage?.cache_hits ?? 0) : Number(report.usage.cache_hits ?? 0) + Number(report.reference_resolution?.usage?.cache_hits ?? 0),
+    grounding_rate: v3 ? 1 : report.extraction.grounded_rate, schema_rate: v3 ? 1 : report.extraction.schema_valid_rate,
+    unresolved: v3 ? (run.resolved_references ?? []).filter((reference) => !reference.resolved_entity_id).length : report.extraction.unresolved_references,
   },
   items: itemViews,
   entities,
 };
 const encodedData = Buffer.from(JSON.stringify(data), 'utf8').toString('base64');
-const documentTitle = `Historical facts · ${run.source_id} · pages ${run.pages.join('–')}`;
-const pageLabel = run.pages.join('–');
+const documentTitle = `Historical facts · ${run.source_id} · pages ${runPages.join('–')}`;
+const pageLabel = runPages.join('–');
 
 const fragment = `<!doctype html>
 <html lang="en">
