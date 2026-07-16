@@ -131,6 +131,8 @@ const itemViews = items.map((item) => {
     reference_antecedent: item.reference_antecedent, reference_status: item.reference_status,
     risk_flags: item.risk_flags ?? [], subject_key: subjectKey, reference_key: referenceKey, evidence,
     subject_resolution_source: item.subject_resolution_source ?? item.reference_resolution_source ?? null,
+    subject_ambiguous: item.subject_ambiguous ?? false,
+    discourse_chain: item.discourse_chain ?? [],
   };
 });
 
@@ -140,9 +142,15 @@ const entities = [...entityGroups.values()].map((group) => ({
   type: group.type,
   aliases: [...group.aliases].filter(Boolean).sort((a, b) => a.localeCompare(b)),
   item_ids: [...group.item_ids],
+  owner_key: v3Entities.get(group.key)?.owner_entity_id ?? null,
+  roles: [...(v3Entities.get(group.key)?.roles ?? [])],
+  origin: v3Entities.get(group.key)?.origin ?? null,
   mentions: [...group.mentions.values()].map((mention) => ({ ...mention, item_ids: [...mention.item_ids] }))
     .sort((a, b) => a.page - b.page || a.start - b.start),
 })).sort((a, b) => b.mentions.length - a.mentions.length || a.label.localeCompare(b.label));
+
+// Ambiguities are first-class: a chip must say when identity is not settled.
+const ambiguousReferences = v3 ? (run.ambiguous_references ?? []) : [];
 
 const data = {
   run: {
@@ -152,6 +160,7 @@ const data = {
     cache_hits: v3 ? Number(run.usage?.cache_hits ?? 0) : Number(report.usage.cache_hits ?? 0) + Number(report.reference_resolution?.usage?.cache_hits ?? 0),
     grounding_rate: v3 ? 1 : report.extraction.grounded_rate, schema_rate: v3 ? 1 : report.extraction.schema_valid_rate,
     unresolved: v3 ? (run.resolved_references ?? []).filter((reference) => !reference.resolved_entity_id).length : report.extraction.unresolved_references,
+    ambiguous_references: ambiguousReferences.length,
   },
   items: itemViews,
   entities,
@@ -306,15 +315,17 @@ const fragment = `<!doctype html>
       ? '<div class="lfb-entity-line"><span class="lfb-label">Reference</span><span>' + esc((item.literal_subject || '').match(/^[^\\s]+/)?.[0] || item.literal_subject || '—') + ' →</span>' + entityButton(item.reference_key, item.reference_antecedent) + '</div>'
       : item.reference_status === 'ambiguous' ? '<div><span class="lfb-label">Reference</span>needs fallback</div>' : '';
     const evidence = item.evidence.map((entry) => '<div class="lfb-evidence"><div class="text-small"><span class="lfb-label">Page</span>' + esc(entry.page_ref) + ' · offsets ' + esc(entry.start_offset) + '–' + esc(entry.end_offset) + '</div><div class="lfb-quote">' + highlightedQuote(entry) + '</div></div>').join('');
-    return '<details><summary><span class="lfb-statement">' + esc(item.statement) + '</span><span class="viz-badge">' + esc(label(item.kind)) + '</span></summary><div class="lfb-detail"><div class="lfb-tags"><span class="viz-badge">' + esc(label(item.type)) + '</span><span class="viz-badge">' + esc(label(item.modality)) + '</span>' + (item.polarity === 'negated' ? '<span class="viz-badge">negated</span>' : '') + (item.reference_status === 'ambiguous' ? '<span class="viz-badge">needs reference fallback</span>' : '') + '</div>' + subject + reference + evidence + '<div class="text-small text-muted">' + esc(item.id) + '</div></div></details>';
+    return '<details><summary><span class="lfb-statement">' + esc(item.statement) + '</span><span class="viz-badge">' + esc(label(item.kind)) + '</span></summary><div class="lfb-detail"><div class="lfb-tags"><span class="viz-badge">' + esc(label(item.type)) + '</span><span class="viz-badge">' + esc(label(item.modality)) + '</span>' + (item.polarity === 'negated' ? '<span class="viz-badge">negated</span>' : '') + (item.reference_status === 'ambiguous' ? '<span class="viz-badge">needs reference fallback</span>' : '') + (item.subject_ambiguous ? '<span class="viz-badge">ambiguous subject</span>' : '') + (item.subject_resolution_source ? '<span class="viz-badge">' + esc(label(item.subject_resolution_source)) + '</span>' : '') + '</div>' + subject + reference + evidence + '<div class="text-small text-muted">' + esc(item.id) + '</div></div></details>';
   };
   const renderEntity = (entity) => '<div class="lfb-entity-row"><div class="lfb-entity-line">' + entityButton(entity.key, entity.label) + '<span class="viz-badge">' + esc(label(entity.type)) + '</span><span class="text-small text-muted">' + entity.mentions.length + ' mentions · ' + entity.item_ids.length + ' facts</span></div><div class="text-small text-muted">' + esc(entity.aliases.join(' · ') || entity.label) + '</div></div>';
   const openEntity = (key) => {
     const entity = byEntity.get(key);
     if (!entity) return;
     els.dialogTitle.textContent = entity.label;
-    els.dialogMeta.textContent = label(entity.type) + ' · ' + entity.mentions.length + ' mentions · ' + entity.item_ids.length + ' linked facts';
-    els.dialogAliases.innerHTML = entity.aliases.map((alias) => '<span class="viz-badge">' + esc(alias) + '</span>').join('');
+    els.dialogMeta.textContent = label(entity.type) + ' · ' + entity.mentions.length + ' mentions · ' + entity.item_ids.length + ' linked facts' + (entity.origin === 'noun_ledger' ? ' · provisional (noun ledger)' : '');
+    els.dialogAliases.innerHTML = entity.aliases.map((alias) => '<span class="viz-badge">' + esc(alias) + '</span>').join('')
+      + (entity.roles ?? []).filter((role) => !entity.aliases.includes(role)).map((role) => '<span class="viz-badge">role: ' + esc(role) + '</span>').join('')
+      + (entity.owner_key && byEntity.has(entity.owner_key) ? '<span class="lfb-entity-line"><span class="lfb-label">owned by</span>' + entityButton(entity.owner_key, byEntity.get(entity.owner_key).label) + '</span>' : '');
     els.dialogMentions.innerHTML = entity.mentions.map((mention) => {
       const statements = mention.item_ids.map((id) => byItem.get(id)?.statement).filter(Boolean);
       return '<div class="lfb-mention"><div><span class="viz-badge">page ' + esc(mention.page) + '</span> <span class="viz-badge">offsets ' + esc(mention.start) + '–' + esc(mention.end) + '</span></div><div class="lfb-quote">' + esc(mention.quote) + '</div><div class="text-small text-muted">mention: ' + esc(mention.text) + (mention.confidence == null ? '' : ' · confidence ' + Number(mention.confidence).toFixed(3)) + '</div>' + (statements.length ? '<div>' + statements.map(esc).join('<br>') + '</div>' : '') + '</div>';
@@ -359,4 +370,27 @@ const fragment = `<!doctype html>
 
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 fs.writeFileSync(outputPath, fragment);
-console.log(JSON.stringify({ output: outputPath, items: items.length, entities: entities.length, bytes: Buffer.byteLength(fragment) }));
+if (v3) {
+  const reportPath = path.join(extractionDir, `${sourceId}.historical-v3.report.json`);
+  fs.writeFileSync(reportPath, `${JSON.stringify({
+    run_id: run.run_id,
+    source_id: run.source_id,
+    status: run.status,
+    pages: runPages,
+    item_count: (run.items ?? []).length,
+    supported_item_count: run.supported_item_count ?? 0,
+    entity_count: entities.length,
+    resolved_reference_count: (run.resolved_references ?? []).length,
+    deterministic_reference_count: (run.resolved_references ?? []).filter((row) => row.resolution_source === 'deterministic_subject_memory').length,
+    ambiguous_reference_count: ambiguousReferences.length,
+    adjudication_requests: run.adjudication_requests ?? [],
+    subject_memory_cold_start: run.subject_memory_cold_start ?? null,
+    budget: run.budget ?? null,
+    usage: run.usage ?? null,
+    average_cost_usd_per_page: run.average_cost_usd_per_page ?? null,
+    generated_at: new Date().toISOString(),
+  }, null, 2)}\n`);
+  console.log(JSON.stringify({ output: outputPath, report: reportPath, items: items.length, entities: entities.length, bytes: Buffer.byteLength(fragment) }));
+} else {
+  console.log(JSON.stringify({ output: outputPath, items: items.length, entities: entities.length, bytes: Buffer.byteLength(fragment) }));
+}
