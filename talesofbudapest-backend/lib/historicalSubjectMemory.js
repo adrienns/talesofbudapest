@@ -245,8 +245,13 @@ const processLedgerPhrase = ({ state, clause, phraseRow, overlapsExplicit, refer
     let result = resolveTyped(state, { expected, page: clause.page_ref });
     // "They" also covers plural things (the gravestones ... They come from...);
     // fall back to the thing focus when no group candidate exists.
-    if (result.status === 'unresolved' && expected === 'group' && phraseRow.number_hint !== 'singular') {
-      result = resolveTyped(state, { expected: 'thing', page: clause.page_ref });
+    // they/them/their are inherently plural regardless of the tagger's hint.
+    // When no clean group antecedent exists, plural things (the gravestones
+    // ... They come from ...) are the natural reading; keep the group
+    // ambiguity only if things do not resolve either.
+    if (result.status !== 'resolved' && expected === 'group') {
+      const thingResult = resolveTyped(state, { expected: 'thing', page: clause.page_ref });
+      if (thingResult.status === 'resolved') result = thingResult;
     }
     if (result.status === 'resolved') { pushReference(result.entity); touch(state, result.entity, null, clause); }
     else if (result.status === 'ambiguous') pushAmbiguity(result.candidates, expected);
@@ -320,7 +325,9 @@ export const resolveSubjectReferences = ({ state, clauses, mentionById, nounPhra
     } else {
       for (const expression of referenceExpressions(clause.text)) {
         const expected = expectedFor(expression.surface);
-        const antecedent = pickFocus(state, expected, roleFor(expression.surface));
+        let antecedent = pickFocus(state, expected, roleFor(expression.surface));
+        // Plural "they" naturally covers plural things when no group exists.
+        if (!antecedent?.last_mention_id && expected === 'group') antecedent = pickFocus(state, 'thing', null);
         if (!antecedent?.last_mention_id) continue;
         references.push({ clause_id: clause.clause_id, antecedent_mention_id: antecedent.last_mention_id, resolved_entity_id: antecedent.entity_id, surface: expression.surface, start_offset: clause.start_offset + expression.index, resolution_source: 'deterministic_subject_memory' });
       }
