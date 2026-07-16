@@ -91,7 +91,7 @@ const VERIFY_MAX_TOKENS = 240;
 const VERIFY_BATCH_SIZE = 8;
 const QUALITY_MAX_TOKENS = 2200;
 const MAX_QUALITY_CLAUSES = 12;
-const PRIMARY_CACHE_VERSION = V3 ? 'historical-stateful-v3.0' : 'historical-semi-open-v2.8';
+const PRIMARY_CACHE_VERSION = V3 ? 'historical-stateful-v3.1' : 'historical-semi-open-v2.8';
 // Page 75/97 dev runs hit the previous caps exactly and truncated mid-item,
 // which cascaded into audit mismatches and mass quality escalation. Measured
 // natural output on dense dev pages is ~70 completion tokens per clause for
@@ -125,7 +125,7 @@ const ITEM_EXAMPLES = `Valid examples (actual tab-separated rows):
 I\tE\t-\tdeath\tbirth_or_death\tcl_example1\tm_example1=person\t+A-\tR. Example died during the epidemic.
 I\tA\tC\tprivate_prayer_restriction\t-\tcl_example2\tm_example2=authority\tNR-\tPrivate prayer was not customary.
 Never print K, A, F, ITEM, field names, or a row for a clause with no item. Every item row starts with I.`;
-const WIRE_PAGE = `Input PAGE={"p":page_ref,"s":current_subjects,"b":{"prev":[boundary_text,mentions],"next":[boundary_text,mentions]},"c":[[clause_id,text,mentions,suggested_schemas]...]}; mentions=[[mention_id,text,type]...]. s is compact source-local subject memory: [entity_id,label,type,aliases,roles].`;
+const WIRE_PAGE = `Input PAGE={"p":page_ref,"s":current_subjects,"b":{"prev":[boundary_text,mentions],"next":[boundary_text,mentions]},"c":[[clause_id,text,mentions,suggested_schemas,resolutions]...]}; mentions=[[mention_id,text,type]...]. s is compact source-local subject memory: [entity_id,label,type,aliases,roles]. resolutions=[[surface,antecedent]...] are authoritative locally resolved references for that clause (e.g. ["He","R. Efraim"]).`;
 
 const PRIMARY_PROMPT = `Extract an exhaustive, source-grounded ledger from one historical-book page.
 
@@ -141,6 +141,7 @@ Rules:
 - suggested schemas are hints, never gates. Use canonical_type null and a precise new open_type when needed.
 - Boundary context resolves names and pronouns only. An item must be asserted by target clause_ids.
 - Current subject memory is authoritative context, not evidence. Treat aliases such as full name, first name, R. Name, and "the rabbi" as one entity only when s presents them together. Never invent a different subject.
+- When a fact spans adjacent clauses (name in one, predicate in the next), list every asserting clause id.
 - Every acting, speaking, believing, described, or referenced person/group/organization must be a participant. For he/she/they/his/her/their and lowercase page-start continuations, copy the antecedent mention_id from boundary or earlier clauses. Never leave a resolvable subject or attribution unlinked.
 - Emit one R row for every resolvable contextual reference, once per clause/reference. This clause-level map is mandatory even when several I rows share that clause.
 - R surface must be the exact contextual expression: He, She, They, His, Her, Their, This, That, the former, the latter, or CONTINUATION. Never write "clause" as the surface.
@@ -152,7 +153,7 @@ const AUDIT_PROMPT = `Independently extract every historical item from the suppl
 Output plain TSV only: I<TAB>clause_ids_comma<TAB>kind<TAB>atomic_statement_under_20_words
 kind is E for an event or A for an assertion. Example: I<TAB>c7<TAB>E<TAB>He returned to Prague.
 No JSON, markdown, header, field names, mention IDs, schemas, verdicts, or commentary.
-Input pages use {"p":page,"b":boundary_context,"c":[[clause_id,text]...]}.
+Input pages use {"p":page,"b":boundary_context,"c":[[clause_id,text,resolutions]...]}; resolutions=[[surface,antecedent]...] are authoritative locally resolved references for that clause.
 
 Rules:
 - Independently inspect every clause for events and assertions.
@@ -168,7 +169,7 @@ const VERIFY_PROMPT = `Verify compact candidate items against supplied exact cla
 Output exactly one TSV row per candidate and nothing else: item_id<TAB>judgment.
 Judgment is S supported, P partially supported, U unsupported, A ambiguous, or X contradicted.
 Example actual row: hi_example1\tS
-No header, field names, reasons, JSON, markdown, or commentary. Judge exact semantic support, participant roles, polarity, modality, attribution, and scope. No outside knowledge. Classify every candidate ID exactly once.`;
+No header, field names, reasons, JSON, markdown, or commentary. Judge semantic support, participant roles, polarity, modality, attribution, and scope. Clauses may carry resolutions [[surface,antecedent]...]: treat them as authoritative, so a candidate naming the antecedent where the clause shows only a pronoun is still supported. A statement logically equivalent to the clause content (paraphrase, double negation) is supported. No outside knowledge. Classify every candidate ID exactly once.`;
 
 const QUALITY_PROMPT = `Adjudicate difficult historical extraction candidates using only supplied clauses and boundary context.
 
@@ -181,6 +182,8 @@ Rules:
 - Return one verdict per candidate. If a candidate is materially wrong, reject it and optionally add a corrected item.
 - Search supplied risky clauses for omissions too. I lines contain only new or corrected grounded items.
 - Resolve cross-page pronouns only from boundary context. The target clause must still assert the item.
+- Clause resolutions [[surface,antecedent]...] are authoritative: a candidate naming the antecedent where the clause shows a pronoun is supported.
+- A statement logically equivalent to the clause content is supported: paraphrase, double negation, or a fact asserted jointly by directly adjacent supplied clauses.
 - A candidate with he/she/they/his/her/their or a lowercase page-start continuation is not supported when its antecedent participant is missing. Reject it and emit a corrected I row with the boundary/earlier mention_id.
 - Preserve open types, negation, attribution, uncertainty, plans, and disputed beliefs.
 - clause_ids and mention_ids must be copied exactly. No outside knowledge. No rewritten evidence.
@@ -301,6 +304,7 @@ const wireClause = (clause, wireIds) => [
   clause.text,
   (clause.mentions ?? []).map((mention) => [wireIds.mention(mention.mention_id), mention.text, mention.type]),
   clause.suggested_schemas.slice(0, 3),
+  (clause.resolutions ?? []).map((row) => [row.surface, row.label]),
 ];
 
 const wireBoundary = (payload, wireIds) => ({
@@ -324,7 +328,7 @@ const wirePage = (payload, wireIds) => ({
 const wireAuditPage = (payload, wireIds) => ({
   p: payload.page_ref,
   b: wireBoundary(payload, wireIds),
-  c: payload.clauses.map((clause) => [wireIds.clause(clause.clause_id), clause.text]),
+  c: payload.clauses.map((clause) => [wireIds.clause(clause.clause_id), clause.text, (clause.resolutions ?? []).map((row) => [row.surface, row.label])]),
 });
 
 const modalityCode = { asserted: 'A', reported: 'R', believed: 'B', planned: 'P', hypothetical: 'H', uncertain: 'U' };
@@ -679,7 +683,12 @@ const main = async () => {
     for (const batch of batchesOf(items, VERIFY_BATCH_SIZE)) {
       const itemAliases = new Map(batch.map((item, index) => [`v${index.toString(36)}`, item.item_id]));
       const evidenceClauseIds = new Set(batch.flatMap((item) => item.clause_ids));
-      const verificationClauses = availableClauses.filter((clause) => evidenceClauseIds.has(clause.clause_id));
+      // Include directly adjacent clauses so split facts (name in one clause,
+      // predicate in the next) are judged with their context.
+      const orderedAvailable = [...availableClauses].sort((a, b) => a.page_ref - b.page_ref || a.start_offset - b.start_offset);
+      const verificationClauses = orderedAvailable.filter((clause, index) => evidenceClauseIds.has(clause.clause_id)
+        || (orderedAvailable[index - 1] && evidenceClauseIds.has(orderedAvailable[index - 1].clause_id))
+        || (orderedAvailable[index + 1] && evidenceClauseIds.has(orderedAvailable[index + 1].clause_id)));
       const response = await callProtocol({
         operation, model: AUDIT_MODEL, system: VERIFY_PROMPT,
         payload: {
@@ -729,6 +738,18 @@ const main = async () => {
         if (!mentionById.has(ledgerMention.mention_id)) {
           mentionById.set(ledgerMention.mention_id, ledgerMention);
           mentions.push(ledgerMention);
+        }
+      }
+      // Make deterministic resolutions visible to every model: the verifier
+      // must see "he = R. Efraim" or it rejects cross-clause subjects.
+      for (const reference of deterministicSubjects.references) {
+        const clause = clauseById.get(reference.clause_id);
+        const entity = subjectState.entities.get(reference.resolved_entity_id);
+        if (clause && entity?.label) {
+          clause.resolutions = clause.resolutions ?? [];
+          if (!clause.resolutions.some((row) => row.surface === reference.surface)) {
+            clause.resolutions.push({ surface: reference.surface, label: entity.label });
+          }
         }
       }
       const deterministicReferenceKeys = new Set(deterministicSubjects.references.map((reference) => `${reference.clause_id}\u001f${String(reference.surface).toLowerCase()}`));
@@ -790,7 +811,9 @@ const main = async () => {
       const itemAliases = new Map(batch.map((item, index) => [`q${index.toString(36)}`, item.item_id]));
       batch.flatMap((item) => item.evidence.map((evidence) => evidence.page_ref)).forEach((page) => qualityPages.add(page));
       const ids = new Set(batch.flatMap((item) => item.clause_ids));
-      const riskClauses = clauses.filter((clause) => ids.has(clause.clause_id));
+      const riskClauses = clauses.filter((clause, index) => ids.has(clause.clause_id)
+        || (clauses[index - 1] && ids.has(clauses[index - 1].clause_id) && clauses[index - 1].page_ref === clause.page_ref)
+        || (clauses[index + 1] && ids.has(clauses[index + 1].clause_id) && clauses[index + 1].page_ref === clause.page_ref));
       const response = await callProtocol({
         operation: 'historical.v2.quality', model: QUALITY_MODEL, system: QUALITY_PROMPT,
         payload: {
@@ -844,7 +867,7 @@ const main = async () => {
     else if (primaryIds.has(item.item_id)) judgment = auditVerdicts.get(item.item_id);
     else if (auditMissingIds.has(item.item_id)) judgment = qualityVerdicts.get(item.item_id) ?? auditVerdicts.get(item.item_id);
     else judgment = qualityVerdicts.get(item.item_id);
-    const referencesResolved = itemHasResolvedReferences(item, clauseById, mentionById);
+    const referencesResolved = itemHasResolvedReferences(item, clauseById, mentionById, referenceRows);
     const verdict = judgment?.verdict === 'supported' && referencesResolved ? 'supported' : judgment?.verdict === 'supported' ? 'ambiguous' : judgment?.verdict ?? 'ambiguous';
     const reason = referencesResolved ? judgment?.reason ?? 'Independent agreement not completed.' : 'Pronoun or page-boundary antecedent was not linked to an entity mention.';
     // The earliest reference in the first evidence clause approximates the

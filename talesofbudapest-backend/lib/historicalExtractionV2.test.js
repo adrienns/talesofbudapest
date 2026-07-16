@@ -171,3 +171,20 @@ test('near duplicate items on adjacent evidence merge without merging separate f
   const distinct = dedupeHistoricalItems([base('a', 'Efraim died in Buda during an epidemic.', 10), base('c', 'Efraim died in Prague during a fire.', 90)]);
   assert.equal(distinct.length, 2);
 });
+
+test('single-capital initials do not split sentences', () => {
+  const text = 'His son, R. Judah, survived the siege of Buda. He settled in the land of Zion.';
+  const clauses = buildClauseLedger({ sourceId: 'book', targetPages: [{ page: 1, text }], readingPages: [readingPage(1, text)], mentions: [] });
+  assert.equal(clauses.length, 2);
+  assert.match(clauses[0].text, /R\. Judah, survived/u);
+});
+
+test('resolver-linked antecedent satisfies the reference gate without a local participant', () => {
+  const text = 'He maintained that a curse cannot be imposed on scholars.';
+  const clauses = buildClauseLedger({ sourceId: 'book', targetPages: [{ page: 1, text }], readingPages: [readingPage(1, text)], mentions: [] });
+  const clauseById = new Map(clauses.map((clause) => [clause.clause_id, clause]));
+  const item = { clause_ids: [clauses[0].clause_id], participants: [] };
+  assert.equal(itemHasResolvedReferences(item, clauseById, new Map()), false);
+  const references = [{ clause_id: clauses[0].clause_id, surface: 'He', resolved_entity_id: 'se_x', antecedent_mention_id: 'm_x' }];
+  assert.equal(itemHasResolvedReferences(item, clauseById, new Map(), references), true);
+});

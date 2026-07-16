@@ -58,7 +58,15 @@ export const realignModelItemsToClauses = ({ items, availableClauses, allClauses
     const originalScore = Math.max(0, ...(item.clause_ids ?? []).map((id) => semanticTokenOverlap(item.statement_en, clauseById.get(id)?.text ?? '')));
     const best = ranked[0];
     if (!best || best.score < 0.45 || best.score < originalScore + 0.15) return item;
-    return { ...item, clause_ids: [best.clause.clause_id] };
+    // A fact often straddles two adjacent clauses (name in one, predicate in
+    // the next); keep the neighbor when it also carries real overlap.
+    const ordered = candidates.slice().sort((left, right) => left.start_offset - right.start_offset);
+    const bestIndex = ordered.findIndex((clause) => clause.clause_id === best.clause.clause_id);
+    const neighbor = [ordered[bestIndex - 1], ordered[bestIndex + 1]].filter(Boolean)
+      .map((clause) => ({ clause, score: semanticTokenOverlap(item.statement_en, clause.text) }))
+      .filter((entry) => entry.score >= 0.3)
+      .sort((left, right) => right.score - left.score)[0];
+    return { ...item, clause_ids: neighbor ? [best.clause.clause_id, neighbor.clause.clause_id] : [best.clause.clause_id] };
   });
 };
 
@@ -74,9 +82,22 @@ const trimMappedSpan = (readingText, start, end) => {
   return [left, right];
 };
 
-const sentenceSpans = (readingText) => Array.from(new Intl.Segmenter('en', { granularity: 'sentence' }).segment(readingText))
-  .map((segment) => trimMappedSpan(readingText, segment.index, segment.index + segment.segment.length))
-  .filter(([start, end]) => end - start >= 2);
+// Single-capital initials ("R." before almost every rabbi name in this
+// corpus) and common abbreviations are not sentence ends; splitting there
+// fragmented names mid-clause ("His son, R." | "Judah...").
+const ABBREVIATION_END = /(?:\b[A-Z]|\b(?:Dr|Mr|Mrs|Ms|St|Prof|ca|cf|vs|Jr|Sr))\.$/u;
+const sentenceSpans = (readingText) => {
+  const raw = Array.from(new Intl.Segmenter('en', { granularity: 'sentence' }).segment(readingText))
+    .map((segment) => trimMappedSpan(readingText, segment.index, segment.index + segment.segment.length))
+    .filter(([start, end]) => end - start >= 2);
+  const merged = [];
+  for (const span of raw) {
+    const previous = merged.at(-1);
+    if (previous && ABBREVIATION_END.test(readingText.slice(previous[0], previous[1]))) previous[1] = span[1];
+    else merged.push([...span]);
+  }
+  return merged;
+};
 
 const clauseBoundaries = (sentenceText) => {
   const cuts = [0];
@@ -303,15 +324,26 @@ export const needsQualityEscalation = (item, auditorVerdict, clauseById) => {
   return ['unresolved_reference', 'contextual_reference', 'cross_page_continuation', 'ocr_noise'].some((flag) => flags.has(flag));
 };
 
-export const itemHasResolvedReferences = (item, clauseById, mentionById) => {
+export const itemHasResolvedReferences = (item, clauseById, mentionById, resolvedReferences = []) => {
   const riskyClauses = item.clause_ids.map((id) => clauseById.get(id)).filter((clause) => clause?.risk_flags?.some((flag) => flag === 'unresolved_reference' || flag === 'contextual_reference' || flag === 'cross_page_continuation'));
   if (!riskyClauses.length) return true;
   const participantTypes = new Set(item.participants.map((participant) => mentionById.get(participant.mention_id)?.type).filter(Boolean));
+  const resolvedByClause = new Map();
+  for (const reference of resolvedReferences) {
+    if (!reference.resolved_entity_id && !reference.antecedent_mention_id) continue;
+    const list = resolvedByClause.get(reference.clause_id) ?? [];
+    list.push(reference);
+    resolvedByClause.set(reference.clause_id, list);
+  }
+  const resolverCovered = (clause, expectedPattern) => (resolvedByClause.get(clause.clause_id) ?? [])
+    .some((reference) => !expectedPattern || expectedPattern.test(String(reference.surface ?? '')));
   return riskyClauses.every((clause) => {
     const text = clause.text.trim();
-    if (/^(?:he|she|his|her)\b/iu.test(text)) return participantTypes.has('person');
-    if (/^(?:they|their)\b/iu.test(text)) return ['person', 'family', 'group', 'organisation'].some((type) => participantTypes.has(type));
-    return participantTypes.size > 0;
+    // A deterministic subject-memory resolution for this clause counts: the
+    // antecedent lives in an earlier clause by design, not by omission.
+    if (/^(?:he|she|his|her)\b/iu.test(text)) return participantTypes.has('person') || resolverCovered(clause, /^(?:he|she|his|her)\b/iu);
+    if (/^(?:they|their)\b/iu.test(text)) return ['person', 'family', 'group', 'organisation'].some((type) => participantTypes.has(type)) || resolverCovered(clause, /^(?:they|their)\b/iu);
+    return participantTypes.size > 0 || resolverCovered(clause, null);
   });
 };
 
