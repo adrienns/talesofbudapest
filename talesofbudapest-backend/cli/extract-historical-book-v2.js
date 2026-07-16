@@ -75,8 +75,12 @@ const VERIFY_BATCH_SIZE = 8;
 const QUALITY_MAX_TOKENS = 2200;
 const MAX_QUALITY_CLAUSES = 12;
 const PRIMARY_CACHE_VERSION = V3 ? 'historical-stateful-v3.0' : 'historical-semi-open-v2.8';
-const primaryTokenLimit = (clauseCount) => V3 ? Math.min(1300, Math.max(520, 140 + clauseCount * 16)) : PRIMARY_MAX_TOKENS;
-const auditTokenLimit = (clauseCount) => V3 ? Math.min(900, Math.max(420, 120 + clauseCount * 11)) : AUDIT_MAX_TOKENS;
+// Page 75/97 dev runs hit the previous caps exactly and truncated mid-item,
+// which cascaded into audit mismatches and mass quality escalation. Measured
+// natural output on dense dev pages is ~70 completion tokens per clause for
+// the primary (I+R rows) and ~20 for the audit.
+const primaryTokenLimit = (clauseCount) => V3 ? Number(process.env.KG_V3_PRIMARY_TOKENS ?? Math.min(3000, Math.max(800, 300 + clauseCount * 65))) : PRIMARY_MAX_TOKENS;
+const auditTokenLimit = (clauseCount) => V3 ? Math.min(1500, Math.max(560, 200 + clauseCount * 20)) : AUDIT_MAX_TOKENS;
 const qualityTokenLimit = () => V3 ? 700 : QUALITY_MAX_TOKENS;
 // Compact TSV is mostly ASCII English. Two bytes/token remains deliberately
 // pessimistic while avoiding V2's invalid one-byte-per-token reservation.
@@ -96,7 +100,7 @@ Example: for c9="He died in Buda", c9 mentions m5=Buda/place, and boundary has m
 J: S supported, P partial, U unsupported, A ambiguous, X contradicted.`;
 const REVIEW_LINE_PROTOCOL = `Output plain TSV lines, no JSON, markdown, header, tabs inside text, or commentary.
 I<TAB>K<TAB>A<TAB>open_type<TAB>canonical_type_or_-<TAB>clause_ids_comma<TAB>participants_or_-<TAB>F<TAB>statement
-V<TAB>J<TAB>item_ids_comma
+V<TAB>item_id<TAB>J<TAB>short_reason
 K: E event, A assertion. A: - event, S state, C rule/custom, R relationship, B belief/report, D description.
 participants: mention_id=role comma-separated. F: three chars; polarity +|N, modality A|R|B|P|H|U, attribution -|T.
 J: S supported, P partial, U unsupported, A ambiguous, X contradicted.`;
@@ -153,8 +157,8 @@ const QUALITY_PROMPT = `Adjudicate difficult historical extraction candidates us
 
 ${REVIEW_LINE_PROTOCOL}
 ${ITEM_EXAMPLES}
-Input CANDIDATE rows are compact arrays. Emit grouped V rows for candidates, then I only for new/corrected items.
-Valid verdict example: V\tS\thi_example1,hi_example2
+Input CANDIDATE rows are compact arrays. Emit one V row per candidate, then I only for new/corrected items.
+Valid verdict example: V\thi_example1\tS\tclause asserts the death directly
 
 Rules:
 - Return one verdict per candidate. If a candidate is materially wrong, reject it and optionally add a corrected item.
@@ -163,7 +167,7 @@ Rules:
 - A candidate with he/she/they/his/her/their or a lowercase page-start continuation is not supported when its antecedent participant is missing. Reject it and emit a corrected I row with the boundary/earlier mention_id.
 - Preserve open types, negation, attribution, uncertainty, plans, and disputed beliefs.
 - clause_ids and mention_ids must be copied exactly. No outside knowledge. No rewritten evidence.
-- FIRST classify every candidate using at most five grouped V rows. No reasons. Then optional I lines.`;
+- FIRST judge every candidate individually: one V row per candidate with its own item_id, judgment, and a short evidence-based reason. Blanket identical judgments without inspection are protocol violations. Then optional I lines.`;
 
 class BudgetExceeded extends Error {
   constructor(message) {
@@ -360,6 +364,13 @@ const parseProtocol = (completion, wireIds) => {
         ? normalizedLine.replace(/^\||\|$/g, '').split('|').map((value) => value.trim())
         : normalizedLine.split(/\s{2,}/u).map((value) => value.trim());
     if (columns[0] === 'I' && columns.length === 8 && /^c[0-9a-z]+$/u.test(columns[4] ?? '')) columns.splice(4, 0, '-');
+    // Audit models sometimes fuse clause ids and kind with a comma
+    // ("I<TAB>c0,E<TAB>statement"); repair deterministically.
+    if (columns[0] === 'I' && /^c[0-9a-z]+(?:,c[0-9a-z]+)*,[EA]$/u.test(columns[1] ?? '')) {
+      const parts = columns[1].split(',');
+      const fusedKind = parts.pop();
+      columns.splice(1, 1, parts.join(','), fusedKind);
+    }
     if (columns[0] === 'R' && columns.length >= 4) {
       response.references.push({
         clause_id: wireIds.clauseFromWire.get(columns[1]) ?? columns[1],
@@ -585,11 +596,13 @@ const main = async () => {
     let parsed;
     const attemptCalls = [];
     for (let attempt = 0; attempt < 2; attempt += 1) {
+      // A truncated first attempt retries once with 50% more output room.
+      const attemptTokens = attempt ? Math.ceil(maxTokens * 1.5) : maxTokens;
       completion = await createChatCompletion({
         operation: `${operation}${attempt ? '.protocol_retry' : ''}`,
         model,
         messages: [{ role: 'system', content: attempt ? `${system}\nRETRY: obey TSV exactly; classify every candidate in grouped V rows first.` : system }, { role: 'user', content: JSON.stringify(payload) }],
-        max_tokens: maxTokens,
+        max_tokens: attemptTokens,
         temperature: 0,
       });
       const charged = Number(completion.usage?.cost ?? ceiling);
@@ -598,13 +611,18 @@ const main = async () => {
       calls.push(attemptCall);
       attemptCalls.push(attemptCall);
       try {
+        if (completion.choices?.[0]?.finish_reason === 'length') {
+          if (process.env.KG_DEBUG) console.error(`[truncated ${operation} @${attemptTokens}] tail: ${String(completion.choices?.[0]?.message?.content ?? '').slice(-400)}`);
+          throw new Error('output truncated at token limit');
+        }
         parsed = parseProtocol(completion, wireIds);
         validateProtocol({ response: parsed, expectedClauseIds, expectedVerdictIds });
         break;
       }
       catch (error) {
         if (attempt === 1) throw new Error(`${operation} returned incomplete line protocol twice: ${error.message}`);
-        if (spent + ceiling > budgetCap) throw new BudgetExceeded(`${operation} protocol retry exceeds remaining budget`);
+        const retryCeiling = estimatedCeiling({ requests: [requestText], modelPricing: pricing.get(model), maxOutputTokens: Math.ceil(maxTokens * 1.5) }).usd;
+        if (spent + retryCeiling > budgetCap) throw new BudgetExceeded(`${operation} protocol retry exceeds remaining budget`);
       }
     }
     const row = { cache_key: cacheKey, operation, model, prompt_version: promptVersion, payload: parsed, usage: aggregateUsage(attemptCalls), created_at: new Date().toISOString() };
@@ -656,8 +674,11 @@ const main = async () => {
       // changed prior-page subject state invalidates this page's cache entry.
       const incomingStateHash = V3 ? sha256(JSON.stringify(serializeSubjectState(subjectState, payload.page_ref - 1))) : null;
       const currentSubjectContext = V3 ? subjectContext(subjectState) : [];
+      // Resolution needs the local ledger clauses (page_ref, offsets,
+      // mention_ids), not the compact wire-shaped payload clauses.
+      const pageClauses = clauses.filter((clause) => clause.page_ref === payload.page_ref);
       const deterministicSubjects = V3
-        ? resolveSubjectReferences({ state: subjectState, clauses: payload.clauses, mentionById, nounPhrases })
+        ? resolveSubjectReferences({ state: subjectState, clauses: pageClauses, mentionById, nounPhrases })
         : { references: [], transitions: [], ambiguities: [], ledgerMentions: [] };
       subjectTransitions.push(...deterministicSubjects.transitions);
       ambiguousReferences.push(...(deterministicSubjects.ambiguities ?? []));
@@ -766,6 +787,7 @@ const main = async () => {
     status = error instanceof BudgetExceeded ? 'incomplete_budget' : 'incomplete_api';
     failureReason = error instanceof Error ? error.message : String(error);
     console.error(`${status}: ${failureReason}`);
+    if (process.env.KG_DEBUG && error instanceof Error) console.error(error.stack);
   }
 
   const primaryIds = new Set(primaryItems.map((item) => item.item_id));
@@ -782,7 +804,12 @@ const main = async () => {
     const referencesResolved = itemHasResolvedReferences(item, clauseById, mentionById);
     const verdict = judgment?.verdict === 'supported' && referencesResolved ? 'supported' : judgment?.verdict === 'supported' ? 'ambiguous' : judgment?.verdict ?? 'ambiguous';
     const reason = referencesResolved ? judgment?.reason ?? 'Independent agreement not completed.' : 'Pronoun or page-boundary antecedent was not linked to an entity mention.';
-    const reference = item.clause_ids.flatMap((id) => referenceRows.filter((row) => row.clause_id === id)).find((row) => row.resolved_entity_id);
+    // The earliest reference in the first evidence clause approximates the
+    // grammatical subject far better than arbitrary row order.
+    const reference = item.clause_ids
+      .flatMap((id) => referenceRows.filter((row) => row.clause_id === id && row.resolved_entity_id)
+        .sort((a, b) => (a.start_offset ?? Infinity) - (b.start_offset ?? Infinity)))
+      .find(Boolean);
     const transition = item.clause_ids.map((id) => subjectTransitions.find((row) => row.clause_id === id)).find(Boolean);
     let v3Fields = {};
     if (V3) {
