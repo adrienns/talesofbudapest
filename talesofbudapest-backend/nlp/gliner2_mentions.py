@@ -330,12 +330,66 @@ def detect_page(
     return sorted(pruned, key=lambda item: (item["start_offset"], item["end_offset"], item["type"]))
 
 
+def load_noun_phrase_parser() -> Any:
+    """Load the spaCy pipeline for the local noun-phrase ledger.
+
+    V3 subject memory needs ordinary noun heads (tomb, school, building) that
+    GLiNER labels miss. Failing loudly here keeps V3 from silently degrading.
+    """
+    try:
+        import spacy
+    except ImportError as error:
+        raise SystemExit(
+            "spaCy is required for --noun-ledger. Run `npm run setup:historical:nlp`."
+        ) from error
+    try:
+        return spacy.load("en_core_web_sm")
+    except OSError as error:
+        raise SystemExit(
+            "spaCy model en_core_web_sm is missing. Install it inside "
+            ".venv-historical-nlp with `python -m spacy download en_core_web_sm`."
+        ) from error
+
+
+def noun_ledger_for_page(
+    parser: Any,
+    page: int,
+    source_text: str,
+    reading_text: str,
+    raw_starts: list[int],
+    raw_ends: list[int],
+) -> list[dict[str, Any]]:
+    from noun_phrases import noun_phrase_rows
+
+    ledger: list[dict[str, Any]] = []
+    for row in noun_phrase_rows(parser(reading_text)):
+        reading_start = row["reading_start"]
+        reading_end = row["reading_end"]
+        if reading_end <= reading_start or reading_end > len(raw_ends):
+            continue
+        start = raw_starts[reading_start]
+        end = raw_ends[reading_end - 1]
+        if not 0 <= start < end <= len(source_text):
+            continue
+        ledger.append({
+            **row,
+            "page": page,
+            "start_offset": start,
+            "end_offset": end,
+            "reading_start_offset": reading_start,
+            "reading_end_offset": reading_end,
+            "source_text": source_text[start:end],
+        })
+    return ledger
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default="fastino/gliner2-multi-v1")
     parser.add_argument("--threshold", type=float, default=0.50)
     parser.add_argument("--max-chars", type=int, default=1800)
     parser.add_argument("--device", default="cpu")
+    parser.add_argument("--noun-ledger", action="store_true")
     args = parser.parse_args()
     if not 0 < args.threshold <= 1 or args.max_chars < 500:
         raise SystemExit("--threshold must be in (0,1] and --max-chars must be >= 500")
@@ -347,8 +401,10 @@ def main() -> None:
 
     print(f"Loading local GLiNER2 model {args.model} on {args.device}...", file=sys.stderr)
     model = GLiNER2.from_pretrained(args.model, map_location=args.device)
+    noun_parser = load_noun_phrase_parser() if args.noun_ledger else None
     mentions: list[dict[str, Any]] = []
     reading_pages: list[dict[str, Any]] = []
+    noun_phrases: list[dict[str, Any]] = []
     for source_page in pages:
         page = source_page.get("page")
         text = source_page.get("text")
@@ -364,6 +420,8 @@ def main() -> None:
         mentions.extend(detect_page(
             model, page, text, reading_text, raw_starts, raw_ends, args.threshold, args.max_chars
         ))
+        if noun_parser is not None:
+            noun_phrases.extend(noun_ledger_for_page(noun_parser, page, text, reading_text, raw_starts, raw_ends))
     json.dump(
         {
             "engine": "gliner2",
@@ -372,6 +430,7 @@ def main() -> None:
             "labels": ENTITY_LABELS,
             "mentions": mentions,
             "reading_pages": reading_pages,
+            "noun_phrases": noun_phrases if noun_parser is not None else None,
         },
         sys.stdout,
         ensure_ascii=False,
