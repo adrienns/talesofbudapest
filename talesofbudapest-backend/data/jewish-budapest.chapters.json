@@ -1,0 +1,23 @@
+{
+  "source_id": "jewish-budapest",
+  "note": "Derived from roman-numeral headings in the OCR text (see chapters.candidates.json). Boundaries are PDF page numbers. Human verification of exact boundaries welcome; chapter XI heading was OCR-lost and is folded into X. skip:true chapters are not event material.",
+  "chapters": [
+    { "title": "A Hakdome (front matter)", "from_page": 15, "to_page": 22 },
+    { "title": "I. Castle Hill", "from_page": 23, "to_page": 54 },
+    { "title": "II. Obuda", "from_page": 55, "to_page": 80 },
+    { "title": "III. Kiraly utca: The Old-Old Jewish Quarter of Pest", "from_page": 81, "to_page": 118 },
+    { "title": "IV. The Jewish Triangle in Pest", "from_page": 119, "to_page": 170 },
+    { "title": "V. Erzsebetvaros", "from_page": 171, "to_page": 214 },
+    { "title": "VI. Jozsefvaros", "from_page": 215, "to_page": 257 },
+    { "title": "VII. Lantern in the ...", "from_page": 258, "to_page": 266 },
+    { "title": "VIII. The Pest Jewish Community", "from_page": 267, "to_page": 332 },
+    { "title": "IX. Lipotvaros, Uj-Lipotvaros", "from_page": 333, "to_page": 354 },
+    { "title": "X-XI. Jozsefvaros beyond the Boulevard", "from_page": 355, "to_page": 372 },
+    { "title": "XII. Pest, 1944 Ghetto", "from_page": 373, "to_page": 439 },
+    { "title": "XIII. Jewish Cemeteries", "from_page": 440, "to_page": 459 },
+    { "title": "XIV. Jewish Life in Budapest Today", "from_page": 460, "to_page": 481 },
+    { "title": "XV. The Invisible Jewish Budapest", "from_page": 482, "to_page": 511 },
+    { "title": "XVI. Comments on the Illustrations", "from_page": 512, "to_page": 559, "skip": true },
+    { "title": "XVII. Bibliography", "from_page": 560, "to_page": 616, "skip": true }
+  ]
+}

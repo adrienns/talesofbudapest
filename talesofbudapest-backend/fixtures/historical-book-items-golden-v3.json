@@ -65,9 +65,676 @@
     "development_pages": 32,
     "heldout_pages": 16
   },
-  "items": [],
+  "items": [
+    {
+      "id": "g75_01",
+      "page": 75,
+      "kind": "event",
+      "assertion_kind": null,
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_2f810147050bb205560e"
+      ],
+      "required_terms": [
+        [
+          "1888"
+        ],
+        [
+          "second"
+        ]
+      ],
+      "tags": [],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_02",
+      "page": 75,
+      "kind": "event",
+      "assertion_kind": null,
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_2f810147050bb205560e"
+      ],
+      "required_terms": [
+        [
+          "1922"
+        ],
+        [
+          "third"
+        ]
+      ],
+      "tags": [],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_03",
+      "page": 75,
+      "kind": "event",
+      "assertion_kind": null,
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_2be47968ef8ba88b34cb"
+      ],
+      "required_terms": [
+        [
+          "laborc"
+        ],
+        [
+          "demolish"
+        ]
+      ],
+      "tags": [],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_04",
+      "page": 75,
+      "kind": "assertion",
+      "assertion_kind": "state",
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_e5fd227184fafed04ce7"
+      ],
+      "required_terms": [
+        [
+          "ruins"
+        ],
+        [
+          "mortu"
+        ]
+      ],
+      "tags": [],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_05",
+      "page": 75,
+      "kind": "assertion",
+      "assertion_kind": "description",
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_954166a7aa29f23e1515"
+      ],
+      "required_terms": [
+        [
+          "star"
+        ],
+        [
+          "tablets"
+        ]
+      ],
+      "tags": [],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_06",
+      "page": 75,
+      "kind": "assertion",
+      "assertion_kind": "description",
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_e8197f140cb2b883dad1"
+      ],
+      "required_terms": [
+        [
+          "orthodox"
+        ]
+      ],
+      "tags": [],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_07",
+      "page": 75,
+      "kind": "assertion",
+      "assertion_kind": "description",
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_77372d5b0301ea3366ff"
+      ],
+      "required_terms": [
+        [
+          "cleansing",
+          "taharah",
+          "mortu"
+        ]
+      ],
+      "tags": [],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_08",
+      "page": 75,
+      "kind": "event",
+      "assertion_kind": null,
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_e75583aa7fb49ca62040"
+      ],
+      "required_terms": [
+        [
+          "fourth",
+          "palv"
+        ]
+      ],
+      "tags": [],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_09",
+      "page": 75,
+      "kind": "assertion",
+      "assertion_kind": "belief_report",
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_abeda834c6615f3a92c6"
+      ],
+      "required_terms": [
+        [
+          "szerb"
+        ]
+      ],
+      "tags": [
+        "attribution"
+      ],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_10",
+      "page": 75,
+      "kind": "assertion",
+      "assertion_kind": "state",
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_ad6715f3f5442cc9ba84"
+      ],
+      "required_terms": [
+        [
+          "1909"
+        ],
+        [
+          "map"
+        ]
+      ],
+      "tags": [],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_11",
+      "page": 75,
+      "kind": "assertion",
+      "assertion_kind": "state",
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_e3641beaab8412a469de"
+      ],
+      "required_terms": [
+        [
+          "plateau",
+          "crevice"
+        ]
+      ],
+      "tags": [],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_12",
+      "page": 75,
+      "kind": "event",
+      "assertion_kind": null,
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_107954ed530d1243f8b9"
+      ],
+      "required_terms": [
+        [
+          "1936",
+          "photograph"
+        ]
+      ],
+      "tags": [],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_13",
+      "page": 75,
+      "kind": "event",
+      "assertion_kind": null,
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_28226f48bec91aeafb4a"
+      ],
+      "required_terms": [
+        [
+          "1820"
+        ]
+      ],
+      "tags": [
+        "ocr"
+      ],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_14",
+      "page": 75,
+      "kind": "assertion",
+      "assertion_kind": "description",
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_2ec34bc05e29b2b112e3"
+      ],
+      "required_terms": [
+        [
+          "official",
+          "temet"
+        ]
+      ],
+      "tags": [
+        "ocr"
+      ],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_15",
+      "page": 75,
+      "kind": "assertion",
+      "assertion_kind": "state",
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_7749939e8affabdb7071",
+        "cl_19d832ea5e3fc0a0da98"
+      ],
+      "required_terms": [
+        [
+          "stones"
+        ],
+        [
+          "tombstone"
+        ]
+      ],
+      "tags": [],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_16",
+      "page": 75,
+      "kind": "assertion",
+      "assertion_kind": "belief_report",
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_4472756655ecbef68143"
+      ],
+      "required_terms": [
+        [
+          "possible",
+          "before"
+        ]
+      ],
+      "tags": [
+        "modality"
+      ],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_17",
+      "page": 75,
+      "kind": "event",
+      "assertion_kind": null,
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_1ee99cf4b8f2ac9ceb27"
+      ],
+      "required_terms": [
+        [
+          "zichy"
+        ],
+        [
+          "1732"
+        ]
+      ],
+      "tags": [],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_18",
+      "page": 75,
+      "kind": "assertion",
+      "assertion_kind": "state",
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_fea526cf6047188c54b9"
+      ],
+      "required_terms": [
+        [
+          "no trace",
+          "trace"
+        ]
+      ],
+      "tags": [
+        "negation"
+      ],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_19",
+      "page": 75,
+      "kind": "assertion",
+      "assertion_kind": "rule_custom",
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_05864c010d60fe539d2e"
+      ],
+      "required_terms": [
+        [
+          "prohibit",
+          "tradition"
+        ]
+      ],
+      "tags": [],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_20",
+      "page": 75,
+      "kind": "assertion",
+      "assertion_kind": "rule_custom",
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_be7e934c82c5522ed7ff"
+      ],
+      "required_terms": [
+        [
+          "jerusalem"
+        ]
+      ],
+      "tags": [],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_21",
+      "page": 75,
+      "kind": "assertion",
+      "assertion_kind": "rule_custom",
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_1558ebf46dbbdcd1af38"
+      ],
+      "required_terms": [
+        [
+          "relocat"
+        ]
+      ],
+      "tags": [],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_22",
+      "page": 75,
+      "kind": "assertion",
+      "assertion_kind": "description",
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_5c3493c3f5f9fec532fb"
+      ],
+      "required_terms": [
+        [
+          "fathers"
+        ]
+      ],
+      "tags": [],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_23",
+      "page": 75,
+      "kind": "event",
+      "assertion_kind": null,
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_ab20725d03cd12f9f4f4"
+      ],
+      "required_terms": [
+        [
+          "1950"
+        ]
+      ],
+      "tags": [],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_24",
+      "page": 75,
+      "kind": "event",
+      "assertion_kind": null,
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_72efde126c341a0a5acc"
+      ],
+      "required_terms": [
+        [
+          "munz",
+          "miinz"
+        ]
+      ],
+      "tags": [
+        "ocr"
+      ],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_25",
+      "page": 75,
+      "kind": "assertion",
+      "assertion_kind": "state",
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_c10973bd04cbe99d0ab0"
+      ],
+      "required_terms": [
+        [
+          "refurbish",
+          "inscription"
+        ]
+      ],
+      "tags": [],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_26",
+      "page": 75,
+      "kind": "assertion",
+      "assertion_kind": "state",
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_93f2a52bf6cda8aab7f1"
+      ],
+      "required_terms": [
+        [
+          "marker"
+        ]
+      ],
+      "tags": [],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_27",
+      "page": 75,
+      "kind": "assertion",
+      "assertion_kind": "belief_report",
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_77767d54b9c18ad7dfb4"
+      ],
+      "required_terms": [
+        [
+          "buried"
+        ]
+      ],
+      "tags": [
+        "attribution"
+      ],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_28",
+      "page": 75,
+      "kind": "assertion",
+      "assertion_kind": "belief_report",
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_81f173deea89175bdf2e"
+      ],
+      "required_terms": [
+        [
+          "official order",
+          "reburied"
+        ]
+      ],
+      "tags": [
+        "attribution"
+      ],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_29",
+      "page": 75,
+      "kind": "assertion",
+      "assertion_kind": "state",
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_270c7389dac75362b62b"
+      ],
+      "required_terms": [
+        [
+          "first cemetery"
+        ]
+      ],
+      "tags": [],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    },
+    {
+      "id": "g75_30",
+      "page": 75,
+      "kind": "event",
+      "assertion_kind": null,
+      "canonical_type": null,
+      "clause_ids": [
+        "cl_5829e775a75efe21ade3"
+      ],
+      "required_terms": [
+        [
+          "1806"
+        ]
+      ],
+      "tags": [],
+      "statement_hint": null,
+      "note": null,
+      "gold_source": "fable-5"
+    }
+  ],
   "clauses": [],
-  "references": [],
+  "references": [
+    {
+      "clause_id": "cl_ad6715f3f5442cc9ba84",
+      "surface": "It",
+      "antecedent_label": "Palvelgyi cemetery",
+      "page": 75,
+      "gold_source": "fable-5"
+    },
+    {
+      "clause_id": "cl_e3641beaab8412a469de",
+      "surface": "It",
+      "antecedent_label": "Palvelgyi cemetery",
+      "page": 75,
+      "gold_source": "fable-5"
+    },
+    {
+      "clause_id": "cl_107954ed530d1243f8b9",
+      "surface": "it",
+      "antecedent_label": "Palvelgyi cemetery",
+      "page": 75,
+      "gold_source": "fable-5"
+    },
+    {
+      "clause_id": "cl_28226f48bec91aeafb4a",
+      "surface": "It",
+      "antecedent_label": "Palvelgyi cemetery",
+      "page": 75,
+      "gold_source": "fable-5"
+    },
+    {
+      "clause_id": "cl_2ec34bc05e29b2b112e3",
+      "surface": "Its",
+      "antecedent_label": "Palvelgyi cemetery",
+      "page": 75,
+      "gold_source": "fable-5"
+    },
+    {
+      "clause_id": "cl_c10973bd04cbe99d0ab0",
+      "surface": "his",
+      "antecedent_label": "Moshe Munz",
+      "page": 75,
+      "gold_source": "fable-5"
+    }
+  ],
   "transitions": [],
   "layout_zones": []
 }
