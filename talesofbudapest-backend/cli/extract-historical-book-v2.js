@@ -97,7 +97,7 @@ const PRIMARY_CACHE_VERSION = V3 ? 'historical-stateful-v3.0' : 'historical-semi
 // natural output on dense dev pages is ~70 completion tokens per clause for
 // the primary (I+R rows) and ~20 for the audit.
 const primaryTokenLimit = (clauseCount) => V3 ? Number(process.env.KG_V3_PRIMARY_TOKENS ?? Math.min(4200, Math.max(800, 300 + clauseCount * 65))) : PRIMARY_MAX_TOKENS;
-const auditTokenLimit = (clauseCount) => V3 ? Math.min(1500, Math.max(560, 200 + clauseCount * 20)) : AUDIT_MAX_TOKENS;
+const auditTokenLimit = (clauseCount) => V3 ? Math.min(2400, Math.max(560, 220 + clauseCount * 24)) : AUDIT_MAX_TOKENS;
 const qualityTokenLimit = () => V3 ? 700 : QUALITY_MAX_TOKENS;
 // Compact TSV is mostly ASCII English. Two bytes/token remains deliberately
 // pessimistic while avoiding V2's invalid one-byte-per-token reservation.
