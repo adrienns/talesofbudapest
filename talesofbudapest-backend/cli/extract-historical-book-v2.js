@@ -715,6 +715,7 @@ const main = async () => {
   let coverageRows = [];
   let referenceRows = [...boundaryContinuationReferences];
   const ambiguousReferences = [];
+  const unresolvedReferences = [];
   const auditVerdicts = new Map();
   const qualityVerdicts = new Map();
   const reflectionVerdicts = new Map();
@@ -734,6 +735,7 @@ const main = async () => {
         : { references: [], transitions: [], ambiguities: [], ledgerMentions: [] };
       subjectTransitions.push(...deterministicSubjects.transitions);
       ambiguousReferences.push(...(deterministicSubjects.ambiguities ?? []));
+      unresolvedReferences.push(...(deterministicSubjects.unresolved ?? []));
       for (const ledgerMention of deterministicSubjects.ledgerMentions ?? []) {
         if (!mentionById.has(ledgerMention.mention_id)) {
           mentionById.set(ledgerMention.mention_id, ledgerMention);
@@ -924,6 +926,7 @@ const main = async () => {
     items: allItems, supported_item_count: supportedItems.length, usage,
     resolved_references: referenceRows,
     ambiguous_references: V3 ? ambiguousReferences : undefined,
+    unresolved_references_log: V3 ? unresolvedReferences : undefined,
     adjudication_requests: V3 ? adjudicationRequests : undefined,
     average_cost_usd_per_page: averageCost,
     quality_route_pages: [...qualityPages].sort((a, b) => a - b),

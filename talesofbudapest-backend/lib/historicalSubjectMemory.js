@@ -124,7 +124,9 @@ const pickFocus = (state, expected, role = null) => {
 
 const touch = (state, entity, mention, clause) => {
   if (!entity) return;
-  entity.last_mention_id = mention?.mention_id ?? entity.last_mention_id;
+  // An indexed entity is always referencable: fall back to its last explicit
+  // mention so a focus reached via resolution still yields an antecedent.
+  entity.last_mention_id = mention?.mention_id ?? entity.last_mention_id ?? (entity.mention_ids ?? []).at(-1) ?? null;
   entity.last_page = clause.page_ref;
   entity.last_offset = clause.start_offset;
   state.focus[entity.entity_class] = entity.entity_id;
@@ -220,7 +222,7 @@ const registerLedgerEntity = ({ state, clause, phraseRow, head, ownerEntityId, l
   return entity;
 };
 
-const processLedgerPhrase = ({ state, clause, phraseRow, overlapsExplicit, references, ambiguities, ledgerMentions }) => {
+const processLedgerPhrase = ({ state, clause, phraseRow, overlapsExplicit, references, ambiguities, ledgerMentions, unresolved }) => {
   const first = words(phraseRow.text)[0];
   const head = words(phraseRow.head ?? '')[0] ?? null;
   const kind = phraseRow.reference_kind;
@@ -238,6 +240,11 @@ const processLedgerPhrase = ({ state, clause, phraseRow, overlapsExplicit, refer
     expected, reference_kind: kind, start_offset: phraseRow.start_offset,
     candidate_entity_ids: candidates.map((entity) => entity.entity_id),
   });
+  // Never fail silently: an unresolved reference leaves a record naming why.
+  const pushUnresolved = (expected, why) => unresolved.push({
+    clause_id: clause.clause_id, page_ref: clause.page_ref, surface: phraseRow.text,
+    expected, reference_kind: kind, start_offset: phraseRow.start_offset, why,
+  });
 
   if (kind === 'pronoun') {
     const expected = PRONOUN_EXPECTED[first];
@@ -253,8 +260,12 @@ const processLedgerPhrase = ({ state, clause, phraseRow, overlapsExplicit, refer
       const thingResult = resolveTyped(state, { expected: 'thing', page: clause.page_ref });
       if (thingResult.status === 'resolved') result = thingResult;
     }
-    if (result.status === 'resolved') { pushReference(result.entity); touch(state, result.entity, null, clause); }
+    if (result.status === 'resolved') {
+      if (!result.entity.last_mention_id) pushUnresolved(expected, 'candidate_without_mention');
+      pushReference(result.entity); touch(state, result.entity, null, clause);
+    }
     else if (result.status === 'ambiguous') pushAmbiguity(result.candidates, expected);
+    else pushUnresolved(expected, 'no_candidate');
     return;
   }
   if (kind === 'possessive') {
@@ -262,7 +273,7 @@ const processLedgerPhrase = ({ state, clause, phraseRow, overlapsExplicit, refer
     if (!ownerExpected) return;
     const owner = resolveTyped(state, { expected: ownerExpected, page: clause.page_ref });
     if (owner.status === 'ambiguous') { pushAmbiguity(owner.candidates, ownerExpected); return; }
-    if (owner.status !== 'resolved') return;
+    if (owner.status !== 'resolved') { pushUnresolved(ownerExpected, 'no_candidate'); return; }
     pushReference(owner.entity);
     touch(state, owner.entity, null, clause);
     // The owned object is its own entity; "his tomb" never merges a tomb
@@ -273,7 +284,10 @@ const processLedgerPhrase = ({ state, clause, phraseRow, overlapsExplicit, refer
     return;
   }
   if (kind === 'definite') {
-    const expected = phraseRow.type === 'person' ? 'person' : phraseRow.type === 'group' ? 'group' : 'thing';
+    // A trackable/building head overrides the tagger's type: a possessor name
+    // inside the phrase ("the former Mendel Houses") must not make it a person.
+    const expected = head && (TRACKABLE_HEADS.has(head) || BUILDING_WORDS.has(head)) ? 'thing'
+      : phraseRow.type === 'person' ? 'person' : phraseRow.type === 'group' ? 'group' : 'thing';
     // A definite phrase naming a known alias ("the Orczy House") resolves by
     // exact alias before any head-based candidate search.
     const aliasKey = phrase(String(phraseRow.text).replace(/^(?:the|this|that|these|those)\s+/iu, ''));
@@ -288,7 +302,9 @@ const processLedgerPhrase = ({ state, clause, phraseRow, overlapsExplicit, refer
     if (result.status === 'ambiguous') { pushAmbiguity(result.candidates, expected); return; }
     if (discriminating && !ROLE_WORDS.has(head) && !overlapsExplicit) {
       registerLedgerEntity({ state, clause, phraseRow, head, ownerEntityId: null, ledgerMentions });
+      return;
     }
+    pushUnresolved(expected, 'no_candidate');
     return;
   }
   // Plain noun phrase: a first mention such as "a tomb" introduces a
@@ -303,6 +319,7 @@ export const resolveSubjectReferences = ({ state, clauses, mentionById, nounPhra
   const transitions = [];
   const references = [];
   const ambiguities = [];
+  const unresolved = [];
   const ledgerMentions = new Map();
   for (const clause of [...clauses].sort((a, b) => a.page_ref - b.page_ref || a.start_offset - b.start_offset)) {
     const floor = Math.max(state.last_page ?? -Infinity, state.highest_page ?? -Infinity);
@@ -320,7 +337,7 @@ export const resolveSubjectReferences = ({ state, clauses, mentionById, nounPhra
         .map((mention) => [mention.start_offset, mention.end_offset]);
       for (const phraseRow of phrases) {
         const overlapsExplicit = explicitSpans.some(([start, end]) => phraseRow.start_offset < end && phraseRow.end_offset > start);
-        processLedgerPhrase({ state, clause, phraseRow, overlapsExplicit, references, ambiguities, ledgerMentions });
+        processLedgerPhrase({ state, clause, phraseRow, overlapsExplicit, references, ambiguities, ledgerMentions, unresolved });
       }
     } else {
       for (const expression of referenceExpressions(clause.text)) {
@@ -347,7 +364,7 @@ export const resolveSubjectReferences = ({ state, clauses, mentionById, nounPhra
       ambiguous_references: ambiguities.filter((row) => row.clause_id === clause.clause_id),
     });
   }
-  return { references, transitions, ambiguities, ledgerMentions: [...ledgerMentions.values()] };
+  return { references, transitions, ambiguities, unresolved, ledgerMentions: [...ledgerMentions.values()] };
 };
 
 export const subjectContext = (state) => {
