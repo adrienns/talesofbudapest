@@ -70,6 +70,48 @@ cluster now correctly contains `R. Efraim`, `R. Efraim haKohen`, and
 existing package script passes `lib/` as a Node test path. Use direct test file
 commands until that separate script bug is fixed.
 
+## Status 2026-07-16 (branch `historical-extraction-v3`)
+
+Committed on the branch (five commits from the baseline through eval gates):
+
+- **State engine (§1) — done.** Reusable spaCy noun-phrase module
+  (`nlp/noun_phrases.py`) feeds a per-page noun ledger from
+  `nlp/gliner2_mentions.py --noun-ledger` (always on in V3). Typed resolution
+  covers pronouns, possessives, demonstratives, and definite descriptions;
+  `his tomb` creates an owned thing entity linked to the owner; `he` can never
+  resolve to a place, `it` never to a person; away from the focus stack,
+  comparably recent candidates become explicit ambiguity records grouped into
+  one compact block-level adjudication request per page. Pages must ascend;
+  cold starts are marked in run records. 12 unit tests pass.
+- **V3 fields (§2) — done.** Items carry `subject_entity_id`,
+  spec-compliant `subject_resolution_source`, `discourse_chain`,
+  `literal_subject`, `subject_ambiguous`. Report artifact
+  `<source>.historical-v3.report.json` emitted by the browser build.
+- **Layout (§3) — partial.** Poppler bbox header/footer masking is wired and
+  offset-preserving (page 91 footer case passes). Caption / quote /
+  bibliography zone classification and the 99% body-alignment
+  `incomplete_layout` gate are still open.
+- **Cost routing (§4) — enforced, not passed.** The whole batch must fund the
+  quality reserve up front or the run stops as `incomplete_budget`; routine
+  calls cannot spend the reserve; V3 cache keys bind normalized body checksum,
+  incoming subject-state hash, prompt version, model, and output limit.
+  Current conservative ceilings (routine $0.0017/page + reserve $0.0022) do
+  not fit the $0.002/page cap, so paid V3 runs stop unless `--max-cost-usd`
+  is raised for development. **The cost gate has NOT passed.**
+- **Browser (§5) — done for current data.** V3 entity chips show aliases,
+  roles, provisional noun-ledger origin, owned-by links, resolution source,
+  and ambiguity badges; HTML remains fully self-contained.
+- **Evaluation (§6) — harness ready, gold missing.** `npm run
+  eval:historical:v3` fails closed with explicit blockers until humans
+  adjudicate the V3 gold manifest
+  (`fixtures/historical-book-items-golden-v3.json`, 32 dev / 16 held-out
+  pages). Reference P/R and subject-transition accuracy gates (>0.95) are
+  wired in. **No promotion gate has been claimed.**
+
+Open work: layout zone classification + alignment gate, quote-speaker vs
+described-person regression, wiring ambiguity adjudication requests into the
+quality escalation call, human gold adjudication, then measured paid runs.
+
 ## Exact implementation plan
 
 ### 1. Finish the state engine before paid runs
