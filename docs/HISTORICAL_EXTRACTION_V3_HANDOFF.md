@@ -112,6 +112,25 @@ Open work: layout zone classification + alignment gate, quote-speaker vs
 described-person regression, wiring ambiguity adjudication requests into the
 quality escalation call, human gold adjudication, then measured paid runs.
 
+### Later on 2026-07-16: verification recovery fixes
+
+Manual review of all 74 non-supported items on the 46-50 sequential smoke
+identified three fixable failure classes, now fixed (commit d7590e7):
+
+1. Deterministic subject resolutions are now shown to every model as
+   authoritative clause resolutions [[surface, antecedent]]; the reference
+   gate accepts resolver-linked antecedents.
+2. Single-capital initials ("R.") no longer split sentences.
+3. Verify/quality treat paraphrase, double negation, and jointly asserting
+   adjacent clauses as support; payloads include adjacent clauses;
+   realignment may keep an overlapping neighbor clause.
+
+Genuine rejections (invented citations, modality overreach, contradictions)
+are deliberately untouched. Model config for the book pass is frozen:
+DeepSeek V4 Flash primary with --primary-reasoning off, Qwen 30B audit,
+Gemini Flash quality judge. Fable-5 pilot gold exists for page 75
+(development gate only; held-out promotion still requires human gold).
+
 ## Exact implementation plan
 
 ### 1. Finish the state engine before paid runs
