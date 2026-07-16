@@ -8,7 +8,7 @@ const BUILDING_WORDS = new Set(['synagogue', 'temple', 'school', 'building', 'ho
 const GROUP_WORDS = new Set(['community', 'family', 'group', 'people', 'they', 'followers', 'students', 'workers']);
 // Ordinary narrative object heads that GLiNER misses but the subject memory
 // must track so possessives and definite descriptions stay resolvable.
-const TRACKABLE_HEADS = new Set([...BUILDING_WORDS, 'tomb', 'grave', 'tombstone', 'monument', 'statue', 'bath', 'bridge', 'mill', 'factory', 'shop', 'press', 'yeshiva', 'mikveh', 'quarter', 'district', 'street', 'tower', 'wall', 'gate', 'book']);
+const TRACKABLE_HEADS = new Set([...BUILDING_WORDS, 'tomb', 'grave', 'tombstone', 'gravestone', 'stele', 'plaque', 'inscription', 'monument', 'statue', 'bath', 'bridge', 'mill', 'factory', 'shop', 'press', 'yeshiva', 'mikveh', 'quarter', 'district', 'street', 'tower', 'wall', 'gate', 'book']);
 const PRONOUN_EXPECTED = {
   he: 'person', him: 'person', his: 'person', she: 'person', her: 'person', hers: 'person',
   they: 'group', them: 'group', their: 'group', theirs: 'group',
@@ -242,7 +242,12 @@ const processLedgerPhrase = ({ state, clause, phraseRow, overlapsExplicit, refer
   if (kind === 'pronoun') {
     const expected = PRONOUN_EXPECTED[first];
     if (!expected) return;
-    const result = resolveTyped(state, { expected, page: clause.page_ref });
+    let result = resolveTyped(state, { expected, page: clause.page_ref });
+    // "They" also covers plural things (the gravestones ... They come from...);
+    // fall back to the thing focus when no group candidate exists.
+    if (result.status === 'unresolved' && expected === 'group' && phraseRow.number_hint !== 'singular') {
+      result = resolveTyped(state, { expected: 'thing', page: clause.page_ref });
+    }
     if (result.status === 'resolved') { pushReference(result.entity); touch(state, result.entity, null, clause); }
     else if (result.status === 'ambiguous') pushAmbiguity(result.candidates, expected);
     return;
