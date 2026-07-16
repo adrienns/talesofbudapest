@@ -21,10 +21,68 @@ const fold = (value) => String(value ?? '').normalize('NFKD').replace(/[\u0300-\
 const itemRows = readJsonl(path.join(extractionDir, v3 ? `${sourceId}.historical-items-v3.jsonl` : `${sourceId}.langextract-pilot.jsonl`));
 const experimentFlag = process.argv.indexOf('--experiment');
 const experimentId = experimentFlag >= 0 ? process.argv[experimentFlag + 1] : null;
-// Experiment records (model A/B runs) never become the default/latest view.
+const pagesFlag = process.argv.indexOf('--pages');
+// --pages accepts "15-24" or "15,16,20". When set, every latest non-experiment
+// record overlapping those pages is unioned into one browsable view so a
+// multi-batch run (e.g. 15-19 + 20-24) shows as a single book stretch.
+const pageFilter = pagesFlag >= 0 ? new Set(process.argv[pagesFlag + 1].split(',').flatMap((part) => {
+  const range = part.match(/^(\d+)-(\d+)$/);
+  if (!range) return [Number(part)];
+  const out = [];
+  for (let page = Number(range[1]); page <= Number(range[2]); page += 1) out.push(page);
+  return out;
+})) : null;
+
+const mergeV3Runs = (records) => {
+  const items = [];
+  const mentions = [];
+  const resolvedReferences = [];
+  const ambiguousReferences = [];
+  const entityById = new Map();
+  const pages = new Set();
+  const runIds = [];
+  let usageCost = 0;
+  let cacheHits = 0;
+  for (const record of records) {
+    for (const item of record.items ?? []) items.push(item);
+    for (const mention of record.mentions ?? []) mentions.push(mention);
+    for (const reference of record.resolved_references ?? []) resolvedReferences.push(reference);
+    for (const reference of record.ambiguous_references ?? []) ambiguousReferences.push(reference);
+    for (const page of record.pdf_pages ?? []) pages.add(page);
+    for (const entity of record.entity_aliases ?? []) {
+      const existing = entityById.get(entity.entity_id);
+      if (!existing) { entityById.set(entity.entity_id, { ...entity, aliases: [...(entity.aliases ?? [])], roles: [...(entity.roles ?? [])] }); continue; }
+      existing.aliases = [...new Set([...existing.aliases, ...(entity.aliases ?? [])])];
+      existing.roles = [...new Set([...existing.roles, ...(entity.roles ?? [])])];
+    }
+    usageCost += Number(record.usage?.cost ?? 0);
+    cacheHits += Number(record.usage?.cache_hits ?? 0);
+    runIds.push(record.run_id);
+  }
+  const pageList = [...pages].sort((a, b) => a - b);
+  const supported = items.filter((item) => item.verification?.verdict === 'supported').length;
+  return {
+    run_id: runIds.join('+'), source_id: records[0].source_id, config: records[0].config,
+    pdf_pages: pageList, items, mentions, entity_aliases: [...entityById.values()],
+    resolved_references: resolvedReferences, ambiguous_references: ambiguousReferences,
+    supported_item_count: supported,
+    usage: { cost: usageCost, cache_hits: cacheHits, call_count: records.reduce((sum, record) => sum + Number(record.usage?.call_count ?? 0), 0) },
+    average_cost_usd_per_page: pageList.length ? usageCost / pageList.length : 0,
+    status: records.every((record) => record.status === 'complete') ? 'complete' : 'partial',
+  };
+};
+
+const eligibleV3 = itemRows.filter((row) => (row.status === 'complete' || row.status === 'failed_cost_gate' || row.status === 'preflight')
+  && (experimentId ? row.experiment_id === experimentId : !row.experiment_id) && Array.isArray(row.items));
+// Keep the latest record per page-set (later lines win).
+const latestByPageSet = new Map();
+for (const row of eligibleV3) latestByPageSet.set((row.pdf_pages ?? []).join(','), row);
+let selectedV3 = [...latestByPageSet.values()];
+if (pageFilter) selectedV3 = selectedV3.filter((row) => (row.pdf_pages ?? []).some((page) => pageFilter.has(page)));
+else selectedV3 = selectedV3.slice(-1); // default: most recent single record, as before
+
 const run = v3
-  ? itemRows.filter((row) => (row.status === 'complete' || row.status === 'failed_cost_gate' || row.status === 'preflight')
-      && (experimentId ? row.experiment_id === experimentId : !row.experiment_id)).at(-1)
+  ? (selectedV3.length ? mergeV3Runs(selectedV3) : null)
   : itemRows.find((row) => row.record_type === 'run');
 const report = v3 ? null : JSON.parse(fs.readFileSync(path.join(extractionDir, `${sourceId}.langextract-pilot.report.json`), 'utf8'));
 if (!run) throw new Error(`No V${v3 ? '3 extraction record' : ' run header'} for ${sourceId}`);
