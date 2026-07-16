@@ -80,8 +80,21 @@ const sentenceSpans = (readingText) => Array.from(new Intl.Segmenter('en', { gra
 
 const clauseBoundaries = (sentenceText) => {
   const cuts = [0];
+  const chronologyLabel = /(?:^|\s)(?:c\.\s*)?(?:1[5-9]\d{2}|20\d{2})(?:\s*[–-]\s*\d{2,4})?\s*:/giu;
+  const protectedColons = new Set([...sentenceText.matchAll(chronologyLabel)].map((match) => match.index + match[0].lastIndexOf(':')));
   const pattern = /[;:]\s+|\s+[—–]\s+|\s+(?=(?:but|while|whereas|although|however|therefore|nevertheless)\b)/giu;
-  for (const match of sentenceText.matchAll(pattern)) cuts.push(match.index + match[0].length);
+  for (const match of sentenceText.matchAll(pattern)) {
+    // A chronology label belongs to its event. Splitting `1827:` into a
+    // standalone clause made the verifier reject otherwise grounded entries.
+    if (match[0].startsWith(':') && protectedColons.has(match.index)) continue;
+    cuts.push(match.index + match[0].length);
+  }
+  // OCR frequently collapses a timeline into one line: `1827: ... 1830: ...`.
+  // Start a new clause at later labels, never between a label and its content.
+  for (const match of sentenceText.matchAll(chronologyLabel)) {
+    const start = match.index + (match[0].match(/^\s*/u)?.[0].length ?? 0);
+    if (start > 0) cuts.push(start);
+  }
   cuts.push(sentenceText.length);
   return [...new Set(cuts)].sort((a, b) => a - b);
 };
@@ -90,7 +103,7 @@ const ocrNoise = (text) => {
   const visible = [...text].filter((char) => !/\s/u.test(char));
   if (visible.length < 12) return false;
   const odd = visible.filter((char) => !/[\p{L}\p{N}.,;:'’"“”!?()\[\]\/\-–—]/u.test(char)).length;
-  return odd / visible.length > 0.08 || /(?:\b\w{1,2}-\s+\w{1,2}\b|[|]{2,}|[_]{2,})/u.test(text);
+  return odd / visible.length > 0.08 || /(?:\b\w{1,2}-\s+\w{1,2}\b|[|]{2,}|[_]{2,}|\p{L}{2,}\d+\p{L}*\b)/u.test(text);
 };
 
 export const localRiskFlags = ({ text, mentions, first, last }) => {
@@ -245,11 +258,26 @@ export const normalizeModelItems = ({ rawItems, clauses, mentions, sourceId, dis
 
 export const dedupeHistoricalItems = (items) => {
   const selected = new Map();
+  const merge = (left, right) => ({
+    ...left,
+    clause_ids: [...new Set([...left.clause_ids, ...right.clause_ids])],
+    participants: [...new Map([...left.participants, ...right.participants].map((participant) => [`${participant.mention_id}\u001f${participant.role}`, participant])).values()],
+    evidence: [...new Map([...left.evidence, ...right.evidence].map((evidence) => [`${evidence.page_ref}\u001f${evidence.start_offset}\u001f${evidence.end_offset}`, evidence])).values()],
+    corefers_with: [...new Set([...(left.corefers_with ?? []), ...(right.corefers_with ?? [])])],
+    discovery_sources: [...new Set([...(left.discovery_sources ?? []), ...(right.discovery_sources ?? [])])],
+  });
+  const nearby = (left, right) => left.evidence.some((a) => right.evidence.some((b) => a.page_ref === b.page_ref && Math.abs(a.start_offset - b.start_offset) <= 420));
   for (const item of items) {
     const key = `${item.kind}\u001f${item.assertion_kind ?? ''}\u001f${item.open_type}\u001f${item.clause_ids.join(',')}\u001f${foldText(item.statement_en)}`;
     const previous = selected.get(key);
-    if (!previous) selected.set(key, item);
-    else selected.set(key, { ...previous, discovery_sources: [...new Set([...previous.discovery_sources, ...item.discovery_sources])] });
+    if (previous) { selected.set(key, merge(previous, item)); continue; }
+    const nearKey = [...selected.entries()].find(([, candidate]) => candidate.kind === item.kind
+      && candidate.assertion_kind === item.assertion_kind
+      && candidate.open_type === item.open_type
+      && nearby(candidate, item)
+      && semanticTokenOverlap(candidate.statement_en, item.statement_en) >= 0.82)?.[0];
+    if (nearKey) selected.set(nearKey, merge(selected.get(nearKey), item));
+    else selected.set(key, item);
   }
   return [...selected.values()];
 };

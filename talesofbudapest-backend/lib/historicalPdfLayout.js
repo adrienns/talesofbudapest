@@ -29,6 +29,17 @@ const maskExactBlock = (source, blockText) => {
   return { text, masked };
 };
 
+const captionCue = /\b(?:(?:color\s+)?(?:drawing|photograph|photo|painting|illustration|image|portrait|engraving|map)|(?:drawing|photograph|photo|painting|illustration|image|portrait|engraving|map)\s+by)\b/iu;
+const zoneForBlock = (block, page) => {
+  if (block.y_min >= page.height * 0.90) return 'footer';
+  if (block.y_max <= page.height * 0.032) return 'header';
+  // Image captions often share an otherwise quote-like narrow margin block.
+  // A caption cue is required, so historical side quotations remain available
+  // in a separate lane rather than being discarded by geometry alone.
+  if (block.x_min <= page.width * 0.18 && block.x_max <= page.width * 0.30 && captionCue.test(block.text)) return 'caption';
+  return null;
+};
+
 /**
  * Mask only page furniture, retaining source length and offsets. This keeps
  * flattened OCR evidence immutable while preventing footer/caption words from
@@ -46,12 +57,12 @@ export const maskPdfFurniture = ({ pdfPath, pages, pdftotext = 'pdftotext', exec
   const maskedPages = pages.map((page) => {
     const sourceLayout = layoutPages[page.page - first];
     let text = page.text;
-    const ignored = sourceLayout.blocks.filter((block) => block.y_min >= sourceLayout.height * 0.90 || block.y_max <= sourceLayout.height * 0.032);
+    const ignored = sourceLayout.blocks.map((block) => ({ block, zone: zoneForBlock(block, sourceLayout) })).filter((row) => row.zone);
     const maskedBlocks = [];
-    for (const block of ignored) {
+    for (const { block, zone } of ignored) {
       const masked = maskExactBlock(text, block.text);
       text = masked.text;
-      if (masked.masked) maskedBlocks.push({ ...block, masked_characters: masked.masked, zone: block.y_min >= sourceLayout.height * 0.90 ? 'footer' : 'header' });
+      if (masked.masked) maskedBlocks.push({ ...block, masked_characters: masked.masked, zone });
     }
     layout.push({ page_ref: page.page, width: sourceLayout.width, height: sourceLayout.height, masked_blocks: maskedBlocks, body_block_count: sourceLayout.blocks.length - ignored.length, ignored_block_count: ignored.length });
     return { ...page, text };
