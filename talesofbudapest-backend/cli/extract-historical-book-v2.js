@@ -57,6 +57,10 @@ const NLP_PYTHON = option('--nlp-python', process.env.KG_NLP_PYTHON ?? path.join
 const PREFLIGHT_ONLY = args.includes('--preflight-only');
 const RESUME = args.includes('--resume');
 const V3 = args.includes('--v3');
+// Experiment runs (model A/B tests) get their own cache-key component and a
+// record marker so cache hits never masquerade as fresh model evidence and
+// the browser's default/latest view is not polluted.
+const EXPERIMENT_ID = option('--experiment-id', null);
 
 const INPUT = path.join(__dirname, `../../ingest/corpus/restricted/text/${SOURCE_ID}.pages.txt`);
 const OUTPUT_DIR = path.join(__dirname, '../../ingest/corpus/restricted/extractions');
@@ -468,7 +472,7 @@ const main = async () => {
     payloadPages = allPages.map((page) => maskedByPage.get(page.page) ?? page);
   }
   const sourceSha = sha256(targetPages.map((page) => `${page.page}\u001f${page.text}`).join('\u001e'));
-  const config = { primary_model: PRIMARY_MODEL, audit_model: AUDIT_MODEL, quality_model: QUALITY_MODEL, nlp_model: NLP_MODEL, nlp_threshold: NLP_THRESHOLD, prompt_version: HISTORICAL_V2_PROMPT_VERSION, subject_memory: V3 ? 'stateful-v3' : null };
+  const config = { primary_model: PRIMARY_MODEL, audit_model: AUDIT_MODEL, quality_model: QUALITY_MODEL, nlp_model: NLP_MODEL, nlp_threshold: NLP_THRESHOLD, prompt_version: HISTORICAL_V2_PROMPT_VERSION, subject_memory: V3 ? 'stateful-v3' : null, experiment_id: EXPERIMENT_ID };
   const runKey = sha256(JSON.stringify({ source_id: SOURCE_ID, pages: targetNumbers, source_sha: sourceSha, config }));
 
   if (RESUME) {
@@ -537,6 +541,7 @@ const main = async () => {
     layout: V3 ? { pdf_path: PDF_PATH, pages: layout } : undefined,
     subject_memory_cold_start: V3 ? persistedSubjectMemory == null : undefined,
     subject_state_loaded_last_page: V3 ? persistedSubjectMemory?.last_page ?? null : undefined,
+    experiment_id: EXPERIMENT_ID ?? undefined,
     budget: V3 ? {
       routine_ceiling_usd: primaryCeiling + auditCeiling,
       quality_reserve_usd: qualityReserve,
@@ -581,7 +586,7 @@ const main = async () => {
     // schema version, model, and output limit: a changed prior-page subject
     // state invalidates the next page's cache entry.
     const cacheKey = sha256(JSON.stringify(V3
-      ? { operation, model, prompt_version: promptVersion, request: requestText, max_tokens: maxTokens, body_sha: normalizedBodySha, state_hash: stateHash }
+      ? { operation, model, prompt_version: promptVersion, request: requestText, max_tokens: maxTokens, body_sha: normalizedBodySha, state_hash: stateHash, experiment_id: EXPERIMENT_ID }
       : { operation, model, prompt_version: promptVersion, request: requestText }));
     const cached = cache.get(cacheKey);
     if (cached) {

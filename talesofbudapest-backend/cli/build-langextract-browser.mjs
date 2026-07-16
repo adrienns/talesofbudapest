@@ -18,8 +18,12 @@ const readJsonl = (file) => fs.readFileSync(file, 'utf8').trim().split('\n').fil
 });
 const fold = (value) => String(value ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\b(?:r|rabbi|dr|mr|mrs|saint|st)\.?\s+/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 const itemRows = readJsonl(path.join(extractionDir, v3 ? `${sourceId}.historical-items-v3.jsonl` : `${sourceId}.langextract-pilot.jsonl`));
+const experimentFlag = process.argv.indexOf('--experiment');
+const experimentId = experimentFlag >= 0 ? process.argv[experimentFlag + 1] : null;
+// Experiment records (model A/B runs) never become the default/latest view.
 const run = v3
-  ? itemRows.filter((row) => row.status === 'complete' || row.status === 'failed_cost_gate' || row.status === 'preflight').at(-1)
+  ? itemRows.filter((row) => (row.status === 'complete' || row.status === 'failed_cost_gate' || row.status === 'preflight')
+      && (experimentId ? row.experiment_id === experimentId : !row.experiment_id)).at(-1)
   : itemRows.find((row) => row.record_type === 'run');
 const report = v3 ? null : JSON.parse(fs.readFileSync(path.join(extractionDir, `${sourceId}.langextract-pilot.report.json`), 'utf8'));
 if (!run) throw new Error(`No V${v3 ? '3 extraction record' : ' run header'} for ${sourceId}`);
