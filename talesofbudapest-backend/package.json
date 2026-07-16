@@ -48,7 +48,10 @@
     "test:kg-promotion": "node --test lib/kgPromotion.test.js",
     "test:narrative": "node --test lib/narrativeParsing.test.js",
     "promote:kg-location": "node cli/promote-kg-location.js",
-    "promote:location-candidate": "node cli/promote-location-candidate.js"
+    "promote:location-candidate": "node cli/promote-location-candidate.js",
+    "build:gazetteer": "node cli/build-budapest-gazetteer.js",
+    "export:historical:map": "node cli/export-address-geojson.js",
+    "hungaricana:lookup": "node cli/hungaricana-lookup.js"
   },
   "keywords": [],
   "author": "",
