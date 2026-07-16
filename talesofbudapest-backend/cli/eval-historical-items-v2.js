@@ -10,10 +10,12 @@ const option = (name, fallback) => {
   return index === -1 ? fallback : args[index + 1] ?? fallback;
 };
 
+const V3 = args.includes('--v3');
 const SOURCE_ID = option('--source', 'jewish-budapest');
 const SPLIT = option('--split', 'heldout');
-const GOLD = option('--golden', path.join(__dirname, '../fixtures/historical-book-items-golden-v2.json'));
-const ITEMS = option('--items', path.join(__dirname, `../../ingest/corpus/restricted/extractions/${SOURCE_ID}.historical-items-v2.jsonl`));
+const GOLD = option('--golden', path.join(__dirname, `../fixtures/historical-book-items-golden-${V3 ? 'v3' : 'v2'}.json`));
+const ITEMS = option('--items', path.join(__dirname, `../../ingest/corpus/restricted/extractions/${SOURCE_ID}.historical-items-${V3 ? 'v3' : 'v2'}.jsonl`));
+const TRANSITIONS = option('--transitions', path.join(__dirname, `../../ingest/corpus/restricted/extractions/${SOURCE_ID}.historical-subject-transitions-v3.jsonl`));
 const ALLOW_INCOMPLETE = args.includes('--allow-incomplete');
 const REPORT_ONLY = args.includes('--report-only');
 
@@ -83,7 +85,7 @@ const maximumMatch = (gold, predicted) => {
 const main = async () => {
   if (!['development', 'heldout', 'all'].includes(SPLIT)) throw new Error('--split must be development, heldout, or all');
   const fixture = JSON.parse(await fs.readFile(GOLD, 'utf8'));
-  if (fixture.source_id !== SOURCE_ID || !fixture.splits || !Array.isArray(fixture.items)) throw new Error('V2 gold fixture source/splits/items mismatch');
+  if (fixture.source_id !== SOURCE_ID || !fixture.splits || !Array.isArray(fixture.items)) throw new Error(`${V3 ? 'V3' : 'V2'} gold fixture source/splits/items mismatch`);
   const selectedPages = new Set(SPLIT === 'all' ? [...fixture.splits.development, ...fixture.splits.heldout] : fixture.splits[SPLIT]);
   const gold = fixture.items.filter((item) => selectedPages.has(item.page ?? item.pages?.[0]));
   const heldoutGold = fixture.items.filter((item) => fixture.splits.heldout.includes(item.page ?? item.pages?.[0]));
@@ -97,6 +99,9 @@ const main = async () => {
   const missingAdjudicatedPages = [...selectedPages].filter((page) => !adjudicatedPages.has(page));
   if (missingAdjudicatedPages.length) blockers.push(`${missingAdjudicatedPages.length} selected pages lack clause-level gold adjudication`);
   if ((fixture.clauses ?? []).some((clause) => !clause.clause_id || !['covered', 'background_only', 'reference_only', 'ambiguous'].includes(clause.disposition))) blockers.push('one or more gold clauses lack a valid disposition');
+  if (V3 && !(fixture.references ?? []).length) blockers.push('V3 gold has no adjudicated reference chains');
+  if (V3 && !(fixture.transitions ?? []).length) blockers.push('V3 gold has no adjudicated subject transitions');
+  if (V3 && !(fixture.layout_zones ?? []).length) blockers.push('V3 gold has no adjudicated layout zones');
   if (blockers.length && !ALLOW_INCOMPLETE) {
     console.log(JSON.stringify({ source_id: SOURCE_ID, split: SPLIT, gate: { eligible: false, passed: false }, blockers }, null, 2));
     process.exitCode = 1;
@@ -138,12 +143,39 @@ const main = async () => {
     const sliceMatches = matches.filter((match) => sliceIds.has(match.gold_id));
     slices[tag] = { expected: sliceGold.length, matched: sliceMatches.length, recall: sliceMatches.length / sliceGold.length };
   }
+  // V3 reference and subject-transition gates against adjudicated gold.
+  let referenceMetric = null;
+  let transitionAccuracy = null;
+  if (V3) {
+    const predictedReferences = [...new Map(selectedRows.flatMap((row) => row.resolved_references ?? [])
+      .map((row) => [`${row.clause_id}${row.resolved_entity_id ?? row.antecedent_mention_id}`, row])).values()];
+    const goldReferences = (fixture.references ?? []).filter((row) => selectedPages.has(row.page));
+    const referenceMatches = goldReferences.filter((goldRow) => predictedReferences.some((row) => row.clause_id === goldRow.clause_id
+      && (goldRow.resolved_entity_id ? row.resolved_entity_id === goldRow.resolved_entity_id : row.antecedent_mention_id === goldRow.antecedent_mention_id)));
+    referenceMetric = {
+      expected: goldReferences.length,
+      predicted: predictedReferences.length,
+      matched: referenceMatches.length,
+      precision: predictedReferences.length ? referenceMatches.length / predictedReferences.length : 0,
+      recall: goldReferences.length ? referenceMatches.length / goldReferences.length : 0,
+    };
+    const runIds = new Set(selectedRows.map((row) => row.run_id));
+    const transitionRows = readJsonl(await fs.readFile(TRANSITIONS, 'utf8').catch(() => '')).filter((row) => runIds.has(row.run_id));
+    const predictedActive = new Map(transitionRows.flatMap((row) => row.transitions ?? []).map((row) => [row.clause_id, row.after_focus?.active ?? null]));
+    const goldTransitions = (fixture.transitions ?? []).filter((row) => selectedPages.has(row.page));
+    const transitionMatches = goldTransitions.filter((row) => predictedActive.get(row.clause_id) === row.active_entity_id);
+    transitionAccuracy = { expected: goldTransitions.length, matched: transitionMatches.length, accuracy: goldTransitions.length ? transitionMatches.length / goldTransitions.length : 0 };
+  }
   const coveredPages = new Set(latestByPage.keys());
   const totalCost = selectedRows.reduce((sum, row) => sum + Number(row.usage?.cost ?? 0), 0);
   const averageCost = coveredPages.size ? totalCost / coveredPages.size : 0;
   const enoughPerLayer = ['event', 'assertion'].every((kind) => layers[kind].expected < 50 || (layers[kind].precision > 0.95 && layers[kind].recall > 0.95));
+  const v3GatesPass = !V3 || (
+    referenceMetric && referenceMetric.precision > 0.95 && referenceMetric.recall > 0.95
+    && transitionAccuracy && transitionAccuracy.accuracy > 0.95
+  );
   const eligible = blockers.length === 0 && coveredPages.size === selectedPages.size && SPLIT !== 'development';
-  const passed = eligible && overall.precision > 0.95 && overall.recall > 0.95 && enoughPerLayer && averageCost <= 0.002;
+  const passed = eligible && overall.precision > 0.95 && overall.recall > 0.95 && enoughPerLayer && v3GatesPass && averageCost <= 0.002;
   const matchedGold = new Set(matches.map((match) => match.gold_id));
   const matchedPredictions = new Set(matches.map((match) => match.prediction_id));
   const report = {
@@ -155,8 +187,10 @@ const main = async () => {
     overall,
     layers,
     slices,
+    references: referenceMetric ?? undefined,
+    subject_transitions: transitionAccuracy ?? undefined,
     cost: { total_usd: totalCost, average_usd_per_page: averageCost, gate: 0.002 },
-    gate: { eligible, precision: '>0.95', recall: '>0.95', cost_per_page: '<=0.002', passed },
+    gate: { eligible, precision: '>0.95', recall: '>0.95', ...(V3 ? { reference_pr: '>0.95', transition_accuracy: '>0.95' } : {}), cost_per_page: '<=0.002', passed },
     blockers,
     misses: gold.filter((item) => !matchedGold.has(item.id)).map((item) => ({ id: item.id, page: item.page, kind: item.kind })),
     unmatched_predictions: predicted.filter((item) => !matchedPredictions.has(item.prediction_id)).map((item) => ({ item_id: item.item_id, kind: item.kind, statement_en: item.statement_en })),
