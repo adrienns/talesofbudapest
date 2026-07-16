@@ -6,6 +6,7 @@ import {
   aggregateUsage,
   assignMentionIds,
   buildClauseLedger,
+  dedupeHistoricalItems,
   itemHasResolvedReferences,
   needsQualityEscalation,
   normalizeModelItems,
@@ -43,6 +44,13 @@ test('schema retrieval is advisory and returns at most eight likely schemas', ()
   assert.ok(schemas.includes('construction'));
   assert.ok(schemas.includes('disaster_or_rescue'));
   assert.ok(schemas.length <= 8);
+});
+
+test('chronology labels stay attached to their content and repeated labels split entries', () => {
+  const text = '1827: The school opened. 1830: It moved to Buda.';
+  const clauses = buildClauseLedger({ sourceId: 'book', targetPages: [{ page: 1, text }], readingPages: [readingPage(1, text)], mentions: [] });
+  assert.deepEqual(clauses.map((clause) => clause.text), ['1827: The school opened.', '1830: It moved to Buda.']);
+  assert.ok(clauses.every((clause) => !/^\d{4}:$/u.test(clause.text)));
 });
 
 test('model items use exact clause evidence and may resolve an adjacent-page mention', () => {
@@ -149,4 +157,17 @@ test('cache hits report saved cost without consuming the run budget', () => {
   assert.equal(usage.saved_prompt_tokens, 300);
   assert.equal(usage.call_count, 1);
   assert.equal(usage.cache_hits, 1);
+});
+
+test('near duplicate items on adjacent evidence merge without merging separate facts', () => {
+  const base = (id, statement, offset) => ({
+    item_id: id, kind: 'event', assertion_kind: null, open_type: 'death', statement_en: statement,
+    clause_ids: [`c${id}`], participants: [], evidence: [{ page_ref: 1, start_offset: offset, end_offset: offset + 20, quote: statement }],
+    corefers_with: [], discovery_sources: [id],
+  });
+  const merged = dedupeHistoricalItems([base('a', 'Efraim died in Buda during an epidemic.', 10), base('b', 'Efraim died in Buda.', 90)]);
+  assert.equal(merged.length, 1);
+  assert.deepEqual(merged[0].clause_ids.sort(), ['ca', 'cb']);
+  const distinct = dedupeHistoricalItems([base('a', 'Efraim died in Buda during an epidemic.', 10), base('c', 'Efraim died in Prague during a fire.', 90)]);
+  assert.equal(distinct.length, 2);
 });

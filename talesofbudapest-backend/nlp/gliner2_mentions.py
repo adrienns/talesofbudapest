@@ -173,6 +173,16 @@ def normalize_reading_view(source_text: str) -> tuple[str, list[int], list[int]]
             append(" ", index, cursor)
             index = cursor
             continue
+        # This scan encodes Hungarian umlauts as digit 6 inside words
+        # (`T6r6k`, `K6zépponti`, `temet6`). Repair only letter-adjacent
+        # cases; years and house numbers remain digits. Replacement is one
+        # code point, so immutable raw offsets still align exactly.
+        if source_text[index] == "6" and index > 0 and source_text[index - 1].isalpha():
+            next_char = source_text[index + 1] if index + 1 < len(source_text) else ""
+            if not next_char or next_char.isalpha() or not next_char.isdigit():
+                append("ö" if next_char.isalpha() else "ő", index, index + 1)
+                index += 1
+                continue
         append(source_text[index], index, index + 1)
         index += 1
 
