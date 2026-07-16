@@ -52,7 +52,9 @@ const postChatCompletion = async (body, { operation, requestId }) => {
     method: 'POST',
     headers: getOpenRouterHeadersForRequest(),
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(120_000),
+    // Reasoning models (DeepSeek, GPT-OSS) can exceed the default two
+    // minutes on dense extraction pages.
+    signal: AbortSignal.timeout(Number(process.env.OPENROUTER_TIMEOUT_MS ?? 120_000)),
   });
 
   if (!response.ok) {
@@ -71,6 +73,7 @@ export const createChatCompletion = async ({
   response_format,
   max_tokens,
   temperature,
+  reasoning,
   fallback_without_response_format = true,
   operation = 'chat.completion',
 }) => {
@@ -83,6 +86,10 @@ export const createChatCompletion = async ({
   }
   if (temperature !== undefined) {
     body.temperature = temperature;
+  }
+  if (reasoning !== undefined) {
+    // OpenRouter reasoning control, e.g. { enabled: false } or { effort: 'low' }.
+    body.reasoning = reasoning;
   }
 
   const requestId = openRouterRequestId();
