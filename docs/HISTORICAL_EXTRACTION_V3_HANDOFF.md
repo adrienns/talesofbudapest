@@ -30,7 +30,9 @@ This handoff added, uncommitted:
 - `talesofbudapest-backend/lib/historicalSubjectMemory.test.js`
 - V3 mode inside `cli/extract-historical-book-v2.js` (`--v3`)
 - `npm run extract:historical:v3`
+- `npm run build:historical:v3-browser`
 - entity IDs on resolved reference participants
+- layout masking via `lib/historicalPdfLayout.js`
 
 The new module currently does these deterministic pieces:
 
@@ -41,6 +43,8 @@ The new module currently does these deterministic pieces:
 5. Resolves pronouns, possessives, and common definite descriptions against
    typed focus before model calls.
 6. Writes V3 item/coverage records and subject-transition records.
+7. Uses Poppler layout coordinates to mask page headers/footers before local NLP
+   while preserving raw text length and offsets.
 
 Passing focused tests:
 
@@ -56,6 +60,11 @@ Preflight ran on page 46 with **zero paid extraction calls**:
 npm run extract:historical:v3 -- --source jewish-budapest --from-page 46 --page-count 1 --preflight-only --max-cost-usd 0.002
 # Routine ceiling: $0.0018/page
 ```
+
+Page 91 layout preflight also passed. It masked `KrrALy utca 77` as a footer
+before NLP, preserving the raw-offset coordinate system. The Efraim entity
+cluster now correctly contains `R. Efraim`, `R. Efraim haKohen`, and
+`R. Efraim’s`, with role `rabbi`.
 
 `npm test -- --test-name-pattern=...` is currently not valid because the
 existing package script passes `lib/` as a Node test path. Use direct test file

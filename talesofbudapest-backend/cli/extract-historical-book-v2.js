@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 import { createChatCompletion, getOpenRouterApiKey } from '../lib/openRouterClient.js';
 import { estimateExtractionCeiling, fetchOpenRouterCatalog, formatUsd, pricingForModels } from '../lib/openRouterCostGuard.js';
+import { maskPdfFurniture } from '../lib/historicalPdfLayout.js';
 import {
   buildSubjectEntityIndex,
   createSubjectState,
@@ -59,11 +60,13 @@ const V3 = args.includes('--v3');
 
 const INPUT = path.join(__dirname, `../../ingest/corpus/restricted/text/${SOURCE_ID}.pages.txt`);
 const OUTPUT_DIR = path.join(__dirname, '../../ingest/corpus/restricted/extractions');
+const PDF_PATH = option('--pdf', process.env.KG_HISTORICAL_PDF ?? (SOURCE_ID === 'jewish-budapest' ? path.join(__dirname, '../../ingest/corpus/restricted/raw/Jewish Budapest.pdf') : null));
 const ITEM_OUTPUT = path.join(OUTPUT_DIR, `${SOURCE_ID}.historical-items-${V3 ? 'v3' : 'v2'}.jsonl`);
 const COVERAGE_OUTPUT = path.join(OUTPUT_DIR, `${SOURCE_ID}.historical-coverage-${V3 ? 'v3' : 'v2'}.jsonl`);
 const CACHE_OUTPUT = path.join(OUTPUT_DIR, `${SOURCE_ID}.historical-${V3 ? 'v3' : 'v2'}-model-cache.jsonl`);
 const SUBJECT_TRANSITIONS_OUTPUT = path.join(OUTPUT_DIR, `${SOURCE_ID}.historical-subject-transitions-v3.jsonl`);
 const SUBJECT_MEMORY_OUTPUT = path.resolve(option('--state-file', path.join(OUTPUT_DIR, `${SOURCE_ID}.historical-subject-memory-v3.json`)));
+const LAYOUT_OUTPUT = path.join(OUTPUT_DIR, `${SOURCE_ID}.historical-layout-v3.jsonl`);
 
 const PRIMARY_MAX_TOKENS = 2500;
 const AUDIT_MAX_TOKENS = 1800;
@@ -203,7 +206,7 @@ const saveSubjectMemory = async (file, state, lastPage) => {
 
 const runLocalNlp = (pages) => new Promise((resolve, reject) => {
   const script = path.join(__dirname, '../nlp/gliner2_mentions.py');
-  const child = spawn(NLP_PYTHON, [script, '--model', NLP_MODEL, '--threshold', String(NLP_THRESHOLD)], { stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(NLP_PYTHON, [script, '--model', NLP_MODEL, '--threshold', String(NLP_THRESHOLD), ...(V3 ? ['--noun-ledger'] : [])], { stdio: ['pipe', 'pipe', 'pipe'] });
   let stdout = '';
   let stderr = '';
   child.stdout.setEncoding('utf8');
@@ -442,6 +445,17 @@ const main = async () => {
   const firstPage = targetNumbers[0];
   const lastPage = targetNumbers.at(-1);
   const contextPages = allPages.filter((page) => page.page >= firstPage - 1 && page.page <= lastPage + 1);
+  let nlpContextPages = contextPages;
+  let payloadPages = allPages;
+  let layout = [];
+  if (V3) {
+    if (!PDF_PATH || !(await fs.stat(PDF_PATH).then(() => true).catch(() => false))) throw new Error('incomplete_layout: V3 requires --pdf pointing to the source PDF');
+    const masked = maskPdfFurniture({ pdfPath: PDF_PATH, pages: contextPages });
+    nlpContextPages = masked.pages;
+    layout = masked.layout;
+    const maskedByPage = new Map(masked.pages.map((page) => [page.page, page]));
+    payloadPages = allPages.map((page) => maskedByPage.get(page.page) ?? page);
+  }
   const sourceSha = sha256(targetPages.map((page) => `${page.page}\u001f${page.text}`).join('\u001e'));
   const config = { primary_model: PRIMARY_MODEL, audit_model: AUDIT_MODEL, quality_model: QUALITY_MODEL, nlp_model: NLP_MODEL, nlp_threshold: NLP_THRESHOLD, prompt_version: HISTORICAL_V2_PROMPT_VERSION, subject_memory: V3 ? 'stateful-v3' : null };
   const runKey = sha256(JSON.stringify({ source_id: SOURCE_ID, pages: targetNumbers, source_sha: sourceSha, config }));
@@ -454,8 +468,10 @@ const main = async () => {
     }
   }
 
-  console.log(`Local NLP: ${contextPages.length} pages including boundary context.`);
-  const nlp = await runLocalNlp(contextPages);
+  console.log(`Local NLP: ${nlpContextPages.length} pages including boundary context.`);
+  const nlp = await runLocalNlp(nlpContextPages);
+  const nounPhrases = V3 ? nlp.noun_phrases : [];
+  if (V3 && !Array.isArray(nounPhrases)) throw new Error('V3 requires the local noun-phrase ledger; local NLP returned none');
   const indexedMentions = buildSubjectEntityIndex({ sourceId: SOURCE_ID, mentions: assignMentionIds(SOURCE_ID, nlp.mentions ?? []) });
   const mentions = indexedMentions.mentions;
   const targetReadingPages = (nlp.reading_pages ?? []).filter((page) => targetSet.has(page.page));
@@ -467,7 +483,7 @@ const main = async () => {
   const subjectState = V3 ? createSubjectState({ sourceId: SOURCE_ID, entities: indexedMentions.entities, aliasIndex: indexedMentions.aliasIndex, persisted: persistedSubjectMemory }) : null;
   const subjectTransitions = [];
   const wireIds = createWireIds(clauses, mentions);
-  const pagePayloads = targetNumbers.map((page) => pagePayload({ page, clauses, mentionById, mentions, allPages }));
+  const pagePayloads = targetNumbers.map((page) => pagePayload({ page, clauses, mentionById, mentions, allPages: payloadPages }));
   const pagePayloadByPage = new Map(pagePayloads.map((payload) => [payload.page_ref, payload]));
   const boundaryContinuationReferences = pagePayloads.flatMap((payload) => {
     const firstClause = payload.clauses[0];
@@ -492,7 +508,9 @@ const main = async () => {
   const qualityReserve = estimatedCeiling({ requests: [`${QUALITY_PROMPT}\n${JSON.stringify(qualityReservePayload)}`], modelPricing: pricing.get(QUALITY_MODEL), maxOutputTokens: qualityTokenLimit() }).usd;
   console.log(`Routine ceiling ${formatUsd(primaryCeiling + auditCeiling)}; quality reserve ${formatUsd(qualityReserve)}; hard cap ${formatUsd(MAX_COST_USD)}.`);
   if (primaryCeiling + auditCeiling > MAX_COST_USD) throw new Error(`Routine conservative ceiling ${formatUsd(primaryCeiling + auditCeiling)} exceeds hard cap ${formatUsd(MAX_COST_USD)}`);
+  const normalizedBodySha = V3 ? sha256(payloadPages.filter((page) => targetSet.has(page.page)).map((page) => `${page.page}${page.text}`).join('')) : null;
 
+  const reserveFits = primaryCeiling + auditCeiling + qualityReserve <= MAX_COST_USD;
   const baseRecord = {
     run_id: crypto.randomUUID(),
     run_key: runKey,
@@ -505,12 +523,33 @@ const main = async () => {
     publication_status: 'private',
     mentions,
     entity_aliases: V3 ? [...indexedMentions.entities.values()].map((entity) => ({ ...entity, aliases: [...entity.aliases], roles: [...entity.roles] })) : undefined,
+    layout: V3 ? { pdf_path: PDF_PATH, pages: layout } : undefined,
+    subject_memory_cold_start: V3 ? persistedSubjectMemory == null : undefined,
+    subject_state_loaded_last_page: V3 ? persistedSubjectMemory?.last_page ?? null : undefined,
+    budget: V3 ? {
+      routine_ceiling_usd: primaryCeiling + auditCeiling,
+      quality_reserve_usd: qualityReserve,
+      hard_cap_usd: MAX_COST_USD,
+      reserve_fits: reserveFits,
+    } : undefined,
   };
 
   if (PREFLIGHT_ONLY) {
     await appendJsonl(COVERAGE_OUTPUT, { ...baseRecord, status: 'preflight', clauses });
     await appendJsonl(ITEM_OUTPUT, { ...baseRecord, status: 'preflight', items: [], usage: aggregateUsage([]) });
+    if (V3) await appendJsonl(LAYOUT_OUTPUT, { ...baseRecord, status: 'preflight', layout });
+    if (V3 && !reserveFits) console.warn(`Preflight warning: quality reserve ${formatUsd(qualityReserve)} does not fit the hard cap; a paid run would stop as incomplete_budget.`);
     console.log('Preflight complete. Local ledger stored; no paid calls made.');
+    return;
+  }
+
+  // The whole batch must fund the quality reserve before any paid call. A
+  // reserve that cannot fit stops the run; quality is never downgraded.
+  if (V3 && !reserveFits) {
+    const reason = `Quality reserve ${formatUsd(qualityReserve)} cannot fit: routine ${formatUsd(primaryCeiling + auditCeiling)} + reserve exceeds hard cap ${formatUsd(MAX_COST_USD)}`;
+    await appendJsonl(ITEM_OUTPUT, { ...baseRecord, status: 'incomplete_budget', failure_reason: reason, items: [], usage: aggregateUsage([]) });
+    console.error(`incomplete_budget: ${reason}`);
+    process.exitCode = 1;
     return;
   }
   if (!getOpenRouterApiKey()) throw new Error('OPENROUTER_API_KEY is required after local preflight');
@@ -519,10 +558,20 @@ const main = async () => {
   const cache = new Map(cachedRows.filter((row) => row?.cache_key && row?.payload).map((row) => [row.cache_key, row]));
   const calls = [];
   let spent = 0;
-  const callProtocol = async ({ operation, model, system, payload, maxTokens, expectedClauseIds = [], expectedVerdictIds = [] }) => {
+  // Routine calls may not eat into the quality reserve; only quality
+  // adjudication and its reflection verification can spend it.
+  const budgetCapFor = (operation) => V3 && !/historical\.v2\.(?:quality|reflection)/u.test(operation)
+    ? MAX_COST_USD - qualityReserve
+    : MAX_COST_USD;
+  const callProtocol = async ({ operation, model, system, payload, maxTokens, expectedClauseIds = [], expectedVerdictIds = [], stateHash = null }) => {
     const requestText = `${system}\n${JSON.stringify(payload)}`;
     const promptVersion = operation === 'historical.v2.primary' ? PRIMARY_CACHE_VERSION : HISTORICAL_V2_PROMPT_VERSION;
-    const cacheKey = sha256(JSON.stringify({ operation, model, prompt_version: promptVersion, request: requestText }));
+    // V3 cache keys bind the normalized body, incoming subject state, prompt/
+    // schema version, model, and output limit: a changed prior-page subject
+    // state invalidates the next page's cache entry.
+    const cacheKey = sha256(JSON.stringify(V3
+      ? { operation, model, prompt_version: promptVersion, request: requestText, max_tokens: maxTokens, body_sha: normalizedBodySha, state_hash: stateHash }
+      : { operation, model, prompt_version: promptVersion, request: requestText }));
     const cached = cache.get(cacheKey);
     if (cached) {
       validateProtocol({ response: cached.payload, expectedClauseIds, expectedVerdictIds });
@@ -530,7 +579,8 @@ const main = async () => {
       return cached.payload;
     }
     const ceiling = estimatedCeiling({ requests: [requestText], modelPricing: pricing.get(model), maxOutputTokens: maxTokens }).usd;
-    if (spent + ceiling > MAX_COST_USD) throw new BudgetExceeded(`${operation} ceiling ${formatUsd(ceiling)} exceeds remaining ${formatUsd(MAX_COST_USD - spent)}`);
+    const budgetCap = budgetCapFor(operation);
+    if (spent + ceiling > budgetCap) throw new BudgetExceeded(`${operation} ceiling ${formatUsd(ceiling)} exceeds remaining ${formatUsd(budgetCap - spent)}`);
     let completion;
     let parsed;
     const attemptCalls = [];
@@ -554,7 +604,7 @@ const main = async () => {
       }
       catch (error) {
         if (attempt === 1) throw new Error(`${operation} returned incomplete line protocol twice: ${error.message}`);
-        if (spent + ceiling > MAX_COST_USD) throw new BudgetExceeded(`${operation} protocol retry exceeds remaining budget`);
+        if (spent + ceiling > budgetCap) throw new BudgetExceeded(`${operation} protocol retry exceeds remaining budget`);
       }
     }
     const row = { cache_key: cacheKey, operation, model, prompt_version: promptVersion, payload: parsed, usage: aggregateUsage(attemptCalls), created_at: new Date().toISOString() };
@@ -594,6 +644,7 @@ const main = async () => {
   let reflectedMissing = [];
   let coverageRows = [];
   let referenceRows = [...boundaryContinuationReferences];
+  const ambiguousReferences = [];
   const auditVerdicts = new Map();
   const qualityVerdicts = new Map();
   const reflectionVerdicts = new Map();
@@ -601,15 +652,28 @@ const main = async () => {
 
   try {
     for (const payload of pagePayloads) {
+      // Incoming state hash, taken before this page mutates the memory, so a
+      // changed prior-page subject state invalidates this page's cache entry.
+      const incomingStateHash = V3 ? sha256(JSON.stringify(serializeSubjectState(subjectState, payload.page_ref - 1))) : null;
       const currentSubjectContext = V3 ? subjectContext(subjectState) : [];
-      const deterministicSubjects = V3 ? resolveSubjectReferences({ state: subjectState, clauses: payload.clauses, mentionById }) : { references: [], transitions: [] };
+      const deterministicSubjects = V3
+        ? resolveSubjectReferences({ state: subjectState, clauses: payload.clauses, mentionById, nounPhrases })
+        : { references: [], transitions: [], ambiguities: [], ledgerMentions: [] };
       subjectTransitions.push(...deterministicSubjects.transitions);
+      ambiguousReferences.push(...(deterministicSubjects.ambiguities ?? []));
+      for (const ledgerMention of deterministicSubjects.ledgerMentions ?? []) {
+        if (!mentionById.has(ledgerMention.mention_id)) {
+          mentionById.set(ledgerMention.mention_id, ledgerMention);
+          mentions.push(ledgerMention);
+        }
+      }
       const deterministicReferenceKeys = new Set(deterministicSubjects.references.map((reference) => `${reference.clause_id}\u001f${String(reference.surface).toLowerCase()}`));
       referenceRows.push(...deterministicSubjects.references);
       const expectedClauseIds = payload.clauses.map((clause) => clause.clause_id);
       const response = await callProtocol({
         operation: 'historical.v2.primary', model: PRIMARY_MODEL, system: PRIMARY_PROMPT,
         payload: wirePage({ ...payload, subject_context: currentSubjectContext }, wireIds), maxTokens: primaryTokenLimit(payload.clauses.length), expectedClauseIds,
+        stateHash: incomingStateHash,
       });
       const deterministicContinuationClauses = new Set(boundaryContinuationReferences.map((reference) => reference.clause_id));
       referenceRows.push(...response.references.filter((reference) => {
@@ -720,12 +784,27 @@ const main = async () => {
     const reason = referencesResolved ? judgment?.reason ?? 'Independent agreement not completed.' : 'Pronoun or page-boundary antecedent was not linked to an entity mention.';
     const reference = item.clause_ids.flatMap((id) => referenceRows.filter((row) => row.clause_id === id)).find((row) => row.resolved_entity_id);
     const transition = item.clause_ids.map((id) => subjectTransitions.find((row) => row.clause_id === id)).find(Boolean);
+    let v3Fields = {};
+    if (V3) {
+      const subjectEntityId = reference?.resolved_entity_id ?? transition?.after_focus?.active ?? null;
+      const resolutionSources = { deterministic_subject_memory: 'deterministic_subject_memory', deterministic_boundary_join: 'deterministic_subject_memory', primary_coreference: 'model' };
+      const literalMention = item.clause_ids
+        .flatMap((id) => clauseById.get(id)?.mention_ids ?? [])
+        .map((id) => mentionById.get(id))
+        .find((mention) => mention && mention.subject_entity_id === subjectEntityId);
+      v3Fields = {
+        subject_entity_id: subjectEntityId,
+        subject_resolution_source: !subjectEntityId ? null
+          : reference ? resolutionSources[reference.resolution_source] ?? 'model'
+          : 'deterministic_subject_memory',
+        discourse_chain: [...new Set([reference?.antecedent_mention_id, literalMention?.mention_id, subjectEntityId].filter(Boolean))],
+        literal_subject: reference?.surface ?? literalMention?.text ?? null,
+        subject_ambiguous: item.clause_ids.some((id) => ambiguousReferences.some((row) => row.clause_id === id)),
+      };
+    }
     return {
       ...item,
-      ...(V3 ? {
-        subject_entity_id: reference?.resolved_entity_id ?? transition?.after_focus?.active ?? null,
-        subject_resolution_source: reference?.resolution_source ?? (transition?.after_focus?.active ? 'deterministic_subject_focus' : null),
-      } : {}),
+      ...v3Fields,
       verification: { verdict, reason },
     };
   });
@@ -739,11 +818,20 @@ const main = async () => {
     failureReason = `Average cost ${formatUsd(averageCost)} exceeds $0.0020/page`;
   }
 
+  // One compact block-level adjudication request per page instead of one
+  // model question per ambiguous reference.
+  const adjudicationRequests = [...new Set(ambiguousReferences.map((row) => row.page_ref))].sort((a, b) => a - b).map((page) => ({
+    page_ref: page,
+    requests: ambiguousReferences.filter((row) => row.page_ref === page)
+      .map(({ clause_id, surface, expected, reference_kind, candidate_entity_ids }) => ({ clause_id, surface, expected, reference_kind, candidate_entity_ids })),
+  }));
   const completedAt = new Date().toISOString();
   await appendJsonl(ITEM_OUTPUT, {
     ...baseRecord, status, failure_reason: failureReason, extracted_at: completedAt,
     items: allItems, supported_item_count: supportedItems.length, usage,
     resolved_references: referenceRows,
+    ambiguous_references: V3 ? ambiguousReferences : undefined,
+    adjudication_requests: V3 ? adjudicationRequests : undefined,
     average_cost_usd_per_page: averageCost,
     quality_route_pages: [...qualityPages].sort((a, b) => a - b),
     quality_route_rate: qualityPages.size / targetPages.length,
@@ -759,10 +847,13 @@ const main = async () => {
     },
   });
   if (V3) {
+    await appendJsonl(LAYOUT_OUTPUT, { ...baseRecord, status, extracted_at: completedAt, layout });
     await appendJsonl(SUBJECT_TRANSITIONS_OUTPUT, {
       ...baseRecord, status, extracted_at: completedAt,
       transitions: subjectTransitions,
       resolved_references: referenceRows.filter((reference) => reference.resolution_source === 'deterministic_subject_memory'),
+      ambiguous_references: ambiguousReferences,
+      adjudication_requests: adjudicationRequests,
     });
     await saveSubjectMemory(SUBJECT_MEMORY_OUTPUT, subjectState, lastPage);
   }
