@@ -184,3 +184,17 @@ test('rejects pages processed out of ascending order', () => {
     clause('c1', 4, 0, 'Earlier page text.', []),
   ] }), /ascending|advanced/iu);
 });
+
+test('definite phrase naming a known alias resolves exactly, not by head class', () => {
+  const raw = [mention('h1', 1, 0, 'Orczy House', 'building'), mention('h2', 1, 30, 'Heusler House', 'building')];
+  const index = buildSubjectEntityIndex({ sourceId: 'book', mentions: raw });
+  const byId = new Map(index.mentions.map((row) => [row.mention_id, row]));
+  const state = createSubjectState({ sourceId: 'book', ...index });
+  const result = resolveSubjectReferences({ state, mentionById: byId, clauses: [
+    clause('c1', 1, 0, 'The Orczy House and the Heusler House stood in Pest.', ['h1', 'h2']),
+    clause('c2', 2, 0, 'The Orczy House hosted a prayer room.', []),
+  ], nounPhrases: [phrase(2, 0, 'The Orczy House', 'house', { kind: 'definite', named: true })] });
+  const reference = result.references.find((row) => row.clause_id === 'c2');
+  assert.equal(reference.resolved_entity_id, byId.get('h1').subject_entity_id);
+  assert.equal(result.ambiguities.length, 0);
+});
