@@ -1,0 +1,50 @@
+{
+  "description": "Seeded, well-documented Budapest street renames relevant to the historical corpus. Facts only (names and periods); extend with human-verified Hungaricana lookups via cli/hungaricana-lookup.js --confirm.",
+  "renames": [
+    { "modern": "Andrássy út", "historical": [
+      { "name": "Sugárút", "from": 1872, "to": 1885 },
+      { "name": "Sugár út", "from": 1872, "to": 1885 },
+      { "name": "Andrássy út", "from": 1885, "to": 1950 },
+      { "name": "Sztálin út", "from": 1950, "to": 1956 },
+      { "name": "Magyar Ifjúság útja", "from": 1956, "to": 1957 },
+      { "name": "Népköztársaság útja", "from": 1957, "to": 1990 }
+    ] },
+    { "modern": "Rumbach Sebestyén utca", "historical": [
+      { "name": "Rombach utca", "from": null, "to": 1900 },
+      { "name": "Rumbach utca", "from": null, "to": null }
+    ] },
+    { "modern": "Károly körút", "historical": [
+      { "name": "Károly király út", "from": null, "to": null },
+      { "name": "Tanács körút", "from": 1950, "to": 1990 }
+    ] },
+    { "modern": "Erzsébet körút", "historical": [
+      { "name": "Lenin körút", "from": 1950, "to": 1990 }
+    ] },
+    { "modern": "Teréz körút", "historical": [
+      { "name": "Lenin körút", "from": 1950, "to": 1990 }
+    ] },
+    { "modern": "Dohány utca", "historical": [] },
+    { "modern": "Király utca", "historical": [
+      { "name": "Majakovszkij utca", "from": 1950, "to": 1990 }
+    ] },
+    { "modern": "Wesselényi utca", "historical": [] },
+    { "modern": "Kazinczy utca", "historical": [] },
+    { "modern": "Síp utca", "historical": [] },
+    { "modern": "Bécsi út", "historical": [] },
+    { "modern": "Laborc utca", "historical": [] },
+    { "modern": "Pálvölgyi út", "historical": [
+      { "name": "Palvolgyi ut", "from": null, "to": null }
+    ] },
+    { "modern": "Szépvölgyi út", "historical": [
+      { "name": "Szépvölgyi ut", "from": null, "to": null }
+    ] },
+    { "modern": "Váci utca", "historical": [] },
+    { "modern": "Váci út", "historical": [] },
+    { "modern": "Dob utca", "historical": [] },
+    { "modern": "Nagymező utca", "historical": [] },
+    { "modern": "Bajcsy-Zsilinszky út", "historical": [
+      { "name": "Váczi körút", "from": null, "to": 1937 },
+      { "name": "Vilmos császár út", "from": 1912, "to": 1937 }
+    ] }
+  ]
+}

@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import { createChatCompletion, getOpenRouterApiKey } from '../lib/openRouterClient.js';
 import { estimateExtractionCeiling, fetchOpenRouterCatalog, formatUsd, pricingForModels } from '../lib/openRouterCostGuard.js';
 import { maskPdfFurniture } from '../lib/historicalPdfLayout.js';
+import { buildStreetIndex, extractAddressReferences } from '../lib/historicalAddresses.js';
 import {
   buildSubjectEntityIndex,
   createSubjectState,
@@ -81,6 +82,8 @@ const CACHE_OUTPUT = path.join(OUTPUT_DIR, `${SOURCE_ID}.historical-${V3 ? 'v3' 
 const SUBJECT_TRANSITIONS_OUTPUT = path.join(OUTPUT_DIR, `${SOURCE_ID}.historical-subject-transitions-v3.jsonl`);
 const SUBJECT_MEMORY_OUTPUT = path.resolve(option('--state-file', path.join(OUTPUT_DIR, `${SOURCE_ID}.historical-subject-memory-v3.json`)));
 const LAYOUT_OUTPUT = path.join(OUTPUT_DIR, `${SOURCE_ID}.historical-layout-v3.jsonl`);
+const ADDRESS_OUTPUT = path.join(OUTPUT_DIR, `${SOURCE_ID}.historical-addresses-v3.jsonl`);
+const GAZETTEER_PATH = option('--gazetteer', path.join(__dirname, '../../ingest/gazetteer/budapest-streets.json'));
 
 const PRIMARY_MAX_TOKENS = 2500;
 const AUDIT_MAX_TOKENS = 1800;
@@ -504,6 +507,25 @@ const main = async () => {
   if (!clauses.length) throw new Error('Local clause ledger is empty');
   const mentionById = new Map(mentions.map((mention) => [mention.mention_id, mention]));
   const clauseById = new Map(clauses.map((clause) => [clause.clause_id, clause]));
+  // Street/address fact layer: deterministic, local, gazetteer-matched.
+  let addressReferences = [];
+  let gazetteerSources = [];
+  if (V3) {
+    try {
+      const gazetteer = JSON.parse(await fs.readFile(GAZETTEER_PATH, 'utf8'));
+      const streetIndex = buildStreetIndex(gazetteer);
+      gazetteerSources = gazetteer.sources ?? [];
+      addressReferences = targetReadingPages.flatMap((page) => extractAddressReferences(page.text, streetIndex).map((row) => ({
+        ...row,
+        page_ref: page.page,
+        start_offset: page.raw_starts[row.reading_start] ?? null,
+        end_offset: page.raw_ends[Math.min(row.reading_end, page.raw_ends.length) - 1] ?? null,
+      })));
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+      console.warn(`Gazetteer missing at ${GAZETTEER_PATH}; address layer skipped. Run: node cli/build-budapest-gazetteer.js`);
+    }
+  }
   const persistedSubjectMemory = V3 ? await readSubjectMemory(SUBJECT_MEMORY_OUTPUT, SOURCE_ID, firstPage - 1) : null;
   const subjectState = V3 ? createSubjectState({ sourceId: SOURCE_ID, entities: indexedMentions.entities, aliasIndex: indexedMentions.aliasIndex, persisted: persistedSubjectMemory }) : null;
   const subjectTransitions = [];
@@ -564,6 +586,7 @@ const main = async () => {
     await appendJsonl(COVERAGE_OUTPUT, { ...baseRecord, status: 'preflight', clauses });
     await appendJsonl(ITEM_OUTPUT, { ...baseRecord, status: 'preflight', items: [], usage: aggregateUsage([]) });
     if (V3) await appendJsonl(LAYOUT_OUTPUT, { ...baseRecord, status: 'preflight', layout });
+    if (V3 && addressReferences.length) await appendJsonl(ADDRESS_OUTPUT, { ...baseRecord, status: 'preflight', gazetteer_sources: gazetteerSources, address_references: addressReferences });
     if (V3 && !reserveFits) console.warn(`Preflight warning: quality reserve ${formatUsd(qualityReserve)} does not fit the hard cap; a paid run would stop as incomplete_budget.`);
     console.log('Preflight complete. Local ledger stored; no paid calls made.');
     return;
@@ -895,6 +918,7 @@ const main = async () => {
   });
   if (V3) {
     await appendJsonl(LAYOUT_OUTPUT, { ...baseRecord, status, extracted_at: completedAt, layout });
+    if (addressReferences.length) await appendJsonl(ADDRESS_OUTPUT, { ...baseRecord, status, extracted_at: completedAt, gazetteer_sources: gazetteerSources, address_references: addressReferences });
     await appendJsonl(SUBJECT_TRANSITIONS_OUTPUT, {
       ...baseRecord, status, extracted_at: completedAt,
       transitions: subjectTransitions,
