@@ -23,6 +23,7 @@
     "extract:historical:v3": "node cli/extract-historical-book-v2.js --v3",
     "build:historical:v3-browser": "node cli/build-langextract-browser.mjs --v3",
     "eval:historical:v2": "node cli/eval-historical-items-v2.js",
+    "eval:historical:v3": "node cli/eval-historical-items-v2.js --v3",
     "extract:historical:langextract:pilot": ".venv-historical-nlp/bin/python cli/pilot-langextract-historical.py",
     "revalidate:historical-events": "node cli/extract-historical-book-nlp.js --revalidate-only",
     "extract:historical-events:pilot": "node cli/pilot-historical-events.js",
