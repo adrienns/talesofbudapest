@@ -162,6 +162,43 @@ time:
 | 2 | `deepseek/deepseek-v4-flash` | $0.077 | $0.154 | Cheapest paid rung on both dimensions; gets automatic prompt caching (§5) |
 | 3 | `google/gemini-2.5-flash-lite` | $0.10 | $0.40 | Last-resort paid fallback |
 
+### Historical Extraction V3 — a fixed trio, not a ladder
+
+V3 does not escalate on failure; it runs three fixed roles whose disagreement
+is the quality signal. The configuration is frozen by a bounded A/B on pages
+75/97/140/160/180 (see
+[CLAUDE_HANDOFF_MODEL_COMPARISON_2026-07-16.md](CLAUDE_HANDOFF_MODEL_COMPARISON_2026-07-16.md)):
+
+```sh
+--primary-model deepseek/deepseek-v4-flash --primary-reasoning off \
+--audit-model qwen/qwen3-30b-a3b-instruct-2507 \
+--quality-model google/gemini-2.5-flash
+# and OPENROUTER_TIMEOUT_MS=300000
+```
+
+| Role | Model | Why |
+|---|---|---|
+| primary extractor | `deepseek/deepseek-v4-flash` | Beat Gemini Flash-Lite on supported items *and* cost (140/205 at $0.0029/page vs 134/200 at $0.0034), zero protocol failures |
+| independent audit | `qwen/qwen3-30b-a3b-instruct-2507` | Second opinion that never sees the primary's answers |
+| quality judge | `google/gemini-2.5-flash` | Rules per candidate, with a written reason, only on disagreement |
+
+Hard-won specifics:
+
+- **`--primary-reasoning off` is mandatory.** Reasoning tokens count against
+  `max_tokens` and truncate the TSV protocol mid-item, which silently loses
+  facts. `--reasoning`/`--primary-reasoning`/`--audit-reasoning` map to the
+  OpenRouter `reasoning` parameter (`off` → `{enabled:false}`, otherwise
+  `{effort}`) and join the cache key.
+- **`OPENROUTER_TIMEOUT_MS` overrides the 120s client default.** Reasoning
+  models exceeded it on dense pages and the run died mid-batch.
+- **GPT-OSS-20B is rejected for the audit role**: its endpoint returns 400
+  "Reasoning is mandatory for this endpoint and cannot be disabled" and it
+  truncates even at low effort.
+- Actual measured cost is **$0.003-0.005/page**, so the $0.002/page gate has
+  **not** passed; runs report `failed_cost_gate` honestly. A whole ~500-page
+  book is ≈$2.50, but wall-clock is dominated by local GLiNER reloads, not the
+  API.
+
 `KG_RESTRICTED_EXTRACT_MODEL` env override: when set, it **replaces the
 entire ladder** — the code builds a one-element ladder `[MODEL_OVERRIDE]`,
 so the run becomes exactly one model, one attempt, no escalation. Use this
@@ -194,6 +231,27 @@ break the shared prefix and defeat the cache.
 ($0.01/M vs $0.10/M fresh — 10x) in the live catalog, so the same
 first-message-is-system-prompt ordering benefits that rung too if the ladder
 escalates there.
+
+### Historical-pilot application cache and routing
+
+The LangExtract and discourse-reference pilots also maintain a durable,
+content-addressed JSONL cache. Its key includes the cache/prompt version,
+operation, model, complete request, output limit, reasoning configuration, and
+provider routing. This is separate from provider-side prefix caching: it skips
+an identical API request entirely. `--no-cache` deliberately bypasses it for a
+fresh measurement; the identical Efraim replay cost USD 0.
+
+For the ID-selection resolver, Gemini reasoning is explicitly set to `none`.
+Reasoning tokens are output tokens and were unnecessary for this constrained
+task. Pilot requests also set `provider.sort=price`; the complete page-301
+LangExtract run fell from USD 0.002136 to USD 0.001394 while retaining 41 valid
+items and 100% grounding/schema validity. Provider price and availability can
+change, so stored live usage remains authoritative.
+
+The exhaustive resolver cost USD 0.000306 for 16 page-46 references and USD
+0.001134 for 21 page-301 references. It is batched per page/discourse block,
+not billed per pronoun. The full design and the important always-on cost caveat
+are in [Historical Reference Resolution](HISTORICAL_REFERENCE_RESOLUTION.md).
 
 ---
 
@@ -290,6 +348,12 @@ verification.
   past today — re-check live.
 - Watch for `:free` IDs silently going paid; that's the exact failure mode
   `check-openrouter-models.js`'s WARNING output is built to catch.
+- On any reasoning-capable model used for a strict output protocol, disable
+  reasoning and check `finish_reason === 'length'`. A truncated response is a
+  silent recall loss, not a visible error.
+- Isolate model experiments with `--experiment-id`: it joins the cache key and
+  keeps A/B records out of the default browser view, so a cache hit can never
+  masquerade as fresh evidence for a new model.
 
 ---
 

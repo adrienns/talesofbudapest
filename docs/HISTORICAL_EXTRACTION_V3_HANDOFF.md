@@ -70,6 +70,16 @@ cluster now correctly contains `R. Efraim`, `R. Efraim haKohen`, and
 existing package script passes `lib/` as a Node test path. Use direct test file
 commands until that separate script bug is fixed.
 
+## Status — SUPERSEDED
+
+> **This document is the architecture reference. For current state, read
+> [HISTORICAL_EXTRACTION_V3_HANDOFF_2026-07-17.md](HISTORICAL_EXTRACTION_V3_HANDOFF_2026-07-17.md)
+> first.** The status below is kept as the record of 2026-07-16 and is now
+> partly out of date: the model configuration has since been frozen
+> (DeepSeek V4 Flash primary, reasoning off), verification recovery fixes
+> raised supported items from 71% to 91-97% on the sampled pages, and an
+> address/geography layer and OCR lexicon were added.
+
 ## Status 2026-07-16 (branch `historical-extraction-v3`)
 
 Committed on the branch (five commits from the baseline through eval gates):
