@@ -30,6 +30,7 @@
     "extract:mek": "npm run extract:mek --workspace=talesofbudapest-backend --",
     "extract:mek:deep": "npm run extract:mek:deep --workspace=talesofbudapest-backend --",
     "extract:restricted:deep": "npm run extract:restricted:deep --workspace=talesofbudapest-backend --",
+    "experiment:atomic-claims": "npm run experiment:atomic-claims --workspace=talesofbudapest-backend --",
     "load:mek:kg": "npm run load:mek:kg --workspace=talesofbudapest-backend",
     "load:restricted:kg": "npm run load:restricted:kg --workspace=talesofbudapest-backend --",
     "embed:kg": "npm run embed:kg --workspace=talesofbudapest-backend --",

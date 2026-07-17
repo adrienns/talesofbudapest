@@ -15,6 +15,7 @@
     "extract:mek": "node cli/extract-mek.js",
     "extract:mek:deep": "node cli/extract-mek-deep.js",
     "extract:restricted:deep": "node cli/extract-restricted-book.js",
+    "experiment:atomic-claims": "node cli/experiment-atomic-claims.js",
     "load:mek:kg": "node cli/load-mek-kg-supabase.js",
     "load:restricted:kg": "node cli/load-restricted-kg.js",
     "embed:kg": "node cli/embed-kg.js",
