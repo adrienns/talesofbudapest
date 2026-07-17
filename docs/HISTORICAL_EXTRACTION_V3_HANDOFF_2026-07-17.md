@@ -100,6 +100,12 @@ truncate the TSV protocol.
   by head + street + house number, so `synagogue (Táncsics Mihály utca 23)` and
   `(26)` are different buildings. House numbers parse in both Hungarian
   (`Király utca 77`) and English (`26 Táncsics Mihály utca`) order.
+- `npm run export:historical:map` → GeoJSON for the app's own map rendering.
+- `npm run hungaricana:lookup -- --query "..."` — builds targeted Hungaricana
+  search URLs for a **human** and records confirmed facts to a provenance
+  ledger. **It is deliberately not a scraper**: browsing is free, but scans and
+  curated databases carry provider rights and the EU database right. Facts are
+  free; do not bulk-harvest.
 
 ### OCR damage (`lib/historicalOcrLexicon.js`)
 
@@ -126,12 +132,6 @@ Instead, three narrow layers, none of which rewrites the source:
 
 Extend the lexicon only with forms verified in the corpus that are not words in
 their own right.
-- `npm run export:historical:map` → GeoJSON for the app's own map rendering.
-- `npm run hungaricana:lookup -- --query "..."` — builds targeted Hungaricana
-  search URLs for a **human** and records confirmed facts to a provenance
-  ledger. **It is deliberately not a scraper**: browsing is free, but scans and
-  curated databases carry provider rights and the EU database right. Facts are
-  free; do not bulk-harvest.
 
 ### Downstream and review
 
