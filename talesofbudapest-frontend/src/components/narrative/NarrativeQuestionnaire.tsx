@@ -38,6 +38,7 @@ export const NarrativeQuestionnaire = ({
 
   if (!isOpen) return null
 
+  const isSetupStep = questionnaire.step === 'setup'
   const curatedTours = CURATED_STARTERS.map((starter) => (
     starter.kind === 'fixed'
       ? {
@@ -61,7 +62,14 @@ export const NarrativeQuestionnaire = ({
   }
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={t('title')} className="fixed inset-0 z-50 flex flex-col bg-[var(--color-ai-chat-bg)] animate-ai-chat-enter motion-reduce:animate-none">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={t('title')}
+      className={`fixed inset-0 z-50 flex flex-col animate-ai-chat-enter motion-reduce:animate-none ${
+        isSetupStep ? 'bg-[#cad9db]' : 'bg-[var(--color-ai-chat-bg)]'
+      }`}
+    >
       <QuestionnaireStepHeader
         step={questionnaire.step}
         closeLabel={t('close')}

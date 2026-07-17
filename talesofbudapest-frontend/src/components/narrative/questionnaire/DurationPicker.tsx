@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import { TOUR_DURATIONS, formatMinutesShort } from '@/constants/questionnaire'
 
 type DurationPickerProps = {
@@ -7,13 +8,14 @@ type DurationPickerProps = {
   onChange: (minutes: number) => void
   label: string
   hint: string
+  headerAction?: ReactNode
 }
 
-export const DurationPicker = ({ value, onChange, label, hint }: DurationPickerProps) => (
+export const DurationPicker = ({ value, onChange, label, hint, headerAction }: DurationPickerProps) => (
   <section>
-    <div className="mb-3 flex items-center justify-between">
-      <h3 className="font-bold text-on-surface">{label}</h3>
-      <span className="q-duration-chip rounded-full px-3 py-1 text-sm font-bold">{formatMinutesShort(value)}</span>
+    <div className="mb-3 flex items-center justify-between gap-4">
+      <h3 className="min-w-0 font-bold text-on-surface">{label}</h3>
+      {headerAction}
     </div>
     <input
       type="range"

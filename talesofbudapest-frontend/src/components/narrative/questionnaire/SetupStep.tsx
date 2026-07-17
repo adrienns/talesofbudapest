@@ -19,7 +19,7 @@ type SetupStepProps = {
   onSelectCuratedTour: (slug: string) => void
   onSelectStyle: (styleId: string) => void
   onSetMinutes: (minutes: number) => void
-  onToggleNearMe: () => void
+  onToggleNearMe: () => Promise<void>
   onNext: () => void
 }
 
@@ -53,7 +53,7 @@ export const SetupStep = ({
       <section className="flex-1 bg-[var(--color-ai-chat-bg)] px-5 pb-8 pt-1">
         <div className="mx-auto flex max-w-md flex-col gap-7">
           <div className="text-center">
-            <h2 className="text-2xl font-bold text-on-surface">{t('styleQuestion')}</h2>
+            <h2 className="text-xl font-extrabold text-on-surface">{t('styleQuestion')}</h2>
             <p className="mt-1 text-sm text-on-surface/55">{t('styleHelper')}</p>
           </div>
           <div className="grid grid-cols-3 gap-3">
@@ -75,13 +75,15 @@ export const SetupStep = ({
             onChange={onSetMinutes}
             label={t('durationQuestion')}
             hint={t('durationHint', { minutes: formatMinutesShort(minutes) })}
-          />
-          <LocationToggle
-            nearMe={nearMe}
-            locationStatus={locationStatus}
-            onToggle={onToggleNearMe}
-            label={t('startNearMe')}
-            requestingLabel={t('locationRequesting')}
+            headerAction={(
+              <LocationToggle
+                nearMe={nearMe}
+                locationStatus={locationStatus}
+                onToggle={onToggleNearMe}
+                label={t('startNearMe')}
+                requestingLabel={t('locationRequesting')}
+              />
+            )}
           />
           <button type="button" disabled={!canContinue} onClick={onNext} className="q-start-btn rounded-full py-3.5 font-bold text-white disabled:opacity-35">
             {t('continue')}

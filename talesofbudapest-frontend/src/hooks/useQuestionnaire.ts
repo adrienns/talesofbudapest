@@ -94,7 +94,7 @@ export const useQuestionnaire = ({
   }, [isOpen])
 
   useEffect(() => {
-    if (locationStatus !== 'ready') {
+    if (locationStatus === 'denied' || locationStatus === 'unavailable') {
       locationRequestVersion.current += 1
       dispatch({ type: 'set-near-me', nearMe: false })
     }
@@ -108,16 +108,23 @@ export const useQuestionnaire = ({
   const canStart = Boolean(selectedStyle && (state.topicIds.length > 0 || state.intent.trim()))
 
   const toggleNearMe = useCallback(async () => {
-    if (state.nearMe) {
-      locationRequestVersion.current += 1
-      dispatch({ type: 'set-near-me', nearMe: false })
+    const nextNearMe = !state.nearMe
+    const requestVersion = ++locationRequestVersion.current
+
+    dispatch({ type: 'set-near-me', nearMe: nextNearMe })
+    if (!nextNearMe) {
       return
     }
 
-    const requestVersion = ++locationRequestVersion.current
-    const granted = await onRequestLocation()
-    if (requestVersion === locationRequestVersion.current) {
-      dispatch({ type: 'set-near-me', nearMe: granted })
+    try {
+      const granted = await onRequestLocation()
+      if (!granted && requestVersion === locationRequestVersion.current) {
+        dispatch({ type: 'set-near-me', nearMe: false })
+      }
+    } catch {
+      if (requestVersion === locationRequestVersion.current) {
+        dispatch({ type: 'set-near-me', nearMe: false })
+      }
     }
   }, [onRequestLocation, state.nearMe])
 

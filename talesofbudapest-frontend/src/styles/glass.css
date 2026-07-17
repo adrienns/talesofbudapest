@@ -40,14 +40,6 @@
     var(--glass-inset-highlight);
 }
 
-@utility q-duration-chip {
-  background: var(--glass-bg-strong);
-  backdrop-filter: blur(14px) saturate(var(--glass-saturate));
-  -webkit-backdrop-filter: blur(14px) saturate(var(--glass-saturate));
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
-}
-
 @utility scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
