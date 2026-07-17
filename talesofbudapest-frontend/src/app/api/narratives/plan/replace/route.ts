@@ -2,6 +2,14 @@ import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/server/supabaseAdmin'
 import { selectNarrativePool } from '@/lib/server/narrativePool'
 import { NARRATIVE_LANDMARK_SELECT } from '@/lib/server/narrativeLandmarkSelect'
+import {
+  consumeExpensiveRequest,
+  readJsonBody,
+  requestGuardResponse,
+  RequestGuardError,
+} from '@/lib/server/expensiveRequestGuard'
+import { getOrCreateVisitorId } from '@/lib/server/visitorIdentity'
+import { getNarrativeDraft, updateNarrativeDraft } from '@/lib/server/narrativeDraft'
 // @ts-expect-error backend lib is plain JS in sibling workspace
 import { finalizeChapterScripts, planReplacementStop } from '@backend/lib/narrativePipeline.js'
 
@@ -9,27 +17,26 @@ export const maxDuration = 30
 
 export const POST = async (request: Request) => {
   try {
-    const body = await request.json()
-    const userPrompt = body?.draft?.userPrompt?.trim()
-    const context = body?.draft?.context ?? {}
-    const chapters = body?.draft?.chapters
+    const body = await readJsonBody(request, 4_096)
     const replaceIndex = body?.replaceIndex
 
-    if (!userPrompt || !Array.isArray(chapters)) {
-      return NextResponse.json({ error: 'draft with userPrompt and chapters is required' }, { status: 400 })
+    const supabase = getSupabaseAdmin()
+    const visitorId = await getOrCreateVisitorId()
+    const draft = await getNarrativeDraft(supabase, visitorId, body?.draftId)
+    if (!draft) throw new RequestGuardError('Route preview not found or expired', 404)
+    const { userPrompt, context, chapters } = draft.payload
+    if (!Array.isArray(chapters) || chapters.length === 0 || chapters.length > 12) {
+      throw new RequestGuardError('Route preview is invalid', 400)
     }
-
-    if (typeof replaceIndex !== 'number' || !chapters[replaceIndex]) {
+    if (!Number.isInteger(replaceIndex) || !chapters[replaceIndex]) {
       return NextResponse.json({ error: 'replaceIndex must reference an existing chapter' }, { status: 400 })
     }
-
     const usedLandmarkIds = new Set(
       chapters
         .map((chapter: { landmarkId?: string | null }) => chapter.landmarkId)
         .filter((id: string | null | undefined): id is string => Boolean(id)),
     )
-
-    const supabase = getSupabaseAdmin()
+    await consumeExpensiveRequest({ supabase, request, visitorId, action: 'tour_replace' })
     const { data: landmarks, error: landmarksError } = await supabase
       .from('locations')
       .select(NARRATIVE_LANDMARK_SELECT)
@@ -62,13 +69,21 @@ export const POST = async (request: Request) => {
       supabase,
       chapters: [replacement],
       landmarksById,
-      tourTitle: body?.draft?.title ?? '',
+      tourTitle: draft.payload.title,
       userPrompt,
       context,
     })
 
-    return NextResponse.json({ chapter: finalized })
+    const nextChapters = chapters.map((chapter: Record<string, unknown>, index: number) =>
+      index === replaceIndex ? { ...finalized, draftChapterIndex: chapter.draftChapterIndex } : chapter,
+    )
+    await updateNarrativeDraft(supabase, visitorId, draft.id, { ...draft.payload, chapters: nextChapters })
+
+    const { script, ...chapterPreview } = nextChapters[replaceIndex] as Record<string, unknown>
+    return NextResponse.json({ chapter: chapterPreview })
   } catch (error) {
+    const guarded = requestGuardResponse(error)
+    if (guarded) return guarded
     const message = error instanceof Error ? error.message : 'Failed to replace stop'
     return NextResponse.json({ error: message }, { status: 500 })
   }

@@ -17,11 +17,15 @@ const mapChapter = (row) => ({
   landmarkId: row.landmark_id,
 });
 
-export const findNarrativeByPrompt = async (supabase, userPrompt) => {
+export const findNarrativeByPrompt = async (supabase, userPrompt, ownerId) => {
+  if (!ownerId) return null;
+
   const { data: narrative, error: narrativeError } = await supabase
     .from('narratives')
     .select('*')
     .eq('user_prompt', userPrompt)
+    .eq('owner_id', ownerId)
+    .is('curated_slug', null)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -56,7 +60,7 @@ export const findNarrativeByPrompt = async (supabase, userPrompt) => {
   };
 };
 
-export const fetchNarrativeById = async (supabase, id, requestedLocale = null) => {
+export const fetchNarrativeById = async (supabase, id, requestedLocale = null, ownerId = null) => {
   const { data: narrative, error: narrativeError } = await supabase
     .from('narratives')
     .select('*')
@@ -68,6 +72,11 @@ export const fetchNarrativeById = async (supabase, id, requestedLocale = null) =
   }
 
   if (!narrative) {
+    return null;
+  }
+
+  const isCurated = Boolean(narrative.curated_slug);
+  if (!isCurated && (!ownerId || narrative.owner_id !== ownerId)) {
     return null;
   }
 
@@ -97,6 +106,21 @@ export const fetchNarrativeById = async (supabase, id, requestedLocale = null) =
   };
 };
 
+export const findNarrativeByIdempotencyKey = async (supabase, ownerId, idempotencyKey) => {
+  if (!ownerId || !idempotencyKey) return null;
+
+  const { data, error } = await supabase
+    .from('narratives')
+    .select('id')
+    .eq('owner_id', ownerId)
+    .eq('idempotency_key', idempotencyKey)
+    .is('curated_slug', null)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data ? fetchNarrativeById(supabase, data.id, null, ownerId) : null;
+};
+
 export const fetchCuratedNarrative = async (supabase, { slug, version, locale }) => {
   const { data: narrative, error } = await supabase
     .from('narratives')
@@ -111,10 +135,14 @@ export const fetchCuratedNarrative = async (supabase, { slug, version, locale })
   return fetchNarrativeById(supabase, narrative.id, locale);
 };
 
-export const fetchAllNarratives = async (supabase, requestedLocale = null) => {
+export const fetchAllNarratives = async (supabase, requestedLocale = null, ownerId = null) => {
+  if (!ownerId) return [];
+
   const { data: narratives, error } = await supabase
     .from('narratives')
     .select('id, title, user_prompt, context, locale, created_at, narrative_chapters(id)')
+    .eq('owner_id', ownerId)
+    .is('curated_slug', null)
     .order('created_at', { ascending: false });
 
   if (error) {

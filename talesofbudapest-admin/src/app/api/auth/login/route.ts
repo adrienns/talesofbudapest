@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { verifyAdminPassword } from '@/lib/password'
 import { ADMIN_COOKIE_NAME, adminCookieOptions, createAdminSession } from '@/lib/session'
+import { trustedClientIp } from '@/lib/trustedClientIp'
 
 const attempts = new Map<string, { count: number; resetAt: number }>()
 const WINDOW_MS = 15 * 60 * 1000
 const MAX_ATTEMPTS = 8
 
 function clientKey(request: NextRequest): string {
-  return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'local'
+  return trustedClientIp(request)
 }
 
 function sameOrigin(request: NextRequest): boolean {

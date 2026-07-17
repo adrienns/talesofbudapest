@@ -14,6 +14,14 @@ const priceNumber = (value, label, modelId) => {
   return number;
 };
 
+const requestPriceNumber = (value, modelId) => {
+  // OpenRouter's current catalog omits `pricing.request` for models that have no separate
+  // per-request fee. Prompt and completion prices remain mandatory, so token spend is still
+  // fully reserved. If OpenRouter supplies a request price, it must still be valid.
+  if (value === undefined || value === null || value === '') return 0;
+  return priceNumber(value, 'request', modelId);
+};
+
 export const validateExtractionLimit = ({ limitRaw, confirmFullBook }) => {
   if (limitRaw === null) {
     if (!confirmFullBook) {
@@ -41,7 +49,7 @@ export const pricingForModels = (modelIds, catalog) => modelIds.map((modelId) =>
     modelId,
     prompt: priceNumber(model.pricing?.prompt, 'prompt', modelId),
     completion: priceNumber(model.pricing?.completion, 'completion', modelId),
-    request: priceNumber(model.pricing?.request, 'request', modelId),
+    request: requestPriceNumber(model.pricing?.request, modelId),
   };
   if (modelId.endsWith(':free') && (pricing.prompt !== 0 || pricing.completion !== 0 || pricing.request !== 0)) {
     throw new Error(`Refusing extraction: ${modelId} is no longer free in the live OpenRouter catalog`);

@@ -29,20 +29,24 @@ export const GET = async (request: Request) => {
       : DEFAULT_LOCALE
     const showAll = searchParams.get('showAll') === 'true'
 
-    if (!bbox) {
-      return NextResponse.json({ error: 'bbox query param required (south,west,north,east)' }, { status: 400 })
-    }
-
     const supabase = getSupabaseRead()
-    const { data, error } = await supabase
+    let query = supabase
       .from('locations')
       .select(MAP_PIN_SELECT)
-      .gte('latitude', bbox.south)
-      .lte('latitude', bbox.north)
-      .gte('longitude', bbox.west)
-      .lte('longitude', bbox.east)
       .order('importance_score', { ascending: false, nullsFirst: false })
-      .limit(500)
+
+    if (bbox) {
+      query = query
+        .gte('latitude', bbox.south)
+        .lte('latitude', bbox.north)
+        .gte('longitude', bbox.west)
+        .lte('longitude', bbox.east)
+        .limit(500)
+    } else {
+      query = query.order('name').limit(2_500)
+    }
+
+    const { data, error } = await query
 
     if (error) {
       throw new Error(error.message)

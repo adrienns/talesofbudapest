@@ -19,7 +19,7 @@ flowchart LR
   DB --> PGData[infra/data/postgres]
 ```
 
-## Quick start
+## Ready-Made Tours
 
 ```bash
 node infra/scripts/generate-keys.mjs
@@ -95,6 +95,8 @@ These directories survive `docker compose down`. Gitignored.
 ## Nginx (production)
 
 `nginx/supabase.conf` — reverse proxy template for TLS termination on Oracle Cloud. Proxies to Kong on port 8000.
+
+`nginx/app.conf` — reverse proxy template for the Next.js app. Keep port 3000 private and use this proxy (or an equivalent) in production: it overwrites `X-Tales-Client-IP`, the only client-IP header accepted by application rate limiters. Do not forward caller-supplied `X-Forwarded-For` or `X-Real-IP` values.
 
 ## Environment template
 

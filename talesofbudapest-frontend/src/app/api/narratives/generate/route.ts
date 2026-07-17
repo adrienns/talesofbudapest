@@ -1,97 +1,115 @@
-import { NextResponse } from 'next/server'
+import { createHash } from 'node:crypto'
+import { after, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/server/supabaseAdmin'
-import { selectNarrativePool } from '@/lib/server/narrativePool'
-import { NARRATIVE_LANDMARK_SELECT } from '@/lib/server/narrativeLandmarkSelect'
+import { getOrCreateVisitorId } from '@/lib/server/visitorIdentity'
+import { processNarrativeGenerationJob } from '@/lib/server/narrativeGenerationJob'
+import {
+  consumeExpensiveRequest,
+  readJsonBody,
+  requestGuardResponse,
+  RequestGuardError,
+} from '@/lib/server/expensiveRequestGuard'
+import { getNarrativeDraft } from '@/lib/server/narrativeDraft'
+import { normalizeNarrativeRequest } from '@/lib/server/narrativeRequest'
 // @ts-expect-error backend lib is plain JS in sibling workspace
-import { findNarrativeByPrompt, finalizeChapterScripts, planNarrativeRoute, synthesizeNarrative } from '@backend/lib/narrativePipeline.js'
+import { findNarrativeByPrompt, fetchNarrativeById } from '@backend/lib/narrativePipeline.js'
 
-export const maxDuration = 120
+export const maxDuration = 300
 
-/**
- * Body is either:
- *  - `{ draft: { title, userPrompt, context, chapters } }` — a preview the
- *    user confirmed. Skips planning, goes straight to audio synthesis.
- *  - `{ userPrompt, context }` — legacy/curated path: plans AND synthesizes
- *    in one call. Curated starters use this so tapping one never shows a
- *    preview; a cache hit on `userPrompt` makes repeat taps instant.
- */
 export const POST = async (request: Request) => {
   try {
-    const body = await request.json()
-    const draft = body?.draft
+    const body = await readJsonBody(request, 8_192)
     const supabase = getSupabaseAdmin()
+    const ownerId = await getOrCreateVisitorId()
+    const storedDraft = body?.draftId ? await getNarrativeDraft(supabase, ownerId, body.draftId) : null
+    let jobRequest: Record<string, any>
+    let idempotencyInput: Record<string, unknown>
+    let progressTotal = 0
+    let userPrompt: string
 
-    if (draft) {
-      const userPrompt = draft.userPrompt?.trim()
-      const chapters = draft.chapters
-
-      if (!userPrompt || !Array.isArray(chapters) || chapters.length === 0) {
-        return NextResponse.json({ error: 'draft with userPrompt and chapters is required' }, { status: 400 })
+    if (body?.draftId) {
+      if (!storedDraft) throw new RequestGuardError('Route preview not found or expired', 404)
+      const draft = storedDraft.payload
+      if (!Array.isArray(draft.chapters) || draft.chapters.length === 0 || draft.chapters.length > 12) {
+        throw new RequestGuardError('Route preview is invalid', 400)
       }
-
-      const narrative = await synthesizeNarrative({
-        supabase,
-        title: draft.title ?? 'Your Budapest Tour',
-        userPrompt,
-        context: draft.context ?? {},
-        chapters,
-        walkingRoute: draft.walkingRoute ?? null,
+      const chapterOrder = body?.chapterOrder
+      if (!Array.isArray(chapterOrder) || chapterOrder.length !== draft.chapters.length ||
+        !chapterOrder.every(Number.isInteger) || new Set(chapterOrder).size !== chapterOrder.length) {
+        throw new RequestGuardError('chapterOrder must contain every preview chapter exactly once', 400)
+      }
+      const chaptersByDraftIndex = new Map(draft.chapters.map((chapter: any) => [chapter.draftChapterIndex, chapter]))
+      const orderedChapters = chapterOrder.map((draftChapterIndex: number, chapterIndex: number) => {
+        const chapter = chaptersByDraftIndex.get(draftChapterIndex)
+        if (!chapter) throw new RequestGuardError('chapterOrder does not match route preview', 400)
+        return { ...chapter, chapterIndex }
       })
-
-      return NextResponse.json(narrative)
+      const trustedDraft = { ...draft, chapters: orderedChapters, walkingRoute: body?.walkingRoute ?? null }
+      userPrompt = draft.userPrompt
+      jobRequest = { draft: trustedDraft }
+      idempotencyInput = { draftId: storedDraft.id, chapterOrder, walkingRoute: body?.walkingRoute ?? null }
+      progressTotal = trustedDraft.chapters.length
+    } else {
+      const normalized = normalizeNarrativeRequest(body)
+      userPrompt = normalized.userPrompt
+      jobRequest = normalized
+      idempotencyInput = { request: body.request, context: body.context, curatedSlug: body.curatedSlug ?? null }
     }
 
-    const userPrompt = body?.userPrompt?.trim()
-    const context = body?.context ?? {}
+    const cached = await findNarrativeByPrompt(supabase, userPrompt, ownerId)
+    if (cached) return NextResponse.json(cached)
+    const idempotencyKey = createHash('sha256').update(JSON.stringify(idempotencyInput)).digest('hex')
+    jobRequest.idempotencyKey = idempotencyKey
+    const { data: existing, error: existingError } = await supabase
+      .from('narrative_generation_jobs')
+      .select('*')
+      .eq('owner_id', ownerId)
+      .eq('idempotency_key', idempotencyKey)
+      .maybeSingle()
+    if (existingError) throw new Error(existingError.message)
 
-    if (!userPrompt) {
-      return NextResponse.json({ error: 'userPrompt is required' }, { status: 400 })
+    if (existing?.status === 'completed' && existing.narrative_id) {
+      const narrative = await fetchNarrativeById(supabase, existing.narrative_id, null, ownerId)
+      if (narrative) return NextResponse.json(narrative)
     }
 
-    const cached = await findNarrativeByPrompt(supabase, userPrompt)
-    if (cached) {
-      return NextResponse.json(cached)
+    let job = existing
+    if (existing?.status === 'failed') {
+      if (existing.attempt_count >= 3) {
+        return NextResponse.json({ error: existing.error_message ?? 'Tour generation failed after three attempts' }, { status: 422 })
+      }
+      const { data: retried, error } = await supabase
+        .from('narrative_generation_jobs')
+        .update({ status: 'queued', stage: 'queued', error_message: null, request_body: jobRequest })
+        .eq('id', existing.id)
+        .select()
+        .single()
+      if (error) throw new Error(error.message)
+      job = retried
     }
 
-    const { data: landmarks, error: landmarksError } = await supabase
-      .from('locations')
-      .select(NARRATIVE_LANDMARK_SELECT)
-
-    if (landmarksError) {
-      throw new Error(landmarksError.message)
+    if (!job) {
+      await consumeExpensiveRequest({ supabase, request, visitorId: ownerId, action: 'tour_generate' })
+      const { data: created, error } = await supabase
+        .from('narrative_generation_jobs')
+        .insert({
+          owner_id: ownerId,
+          idempotency_key: idempotencyKey,
+          request_body: jobRequest,
+          progress_total: progressTotal,
+        })
+        .select()
+        .single()
+      if (error) throw new Error(error.message)
+      job = created
     }
 
-    if (!landmarks?.length) {
-      return NextResponse.json({ error: 'No landmarks available' }, { status: 400 })
-    }
-
-    const pool = selectNarrativePool(landmarks, context, 40)
-    const plan = await planNarrativeRoute({ userPrompt, context, landmarks: pool })
-
-    // Ground scripts in the full source texts before TTS (pool rows are excerpted).
-    const landmarksById = new Map(
-      landmarks.map((row: { id: string | number }) => [String(row.id), row]),
-    )
-    const chapters = await finalizeChapterScripts({
-      supabase,
-      chapters: plan.chapters,
-      landmarksById,
-      tourTitle: plan.title,
-      userPrompt,
-      context,
-    })
-
-    const narrative = await synthesizeNarrative({
-      supabase,
-      title: plan.title,
-      userPrompt,
-      context,
-      chapters,
-    })
-
-    return NextResponse.json(narrative)
+    after(() => processNarrativeGenerationJob(job.id))
+    return NextResponse.json({ jobId: job.id, status: job.status, stage: job.stage }, { status: 202 })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to generate narrative'
+    const guarded = requestGuardResponse(error)
+    if (guarded) return guarded
+    const message = error instanceof Error ? error.message : 'Failed to queue narrative'
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

@@ -1,12 +1,22 @@
 import { NextResponse } from 'next/server'
+import { getSupabaseAdmin } from '@/lib/server/supabaseAdmin'
+import {
+  consumeExpensiveRequest,
+  readJsonBody,
+  requestGuardResponse,
+} from '@/lib/server/expensiveRequestGuard'
+import { getOrCreateVisitorId } from '@/lib/server/visitorIdentity'
 
 type Point = { lat: number; lng: number }
+
+const BUDAPEST_BOUNDS = { south: 47.30, north: 47.65, west: 18.85, east: 19.35 }
 
 const isPoint = (value: unknown): value is Point => {
   if (!value || typeof value !== 'object') return false
   const point = value as Point
   return Number.isFinite(point.lat) && Number.isFinite(point.lng)
-    && Math.abs(point.lat) <= 90 && Math.abs(point.lng) <= 180
+    && point.lat >= BUDAPEST_BOUNDS.south && point.lat <= BUDAPEST_BOUNDS.north
+    && point.lng >= BUDAPEST_BOUNDS.west && point.lng <= BUDAPEST_BOUNDS.east
 }
 
 /** Server-side proxy keeps the ORS token out of the browser bundle. */
@@ -17,11 +27,15 @@ export const POST = async (request: Request) => {
   }
 
   try {
-    const body = await request.json()
+    const body = await readJsonBody(request, 8_192)
     const points = body?.points
     if (!Array.isArray(points) || points.length < 2 || points.length > 50 || !points.every(isPoint)) {
-      return NextResponse.json({ error: '2–50 valid route points are required' }, { status: 400 })
+      return NextResponse.json({ error: '2–50 valid Budapest route points are required' }, { status: 400 })
     }
+
+    const supabase = getSupabaseAdmin()
+    const visitorId = await getOrCreateVisitorId()
+    await consumeExpensiveRequest({ supabase, request, visitorId, action: 'walking_route' })
 
     const response = await fetch(
       'https://api.heigit.org/openrouteservice/v2/directions/foot-walking/geojson',
@@ -52,7 +66,9 @@ export const POST = async (request: Request) => {
       distanceMeters: Number(summary?.distance) || 0,
       durationSeconds: Number(summary?.duration) || 0,
     })
-  } catch {
+  } catch (error) {
+    const guarded = requestGuardResponse(error)
+    if (guarded) return guarded
     return NextResponse.json({ error: 'Walking route unavailable' }, { status: 502 })
   }
 }

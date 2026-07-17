@@ -11,7 +11,7 @@ export type NarrativeChapter = {
 }
 
 export type WalkingRoute = {
-  /** Leaflet coordinate order: [latitude, longitude]. */
+  /** Application coordinate order: [latitude, longitude]. */
   geometry: [number, number][]
   distanceMeters: number
   durationSeconds: number
@@ -37,29 +37,35 @@ export type NarrativeContext = {
   userLat?: number | null
   userLng?: number | null
   locale?: 'en' | 'hu'
-  /** Questionnaire picks — forwarded verbatim into the LLM prompt context. */
+  /** Structured questionnaire values; the server turns these into an LLM request. */
   timeBudgetMinutes?: number
   styleId?: string
   topicIds?: string[]
+  /** Optional visitor wording that refines the structured questionnaire picks. */
+  intent?: string
   /** User asked the tour to start from their current location. */
   nearMe?: boolean
 }
 
+export type NarrativeRequest = Pick<NarrativeContext, 'timeBudgetMinutes' | 'styleId' | 'topicIds' | 'intent' | 'nearMe'>
+
 /** A single planned stop before audio has been synthesized. */
 export type DraftChapter = {
+  draftChapterIndex: number
   chapterIndex: number
   title: string
   lat: number
   lng: number
-  script: string
+  hook?: string | null
+  script?: string | null
   landmarkId: string | null
   imageUrl: string | null
 }
 
 /** The output of `/api/narratives/plan` — previewable, not yet persisted or narrated. */
 export type DraftNarrative = {
+  id: string
   title: string
-  userPrompt: string
   context: NarrativeContext
   chapters: DraftChapter[]
   walkingRoute?: WalkingRoute | null
@@ -82,6 +88,7 @@ export type PlaybackItem = {
   audioUrl: string | null
   imageUrl: string | null
   imageAlt?: string
+  landmarkId?: string | null
   script?: string | null
   lat: number
   lng: number

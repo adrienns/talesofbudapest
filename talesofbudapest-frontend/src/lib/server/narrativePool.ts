@@ -62,6 +62,33 @@ const TOPIC_KEYWORDS: Record<string, string[]> = {
     'art nouveau', 'neo-gothic', 'neoclassical', 'facade', 'architect', 'basilica', 'opera', 'parliament',
     'szecesszió', 'neogótikus', 'neoklasszi', 'homlokzat', 'építész', 'bazilika', 'parlament',
   ],
+  'local-life': [
+    'market', 'tenement', 'courtyard', 'residential', 'neighbourhood', 'neighborhood', 'everyday',
+    'piac', 'bérház', 'udvar', 'lakó', 'negyed', 'mindennap',
+  ],
+  'power-history': [
+    'king', 'royal', 'empire', 'revolution', 'parliament', 'siege', 'communis', 'ottoman',
+    'király', 'birodal', 'forradal', 'országház', 'ostrom', 'kommunis', 'török',
+  ],
+  'jewish-budapest': [
+    'jewish', 'ghetto', 'synagogue', 'holocaust', 'zsidó', 'gettó', 'zsinagóga', 'holokauszt',
+  ],
+  'arts-culture': [
+    'writer', 'poet', 'artist', 'theatre', 'theater', 'opera', 'music', 'literary',
+    'író', 'költő', 'művész', 'színház', 'opera', 'zene', 'irodalm',
+  ],
+  'food-nightlife': [
+    'coffee', 'café', 'wine', 'pub', 'ruin bar', 'restaurant', 'market',
+    'kávé', 'bor', 'kocsma', 'romkocsma', 'étterem', 'piac',
+  ],
+  'danube-engineering': [
+    'danube', 'bridge', 'river', 'flood', 'engineering', 'railway',
+    'duna', 'híd', 'folyó', 'árvíz', 'mérnök', 'vasút',
+  ],
+  'legends-mysteries': [
+    'legend', 'mystery', 'ghost', 'scandal', 'crime', 'secret', 'cave', 'bunker',
+    'legenda', 'rejtély', 'szellem', 'botrány', 'bűn', 'titok', 'barlang', 'bunker',
+  ],
   liquid: [
     'wine', 'ruin bar', 'pub', 'tavern', 'brewery',
     'romkocsma', 'kocsma', 'borozó', 'szőlő', 'pálinka', 'unicum', 'tokaj', 'söröző',

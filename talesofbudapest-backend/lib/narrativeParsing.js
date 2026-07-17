@@ -33,7 +33,7 @@ export const withRetry = async (attempt, attempts = 2) => {
   throw lastError;
 };
 
-export const parseRoutePlan = (raw, landmarks) => {
+export const parseRoutePlan = (raw, landmarks, expectedStopCount = null) => {
   let parsed;
   try {
     parsed = JSON.parse(extractJsonPayload(raw));
@@ -49,7 +49,11 @@ export const parseRoutePlan = (raw, landmarks) => {
   let landmarkChapterCount = 0;
   let customChapterCount = 0;
 
-  const chapters = parsed.chapters.slice(0, 4).map((chapter, index) => {
+  if (expectedStopCount !== null && parsed.chapters.length !== expectedStopCount) {
+    throw new Error(`Route must include exactly ${expectedStopCount} stops`);
+  }
+
+  const chapters = parsed.chapters.map((chapter, index) => {
     if (chapter.landmark_id) {
       landmarkChapterCount += 1;
       const landmark = landmarkMap.get(String(chapter.landmark_id));

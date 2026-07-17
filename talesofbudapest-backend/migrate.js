@@ -33,6 +33,14 @@ const migrationFiles = [
   '020_narrative_walking_routes.sql',
   '021_curated_narratives.sql',
   '022_locations_map_theme.sql',
+  '023_private_user_narratives.sql',
+  '024_expensive_endpoint_guards.sql',
+  '025_narrative_generation_jobs.sql',
+  '026_tour_planning_metadata.sql',
+  '027_narrative_drafts.sql',
+  '028_lock_down_source_material.sql',
+  '029_revoke_public_source_table_privileges.sql',
+  '030_walking_route_rate_limit.sql',
 ];
 
 const runMigration = async () => {

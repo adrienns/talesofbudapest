@@ -8,7 +8,7 @@ Run the official [Supabase Docker stack](https://github.com/supabase/supabase/tr
 - Ports free: `5432`, `8000`, `3000`
 - `git`, `node` (for key generation)
 
-## Quick start
+## Ready-Made Tours
 
 ```bash
 # 1. Generate secrets

@@ -7,7 +7,7 @@ import {
   withRetry,
 } from './narrativeParsing.js';
 
-const ROUTE_SYSTEM_PROMPT = `You are a master historian and audio tour guide in Budapest.
+const routeSystemPrompt = (stopCount) => `You are a master historian and audio tour guide in Budapest.
 Plan a cohesive 3-4 stop walking narrative based on the user's mood.
 Return ONLY valid JSON matching this schema:
 {
@@ -29,11 +29,20 @@ Return ONLY valid JSON matching this schema:
   ]
 }
 Rules:
-- Include exactly 3 or 4 chapters.
-- At least 2 chapters MUST use landmark_id from the provided landmark pool.
+- Include exactly ${stopCount} chapters.
+- At least ${Math.max(2, stopCount - 1)} chapters MUST use landmark_id from the provided landmark pool.
 - Pick landmarks whose provided material genuinely supports the requested theme — the hook must cite a real detail, not a generic connection.
 - At most 1 chapter may use custom_stop with coordinates inside Budapest; its script must be about 2-3 minutes when spoken (~300 words), start with a narrative hook, no meta commentary.
 - Chapters should form a logical walking order.`;
+
+const stopCountForContext = (context = {}) => {
+  const minutes = Number(context.timeBudgetMinutes) || 90;
+  const style = context.styleId || 'storyteller';
+  const base = minutes <= 45 ? 4 : minutes <= 60 ? 5 : minutes <= 90 ? 7 : minutes <= 120 ? 9 : 12;
+  if (style === 'easy') return Math.min(14, base + 1);
+  if (style === 'deep-dive') return Math.max(4, base - (minutes >= 90 ? 1 : 0));
+  return base;
+};
 
 const REPLACE_STOP_SYSTEM_PROMPT = `You are a master historian and audio tour guide in Budapest.
 The traveler wants ONE stop of their walking tour replaced with something different.
@@ -51,13 +60,14 @@ Rules:
 /** Plans a route (one LLM call, no TTS, nothing persisted) — cheap and fast. */
 export const planNarrativeRoute = async ({ userPrompt, context, landmarks }) =>
   withRetry(async () => {
+    const stopCount = stopCountForContext(context);
     const completion = await createChatCompletion({
       operation: 'narrative.route_plan',
       response_format: { type: 'json_object' },
       max_tokens: 4096,
       temperature: 0.4,
       messages: [
-        { role: 'system', content: ROUTE_SYSTEM_PROMPT },
+        { role: 'system', content: routeSystemPrompt(stopCount) },
         {
           role: 'user',
           content: JSON.stringify({
@@ -75,7 +85,7 @@ export const planNarrativeRoute = async ({ userPrompt, context, landmarks }) =>
       throw new Error('OpenRouter returned an empty route plan');
     }
 
-    return parseRoutePlan(content, landmarks);
+    return parseRoutePlan(content, landmarks, stopCount);
   });
 
 /**

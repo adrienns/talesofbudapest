@@ -70,7 +70,18 @@ export const finalizeChapterScripts = async ({
 };
 
 /** Synthesizes audio for planned chapters and persists the narrative. Expensive — call once per confirmed tour. */
-export const synthesizeNarrative = async ({ supabase, title, userPrompt, context, chapters, walkingRoute = null }) => {
+export const synthesizeNarrative = async ({
+  supabase,
+  title,
+  userPrompt,
+  context,
+  chapters,
+  walkingRoute = null,
+  ownerId = null,
+  idempotencyKey = null,
+  onNarrativeCreated = null,
+  onChapterSaved = null,
+}) => {
   const locale = resolveTourLocale(context);
   const styleId = context?.styleId;
   const topicIds = context?.topicIds ?? [];
@@ -80,7 +91,9 @@ export const synthesizeNarrative = async ({ supabase, title, userPrompt, context
     .insert({
       title,
       user_prompt: userPrompt,
-      // Visitor coordinates are transient. Narratives are publicly readable.
+      owner_id: ownerId,
+      idempotency_key: idempotencyKey,
+      // Visitor coordinates are transient and are never persisted.
       context: { ...(context ?? {}), userLat: null, userLng: null },
       walking_geometry: walkingRoute?.geometry ?? null,
       walking_distance_meters: walkingRoute?.distanceMeters ?? null,
@@ -94,6 +107,7 @@ export const synthesizeNarrative = async ({ supabase, title, userPrompt, context
   }
 
   const narrativeId = narrativeRow.id;
+  await onNarrativeCreated?.(narrativeId);
   const savedChapters = [];
 
   for (const chapter of chapters) {
@@ -157,6 +171,7 @@ export const synthesizeNarrative = async ({ supabase, title, userPrompt, context
     }
 
     savedChapters.push(chapterRow);
+    await onChapterSaved?.({ completed: savedChapters.length, total: chapters.length });
   }
 
   return {
@@ -183,7 +198,14 @@ export const synthesizeNarrative = async ({ supabase, title, userPrompt, context
  * step. `fullLandmarks` should carry untruncated story_prompt texts for script
  * grounding; falls back to the (possibly excerpted) planning pool.
  */
-export const generateNarrative = async ({ supabase, userPrompt, context, landmarks, fullLandmarks }) => {
+export const generateNarrative = async ({
+  supabase,
+  userPrompt,
+  context,
+  landmarks,
+  fullLandmarks,
+  ownerId = null,
+}) => {
   const routePlan = await planNarrativeRoute({ userPrompt, context, landmarks });
   const landmarksById = new Map((fullLandmarks ?? landmarks).map((row) => [String(row.id), row]));
   const chapters = await finalizeChapterScripts({
@@ -201,5 +223,6 @@ export const generateNarrative = async ({ supabase, userPrompt, context, landmar
     userPrompt,
     context,
     chapters,
+    ownerId,
   });
 };

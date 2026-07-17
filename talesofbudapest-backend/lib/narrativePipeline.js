@@ -6,6 +6,7 @@ export {
 } from './narrativeChapterBuilder.js';
 export {
   findNarrativeByPrompt,
+  findNarrativeByIdempotencyKey,
   fetchCuratedNarrative,
   fetchNarrativeById,
   fetchAllNarratives,

@@ -8,13 +8,13 @@ test('pricing guard rejects a free model that gained a price', () => {
   }]), /no longer free/);
 });
 
-test('pricing guard fails closed when a catalog price is absent', () => {
+test('pricing guard requires token prices and treats an omitted request fee as zero', () => {
   assert.throws(() => pricingForModels(['example/paid'], [{
     id: 'example/paid', pricing: { prompt: '0.000001', request: '0' },
   }]), /Missing OpenRouter completion price/);
-  assert.throws(() => pricingForModels(['example/free:free'], [{
+  assert.deepEqual(pricingForModels(['example/free:free'], [{
     id: 'example/free:free', pricing: { prompt: '0', completion: '0' },
-  }]), /Missing OpenRouter request price/);
+  }]), [{ modelId: 'example/free:free', prompt: 0, completion: 0, request: 0 }]);
 });
 
 test('unbounded extraction requires confirmation and limit zero cannot bypass it', () => {

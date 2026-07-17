@@ -1,112 +1,40 @@
-import {
-  mapLocationToLandmark,
-  mapLocationToMapPin,
-  type LocationRow,
-  type MapPinRow,
-} from '@/services/mappers/locationMapper'
-import { isSupabaseConfigured, supabase } from '@/services/supabase'
 import type { Landmark, MapPin } from '@/types'
 import type { AppLocale } from '@/types/locale'
 import { DEFAULT_LOCALE } from '@/types/locale'
 
-const MAP_PIN_SELECT = `
-  id,
-  name,
-  latitude,
-  longitude,
-  audio_url,
-  image_url,
-  source,
-  landmark_type,
-  map_theme,
-  importance_tier,
-  importance_score,
-  location_translations (locale, name, audio_url)
-`
-
-const DETAIL_SELECT = `
-  id,
-  name,
-  latitude,
-  longitude,
-  story_prompt,
-  audio_url,
-  image_url,
-  images,
-  source,
-  landmark_type,
-  map_theme,
-  importance_tier,
-  importance_score,
-  location_translations (locale, name, story_prompt, audio_url)
-`
+const readJson = async <T>(response: Response, fallback: string): Promise<T> => {
+  const body = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(body.error ?? fallback)
+  return body as T
+}
 
 export const getAllMapPins = async (locale: AppLocale = DEFAULT_LOCALE): Promise<MapPin[]> => {
-  if (!isSupabaseConfigured() || !supabase) {
-    throw new Error('Supabase is not configured')
-  }
-
-  const { data, error } = await supabase
-    .from('locations')
-    .select(MAP_PIN_SELECT)
-    .order('importance_score', { ascending: false, nullsFirst: false })
-    .order('name')
-
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  return (data as MapPinRow[]).map((row) => mapLocationToMapPin(row, locale))
+  const response = await fetch(`/api/landmarks/map?locale=${encodeURIComponent(locale)}`)
+  const body = await readJson<{ pins: MapPin[] }>(response, 'Failed to load landmarks')
+  return body.pins
 }
 
 export const getMapPinsInBbox = async (
   bbox: { south: number; west: number; north: number; east: number },
   locale: AppLocale = DEFAULT_LOCALE,
 ): Promise<MapPin[]> => {
-  if (!isSupabaseConfigured() || !supabase) {
-    throw new Error('Supabase is not configured')
-  }
-
-  const { data, error } = await supabase
-    .from('locations')
-    .select(MAP_PIN_SELECT)
-    .gte('latitude', bbox.south)
-    .lte('latitude', bbox.north)
-    .gte('longitude', bbox.west)
-    .lte('longitude', bbox.east)
-    .order('importance_score', { ascending: false, nullsFirst: false })
-    .limit(500)
-
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  return (data as MapPinRow[]).map((row) => mapLocationToMapPin(row, locale))
+  const params = new URLSearchParams({
+    bbox: [bbox.south, bbox.west, bbox.north, bbox.east].join(','),
+    locale,
+  })
+  const response = await fetch(`/api/landmarks/map?${params}`)
+  const body = await readJson<{ pins: MapPin[] }>(response, 'Failed to load landmarks')
+  return body.pins
 }
 
 export const getLandmarkById = async (
   id: string,
   locale: AppLocale = DEFAULT_LOCALE,
 ): Promise<Landmark | null> => {
-  if (!isSupabaseConfigured() || !supabase) {
-    throw new Error('Supabase is not configured')
-  }
-
-  const { data, error } = await supabase
-    .from('locations')
-    .select(DETAIL_SELECT)
-    .eq('id', id)
-    .maybeSingle()
-
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  if (!data) {
-    return null
-  }
-
-  return mapLocationToLandmark(data as LocationRow, locale)
+  const response = await fetch(`/api/landmarks/${encodeURIComponent(id)}?locale=${encodeURIComponent(locale)}`)
+  if (response.status === 404) return null
+  const body = await readJson<{ landmark: Landmark }>(response, 'Failed to load landmark')
+  return body.landmark
 }
 
 /** @deprecated Use getAllMapPins for map display */
