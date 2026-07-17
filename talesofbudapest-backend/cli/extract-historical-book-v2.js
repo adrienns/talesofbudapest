@@ -8,6 +8,7 @@ import { createChatCompletion, getOpenRouterApiKey } from '../lib/openRouterClie
 import { estimateExtractionCeiling, fetchOpenRouterCatalog, formatUsd, pricingForModels } from '../lib/openRouterCostGuard.js';
 import { maskPdfFurniture } from '../lib/historicalPdfLayout.js';
 import { anchorBuildingMentions, buildStreetIndex, extractAddressReferences, resolveAmbiguousStreets } from '../lib/historicalAddresses.js';
+import { findOcrDamage } from '../lib/historicalOcrLexicon.js';
 import {
   buildSubjectEntityIndex,
   createSubjectState,
@@ -538,6 +539,15 @@ const main = async () => {
       console.warn(`Gazetteer missing at ${GAZETTEER_PATH}; address layer skipped. Run: node cli/build-budapest-gazetteer.js`);
     }
   }
+  // Confession: OCR damage we deliberately do not repair in the text still has
+  // to be visible, with exact positions, instead of silently losing mentions.
+  const ocrDamage = V3 ? targetReadingPages.flatMap((page) => findOcrDamage(page.text).map((row) => ({
+    ...row,
+    page_ref: page.page,
+    start_offset: page.raw_starts[row.reading_start] ?? null,
+    end_offset: page.raw_ends[Math.min(row.reading_end, page.raw_ends.length) - 1] ?? null,
+  }))) : [];
+  if (ocrDamage.length) console.log(`OCR damage: ${ocrDamage.length} damaged domain words folded for identity (text left untouched).`);
   const indexedMentions = buildSubjectEntityIndex({ sourceId: SOURCE_ID, mentions: rawMentions });
   const mentions = indexedMentions.mentions;
   const clauses = buildClauseLedger({ sourceId: SOURCE_ID, targetPages, readingPages: targetReadingPages, mentions });
@@ -590,6 +600,7 @@ const main = async () => {
     mentions,
     entity_aliases: V3 ? [...indexedMentions.entities.values()].map((entity) => ({ ...entity, aliases: [...entity.aliases], roles: [...entity.roles] })) : undefined,
     layout: V3 ? { pdf_path: PDF_PATH, pages: layout } : undefined,
+    ocr_damage_log: V3 ? ocrDamage : undefined,
     subject_memory_cold_start: V3 ? persistedSubjectMemory == null : undefined,
     subject_state_loaded_last_page: V3 ? persistedSubjectMemory?.last_page ?? null : undefined,
     experiment_id: EXPERIMENT_ID ?? undefined,

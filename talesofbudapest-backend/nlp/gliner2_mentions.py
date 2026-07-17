@@ -96,7 +96,13 @@ HEURISTIC_PATTERNS = [
     # Keep generic synagogue references as exact building mentions. They are
     # intentionally not resolved to one named building; the browser aggregates
     # them as a searchable building class.
-    ("building", re.compile(r"\bsynagog(?:ue|ues)\b", re.IGNORECASE)),
+    #
+    # The pattern tolerates the OCR damage this scan actually produces
+    # (synago[q]ue, synago[g]e, [s]ynagogue, syn[e]agogue) because a single
+    # wrong letter otherwise makes a whole building disappear silently. This
+    # loosens a detector; it never rewrites the source text. Entity identity
+    # folds the variants back together (lib/historicalOcrLexicon.js).
+    ("building", re.compile(r"\bs?yn(?:e)?ago(?:[gq]ues?|ges?)\b", re.IGNORECASE)),
     ("organisation", re.compile(r"\b(?:[A-ZÀ-Ž][A-Za-zÀ-ž'’.-]+\s+){1,5}(?:community|Society|Academy|University|Diet|Parliament|Council|synagogue|school|parish|authorities|leadership)\b")),
     ("work", re.compile(r"\b(?:Sefer|Sha'ar|Mahane|Panim|Mishneh|Yemei)\s+[A-ZÀ-Ža-zà-ž][A-Za-zÀ-ž'’ -]{1,50}")),
     ("group", re.compile(r"\b(?:the\s+)?(?:fanatic\s+)?followers of the (?:new\s+)?Messiah\b", re.IGNORECASE)),
