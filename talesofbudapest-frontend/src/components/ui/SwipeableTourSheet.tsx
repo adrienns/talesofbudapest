@@ -23,7 +23,7 @@ const measureSheet = (): SheetMetrics => {
 
   const vh = window.innerHeight
   const expandedPx = Math.round(vh * EXPANDED_VH)
-  const collapsedPx = Math.min(148, Math.max(128, Math.round(vh * 0.19)))
+  const collapsedPx = Math.min(156, Math.max(128, Math.round(vh * 0.19)))
   return {
     expandedPx,
     collapsedPx,
@@ -130,7 +130,7 @@ export const SwipeableTourSheet = ({
           <LayoutGroup id="tour-player">
             <div className="min-h-0 flex-1 overflow-hidden">
               {snap === 'collapsed' ? (
-                <div className="flex h-full flex-col px-3 py-2">{collapsed}</div>
+                <div className="flex h-full flex-col px-4">{collapsed}</div>
               ) : (
                 <div className="flex h-full flex-col overflow-y-auto overscroll-contain px-5 pb-[max(1rem,env(safe-area-inset-bottom))]">
                   {expanded}

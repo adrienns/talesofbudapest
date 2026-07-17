@@ -44,7 +44,7 @@ export const TourSheetCollapsed = ({
   }, [title])
 
   return (
-    <div className="tour-sheet-collapsed flex min-h-0 flex-1 flex-col justify-center gap-1" onClick={onExpand}>
+    <div className="tour-sheet-collapsed flex min-h-0 flex-1 flex-col justify-center gap-0.5" onClick={onExpand}>
       <div className="flex min-w-0 items-center gap-2">
         <motion.button
           type="button"

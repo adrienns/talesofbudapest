@@ -39,7 +39,7 @@ export const PlayerScrubber = ({
         aria-label={t('playbackProgress')}
       />
       <div
-        className={`mt-1.5 flex justify-between text-[0.6875rem] tabular-nums ${
+        className={`flex justify-between text-[0.6875rem] tabular-nums ${
           onImage ? 'text-white/75' : musicSheet ? 'text-[var(--map-text)]/55' : 'text-on-surface/40'
         }`}
       >
