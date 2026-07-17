@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { canonicalizeDomainText, canonicalizeDomainToken } from './historicalOcrLexicon.js';
 
 const PERSON_TYPES = new Set(['person', 'family']);
 const NONPERSON_TYPES = new Set(['building', 'business', 'organisation', 'work', 'movement', 'place']);
@@ -19,6 +20,10 @@ const hash = (value) => crypto.createHash('sha256').update(String(value)).digest
 const words = (value) => String(value ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').replace(/(?:['’]s)\b/giu, '')
   .toLowerCase().match(/[a-z0-9]+/gu) ?? [];
 const phrase = (value) => words(value).join(' ');
+// OCR damage must not fork one building into two entities: `synagoque` and
+// `synagogue` are the same word, so identity keys and roles read the folded
+// form while the raw surface survives as an alias.
+const canonicalPhrase = (value) => words(value).map(canonicalizeDomainToken).join(' ');
 const entityClass = (type) => PERSON_TYPES.has(type) ? 'person' : type === 'group' || type === 'organisation' || type === 'family' ? 'group' : 'thing';
 const entityId = (sourceId, type, key) => `se_${hash(`${sourceId}\u001f${type}\u001f${key}`)}`;
 
@@ -66,13 +71,16 @@ export const buildSubjectEntityIndex = ({ sourceId, mentions }) => {
     // synagogue at 23 and the "small" synagogue at 26 are separate entities,
     // not one generic synagogue.
     const anchor = !isNameLike(mention) ? mention.address_anchor : null;
-    const base = isNameLike(mention) ? canonicalForPerson(mention) : phrase(label);
+    // OCR variants fold into one identity: `synagoque` is not a second
+    // building. The damaged surface stays searchable as an alias.
+    const base = isNameLike(mention) ? canonicalForPerson(mention) : canonicalPhrase(label);
+    const displayLabel = isNameLike(mention) ? label : canonicalizeDomainText(label);
     const canonical = anchor?.key ? `${base} @ ${anchor.key}` : base;
     const id = entityId(sourceId, entityClass(type), canonical || `${mention.page}:${mention.start_offset}`);
     mention.subject_entity_id = id;
     let entity = entities.get(id);
     if (!entity) {
-      entity = { entity_id: id, type, entity_class: entityClass(type), label: anchor ? `${label || base} (${anchor.display})` : (label || canonical), aliases: new Set(), roles: new Set(), mention_ids: [], last_mention_id: null, last_page: null, last_offset: null };
+      entity = { entity_id: id, type, entity_class: entityClass(type), label: anchor ? `${displayLabel || base} (${anchor.display})` : (displayLabel || canonical), aliases: new Set(), roles: new Set(), mention_ids: [], last_mention_id: null, last_page: null, last_offset: null };
       if (anchor) entity.address = { street: anchor.street, house_number: anchor.house_number, display: anchor.display, center: anchor.center };
       entities.set(id, entity);
     }
@@ -80,9 +88,9 @@ export const buildSubjectEntityIndex = ({ sourceId, mentions }) => {
     // identity device, not something a reader ever writes.
     entity.aliases.add(label); entity.aliases.add(base);
     if (anchor?.display) entity.aliases.add(anchor.display);
-    for (const token of words(label)) if (ROLE_WORDS.has(token)) entity.roles.add(token);
+    for (const token of words(label).map(canonicalizeDomainToken)) if (ROLE_WORDS.has(token)) entity.roles.add(token);
     if (/^\s*r\.\s+/iu.test(label)) entity.roles.add('rabbi');
-    if (type === 'building' && /\bsynagog(?:ue|ues)\b/iu.test(label)) entity.roles.add('synagogue');
+    if (type === 'building' && /\bsynagog(?:ue|ues)\b/iu.test(canonicalizeDomainText(label))) entity.roles.add('synagogue');
     entity.mention_ids.push(mention.mention_id);
     for (const alias of entity.aliases) addAlias(alias, id);
   }
