@@ -89,13 +89,13 @@ export const TourSheetCollapsed = ({
         duration={duration}
         hasAudio={hasAudio}
         onSeek={onSeek}
-        tone="musicSheet"
+        tone="tourAudioSheet"
       />
 
       <div className="flex justify-center" onClick={(event) => event.stopPropagation()}>
         <PlayerTransport
           size="sm"
-          tone="musicSheet"
+          tone="tourAudioSheet"
           isPlaying={isPlaying}
           hasAudio={hasAudio}
           isGenerating={isGenerating}
