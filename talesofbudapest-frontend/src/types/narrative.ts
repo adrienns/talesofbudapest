@@ -49,6 +49,15 @@ export type NarrativeContext = {
 
 export type NarrativeRequest = Pick<NarrativeContext, 'timeBudgetMinutes' | 'styleId' | 'topicIds' | 'intent' | 'nearMe'>
 
+/** Complete, validated values collected by the tour questionnaire. */
+export type QuestionnaireExtras = {
+  timeBudgetMinutes: number
+  styleId: string
+  topicIds: string[]
+  nearMe: boolean
+  intent?: string
+}
+
 /** A single planned stop before audio has been synthesized. */
 export type DraftChapter = {
   draftChapterIndex: number
