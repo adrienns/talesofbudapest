@@ -25,6 +25,7 @@ type UsePlaybackAudioResult = {
   audioUrl: string | null
   historyDepth: string | null
   togglePlayPause: () => Promise<void>
+  play: () => Promise<void>
   seek: (time: number) => void
 }
 
@@ -129,6 +130,7 @@ export const usePlaybackAudio = (
     audioUrl: activeUrl,
     historyDepth,
     togglePlayPause: handlePlayPause,
+    play,
     seek,
   }
 }

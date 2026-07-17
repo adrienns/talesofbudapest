@@ -1,12 +1,11 @@
 'use client'
 
-import { MapContainer, Polyline, TileLayer } from 'react-leaflet'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { Layer, Map, Source, type MapRef } from '@vis.gl/react-maplibre'
 import { ChapterMarker } from '@/components/map/ChapterMarker'
-import { MapFitBounds } from '@/components/map/MapFitBounds'
-import { MAP_ATTRIBUTION, MAP_CENTER, MAP_TILE_OPTIONS, MAP_TILE_URL } from '@/constants/map'
+import { MAP_ATTRIBUTION_CONTROL, MAP_CENTER, MAP_MAX_ZOOM, MAP_STYLE_URL } from '@/constants/map'
 import { colors } from '@/constants/designTokens'
 import type { NarrativeChapter, WalkingRoute } from '@/types/narrative'
-import 'leaflet/dist/leaflet.css'
 
 type RoutePreviewMapProps = {
   chapters: NarrativeChapter[]
@@ -16,53 +15,46 @@ type RoutePreviewMapProps = {
   walkingRoute?: WalkingRoute | null
 }
 
-/** A small, self-contained map for the route preview — no pin fetching or clustering. */
-export const RoutePreviewMap = ({
-  chapters,
-  selectedChapterId = null,
-  onChapterSelect,
-  fitKey,
-  walkingRoute = null,
-}: RoutePreviewMapProps) => {
-  const positions = chapters.map((chapter) => [chapter.lat, chapter.lng] as [number, number])
+export const RoutePreviewMap = ({ chapters, selectedChapterId = null, onChapterSelect, fitKey, walkingRoute = null }: RoutePreviewMapProps) => {
+  const mapRef = useRef<MapRef>(null)
+  const positions = walkingRoute?.geometry ?? chapters.map((chapter) => [chapter.lat, chapter.lng] as [number, number])
+  const routeData = useMemo(() => ({
+    type: 'Feature' as const,
+    properties: {},
+    geometry: { type: 'LineString' as const, coordinates: positions.map(([lat, lng]) => [lng, lat]) },
+  }), [positions])
+
+  const fitRoute = useCallback(() => {
+    if (!chapters.length) return
+    const lngs = chapters.map((chapter) => chapter.lng)
+    const lats = chapters.map((chapter) => chapter.lat)
+    mapRef.current?.fitBounds(
+      [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+      { padding: 48, maxZoom: 15, duration: 500 },
+    )
+  }, [chapters])
+
+  useEffect(fitRoute, [fitKey, fitRoute])
 
   return (
-    <MapContainer
-      center={MAP_CENTER}
-      zoom={14}
-      scrollWheelZoom
-      dragging
-      preferCanvas
-      maxZoom={MAP_TILE_OPTIONS.maxZoom}
-      className="h-full w-full"
-      zoomControl={false}
+    <Map
+      ref={mapRef}
+      initialViewState={{ latitude: MAP_CENTER[0], longitude: MAP_CENTER[1], zoom: 14 }}
+      mapStyle={MAP_STYLE_URL}
+      maxZoom={MAP_MAX_ZOOM}
+      attributionControl={MAP_ATTRIBUTION_CONTROL}
+      onLoad={fitRoute}
+      reuseMaps
+      style={{ width: '100%', height: '100%' }}
     >
-      <TileLayer
-        attribution={MAP_ATTRIBUTION}
-        url={MAP_TILE_URL}
-        maxZoom={MAP_TILE_OPTIONS.maxZoom}
-        updateWhenIdle={MAP_TILE_OPTIONS.updateWhenIdle}
-        keepBuffer={MAP_TILE_OPTIONS.keepBuffer}
-      />
-
       {positions.length > 1 && (
-        <Polyline
-          positions={walkingRoute?.geometry ?? positions}
-          pathOptions={{ color: colors.accent, weight: 3, opacity: 0.85, dashArray: walkingRoute ? undefined : '8 8' }}
-        />
+        <Source id="preview-route" type="geojson" data={routeData}>
+          <Layer id="preview-route-line" type="line" paint={{ 'line-color': colors.accent, 'line-width': 3, 'line-opacity': 0.85, ...(walkingRoute ? {} : { 'line-dasharray': [2, 2] }) }} />
+        </Source>
       )}
-
       {chapters.map((chapter, index) => (
-        <ChapterMarker
-          key={chapter.id}
-          chapter={chapter}
-          stopNumber={index + 1}
-          isSelected={chapter.id === selectedChapterId}
-          onSelect={(selected) => onChapterSelect?.(selected)}
-        />
+        <ChapterMarker key={chapter.id} chapter={chapter} stopNumber={index + 1} isSelected={chapter.id === selectedChapterId} onSelect={(selected) => onChapterSelect?.(selected)} />
       ))}
-
-      <MapFitBounds chapters={chapters} triggerKey={fitKey} />
-    </MapContainer>
+    </Map>
   )
 }

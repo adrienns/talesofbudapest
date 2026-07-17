@@ -1,32 +1,35 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { MapContainer, Polyline, TileLayer } from 'react-leaflet'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Layer, Map as MapLibreMap, Source, type MapLayerMouseEvent, type MapRef } from '@vis.gl/react-maplibre'
+import type { GeoJSONSource } from 'maplibre-gl'
 import { ChapterMarker } from '@/components/map/ChapterMarker'
-import { LandmarkClusterLayer } from '@/components/map/LandmarkClusterLayer'
-import { LandmarkMarker } from '@/components/map/LandmarkMarker'
-import { MapFitBounds } from '@/components/map/MapFitBounds'
-import { MapViewportTracker, type MapViewport } from '@/components/map/MapViewportTracker'
-import { MapZoomHint } from '@/components/map/MapZoomHint'
 import {
-  MAP_ATTRIBUTION,
-  MAP_CENTER,
-  MAP_DEFAULT_ZOOM,
-  MAP_TILE_OPTIONS,
-  MAP_TILE_URL,
-} from '@/constants/map'
+  LandmarkClusterLayer,
+  LANDMARK_CLUSTER_DOT_LAYER_ID,
+  LANDMARK_CLUSTER_LAYER_ID,
+  LANDMARK_CLUSTER_SOURCE_ID,
+} from '@/components/map/LandmarkClusterLayer'
+import { LandmarkMarker } from '@/components/map/LandmarkMarker'
+import { MapZoomHint } from '@/components/map/MapZoomHint'
+import { MAP_ATTRIBUTION_CONTROL, MAP_CENTER, MAP_DEFAULT_ZOOM, MAP_MAX_ZOOM, MAP_STYLE_URL } from '@/constants/map'
+import { colors } from '@/constants/designTokens'
 import { useMapPins } from '@/features/landmarks/hooks/useMapPins'
 import { useVisibleLandmarks } from '@/features/landmarks/hooks/useVisibleLandmarks'
+import type { MapBounds } from '@/lib/map/visibleLandmarks'
 import { useMapSettingsStore } from '@/stores/mapSettingsStore'
-import { colors } from '@/constants/designTokens'
 import type { MapViewProps } from '@/types/map'
 import type { NarrativeChapter } from '@/types/narrative'
-import 'leaflet/dist/leaflet.css'
 
-const INITIAL_VIEWPORT: MapViewport = {
-  zoom: MAP_DEFAULT_ZOOM,
-  bounds: null,
-}
+type MapViewport = { zoom: number; bounds: MapBounds | null }
+
+const INITIAL_VIEWPORT: MapViewport = { zoom: MAP_DEFAULT_ZOOM, bounds: null }
+
+const lineFeature = (positions: [number, number][]) => ({
+  type: 'Feature' as const,
+  properties: {},
+  geometry: { type: 'LineString' as const, coordinates: positions.map(([lat, lng]) => [lng, lat]) },
+})
 
 export const MapView = ({
   selectedLandmarkId,
@@ -37,120 +40,125 @@ export const MapView = ({
   showLandmarks = true,
   temporaryRoute = null,
 }: MapViewProps) => {
-  const [isMapReady, setIsMapReady] = useState(false)
+  const mapRef = useRef<MapRef>(null)
   const [viewport, setViewport] = useState<MapViewport>(INITIAL_VIEWPORT)
+  const { pins, isLoading } = useMapPins(viewport.bounds, viewport.zoom)
+  const { prominent, clustered } = useVisibleLandmarks(pins, viewport.zoom, viewport.bounds, selectedLandmarkId)
+  const showAllBuildings = useMapSettingsStore((state) => state.showAllBuildings)
+  const clusteredById = useMemo(
+    () => new Map(clustered.map(({ landmark }) => [landmark.id, landmark])),
+    [clustered],
+  )
 
-  const handleViewportChange = useCallback((nextViewport: MapViewport) => {
-    setViewport(nextViewport)
+  const publishViewport = useCallback(() => {
+    const map = mapRef.current?.getMap()
+    if (!map) return
+    const bounds = map.getBounds()
+    setViewport({
+      zoom: map.getZoom(),
+      bounds: {
+        south: bounds.getSouth(),
+        west: bounds.getWest(),
+        north: bounds.getNorth(),
+        east: bounds.getEast(),
+      },
+    })
   }, [])
 
-  const { pins, isLoading } = useMapPins(viewport.bounds, viewport.zoom)
-  const { prominent, clustered } = useVisibleLandmarks(
-    pins,
-    viewport.zoom,
-    viewport.bounds,
-    selectedLandmarkId,
-  )
-  const showAllBuildings = useMapSettingsStore((state) => state.showAllBuildings)
+  const handleMapClick = useCallback((event: MapLayerMouseEvent) => {
+    const feature = event.features?.[0]
+    if (!feature) return
 
-  const clusterRebuildKey = useMemo(
-    () =>
-      `${viewport.zoom}-${showAllBuildings}-${pins.length}-${pins[0]?.id ?? ''}-${pins[pins.length - 1]?.id ?? ''}`,
-    [pins, showAllBuildings, viewport.zoom],
-  )
+    if (feature.layer.id === LANDMARK_CLUSTER_DOT_LAYER_ID) {
+      const landmarkId = String(feature.properties?.id ?? '')
+      const landmark = clusteredById.get(landmarkId)
+      if (landmark) {
+        onLandmarkSelect(landmark)
+      }
+      return
+    }
+
+    if (feature.layer.id !== LANDMARK_CLUSTER_LAYER_ID || feature.geometry.type !== 'Point') return
+
+    const map = mapRef.current?.getMap()
+    if (!map) return
+    const clusterId = Number(feature.properties?.cluster_id)
+    const source = map.getSource(LANDMARK_CLUSTER_SOURCE_ID)
+    if (!Number.isFinite(clusterId) || source?.type !== 'geojson') return
+
+    const [lng, lat] = feature.geometry.coordinates
+    void (source as GeoJSONSource).getClusterExpansionZoom(clusterId).then((zoom) => {
+      map.easeTo({ center: [lng, lat], zoom: Math.min(zoom, MAP_MAX_ZOOM), duration: 500 })
+    })
+  }, [clusteredById, onLandmarkSelect])
 
   useEffect(() => {
-    setIsMapReady(true)
-  }, [])
+    if (!activeRoute?.chapters.length) return
+    const lngs = activeRoute.chapters.map((chapter) => chapter.lng)
+    const lats = activeRoute.chapters.map((chapter) => chapter.lat)
+    mapRef.current?.fitBounds(
+      [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+      { padding: 80, maxZoom: 15, duration: 700 },
+    )
+  }, [activeRoute?.id, activeRoute?.chapters])
 
   const routePositions = activeRoute?.walkingRoute?.geometry
-    ?? activeRoute?.chapters.map((chapter) => [chapter.lat, chapter.lng] as [number, number]) ?? []
-
-  const handleChapterSelect = (chapter: NarrativeChapter) => {
-    onChapterSelect?.(chapter)
-  }
+    ?? activeRoute?.chapters.map((chapter) => [chapter.lat, chapter.lng] as [number, number])
+    ?? []
 
   return (
     <div className="absolute inset-0 overflow-hidden">
-      {isMapReady ? (
-        <MapContainer
-          key="budapest-map"
-          center={MAP_CENTER}
-          zoom={MAP_DEFAULT_ZOOM}
-          scrollWheelZoom
-          preferCanvas
-          maxZoom={MAP_TILE_OPTIONS.maxZoom}
-          className="h-full w-full z-0"
-          zoomControl={false}
-        >
-          <TileLayer
-            attribution={MAP_ATTRIBUTION}
-            url={MAP_TILE_URL}
-            maxZoom={MAP_TILE_OPTIONS.maxZoom}
-            updateWhenIdle={MAP_TILE_OPTIONS.updateWhenIdle}
-            keepBuffer={MAP_TILE_OPTIONS.keepBuffer}
+      <MapLibreMap
+        ref={mapRef}
+        initialViewState={{ latitude: MAP_CENTER[0], longitude: MAP_CENTER[1], zoom: MAP_DEFAULT_ZOOM }}
+        mapStyle={MAP_STYLE_URL}
+        maxZoom={MAP_MAX_ZOOM}
+        attributionControl={MAP_ATTRIBUTION_CONTROL}
+        interactiveLayerIds={showLandmarks ? [LANDMARK_CLUSTER_LAYER_ID, LANDMARK_CLUSTER_DOT_LAYER_ID] : []}
+        onLoad={publishViewport}
+        onMoveEnd={publishViewport}
+        onClick={handleMapClick}
+        reuseMaps
+        style={{ width: '100%', height: '100%' }}
+      >
+        {showLandmarks && <LandmarkClusterLayer entries={clustered} />}
+
+        {showLandmarks && prominent.map(({ landmark, variant }) => (
+          <LandmarkMarker
+            key={landmark.id}
+            landmark={landmark}
+            variant={variant}
+            isSelected={landmark.id === selectedLandmarkId}
+            onSelect={onLandmarkSelect}
           />
-          <MapViewportTracker onViewportChange={handleViewportChange} />
+        ))}
 
-          {showLandmarks &&
-            prominent.map(({ landmark, variant }) => (
-              <LandmarkMarker
-                key={landmark.id}
-                landmark={landmark}
-                variant={variant}
-                isSelected={landmark.id === selectedLandmarkId}
-                onSelect={onLandmarkSelect}
-              />
-            ))}
+        {activeRoute && routePositions.length > 1 && (
+          <Source id="active-tour-route" type="geojson" data={lineFeature(routePositions)}>
+            <Layer id="active-tour-route-line" type="line" paint={{ 'line-color': colors.mapOrange, 'line-width': 3, 'line-opacity': 0.85, ...(activeRoute.walkingRoute ? {} : { 'line-dasharray': [2, 2] }) }} />
+          </Source>
+        )}
 
-          {showLandmarks && clustered.length > 0 && (
-            <LandmarkClusterLayer
-              entries={clustered}
-              rebuildKey={clusterRebuildKey}
-              onSelect={onLandmarkSelect}
-            />
-          )}
+        {temporaryRoute && temporaryRoute.geometry.length > 1 && (
+          <Source id="temporary-route" type="geojson" data={lineFeature(temporaryRoute.geometry)}>
+            <Layer id="temporary-route-line" type="line" paint={{ 'line-color': '#245b9f', 'line-width': 4, 'line-opacity': 0.95 }} />
+          </Source>
+        )}
 
-          {activeRoute && routePositions.length > 1 && (
-            <Polyline
-              positions={routePositions}
-              pathOptions={{
-                color: colors.mapOrange,
-                weight: 3,
-                opacity: 0.85,
-                dashArray: activeRoute.walkingRoute ? undefined : '8 8',
-              }}
-            />
-          )}
-
-          {temporaryRoute && (
-            <Polyline positions={temporaryRoute.geometry} pathOptions={{ color: '#245b9f', weight: 4, opacity: 0.95 }} />
-          )}
-
-          {activeRoute?.chapters.map((chapter, index) => (
-            <ChapterMarker
-              key={chapter.id}
-              chapter={chapter}
-              stopNumber={index + 1}
-              isSelected={chapter.id === selectedChapterId}
-              onSelect={handleChapterSelect}
-            />
-          ))}
-
-          {activeRoute && (
-            <MapFitBounds chapters={activeRoute.chapters} triggerKey={activeRoute.id} />
-          )}
-        </MapContainer>
-      ) : (
-        <div className="h-full w-full bg-surface" aria-hidden="true" />
-      )}
+        {activeRoute?.chapters.map((chapter, index) => (
+          <ChapterMarker
+            key={chapter.id}
+            chapter={chapter}
+            stopNumber={index + 1}
+            isSelected={chapter.id === selectedChapterId}
+            onSelect={(selected: NarrativeChapter) => onChapterSelect?.(selected)}
+          />
+        ))}
+      </MapLibreMap>
 
       {isLoading && showLandmarks && (
-        <div className="pointer-events-none absolute left-4 top-[max(5rem,env(safe-area-inset-top))] z-20 rounded-full border border-outline-variant/40 bg-surface/90 px-3 py-1.5 text-xs text-on-surface/70 shadow backdrop-blur">
-          ●
-        </div>
+        <div className="pointer-events-none absolute left-4 top-[max(5rem,env(safe-area-inset-top))] z-20 rounded-full border border-outline-variant/40 bg-surface/90 px-3 py-1.5 text-xs text-on-surface/70 shadow backdrop-blur">●</div>
       )}
-
       <MapZoomHint zoom={viewport.zoom} showAllBuildings={showAllBuildings} />
     </div>
   )

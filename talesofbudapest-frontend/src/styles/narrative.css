@@ -125,33 +125,10 @@
   }
 }
 
-.q-top-section {
-  background-color: #e1f3fd;
-  padding: 0 16px;
-}
-
-.q-wave-container {
-  width: 100%;
-  line-height: 0;
-  margin-top: -1px;
-  overflow: visible;
-}
-
-.q-wave-container svg {
-  display: block;
-  width: 100%;
-  height: 72px;
-  overflow: visible;
-}
-
-.q-bottom-section {
-  padding: 24px 16px;
-}
-
 .q-start-btn {
-  background: linear-gradient(135deg, var(--color-accent), var(--color-accent-deep));
+  background: var(--map-teal);
   color: #fff;
-  box-shadow: 0 16px 36px -12px var(--color-accent-glow);
+  box-shadow: 0 16px 36px -12px rgba(92, 141, 137, 0.45);
 }
 
 .q-start-pulse {

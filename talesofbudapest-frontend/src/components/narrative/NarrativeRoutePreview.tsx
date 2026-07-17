@@ -140,7 +140,7 @@ export const NarrativeRoutePreview = ({ draft, onConfirm, onDiscard }: Narrative
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-bold text-on-surface">{chapter.title}</p>
                   <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-on-surface/60">
-                    {chapter.script}
+                    {chapter.hook ?? chapter.title}
                   </p>
                 </div>
 

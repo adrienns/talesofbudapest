@@ -6,14 +6,12 @@ export const MAP_DEFAULT_ZOOM = 13
 
 export const MAP_MAX_ZOOM = 18
 
-export const MAP_TILE_URL =
-  'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+export const MAP_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty'
 
-export const MAP_ATTRIBUTION =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a> &copy; <a href="https://openrouteservice.org">openrouteservice.org</a> by HeiGIT'
+export const MAP_ROUTE_ATTRIBUTION =
+  'Routes &copy; <a href="https://openrouteservice.org">openrouteservice.org</a> by HeiGIT'
 
-export const MAP_TILE_OPTIONS = {
-  maxZoom: MAP_MAX_ZOOM,
-  updateWhenIdle: true,
-  keepBuffer: 2,
+export const MAP_ATTRIBUTION_CONTROL = {
+  compact: true,
+  customAttribution: MAP_ROUTE_ATTRIBUTION,
 } as const

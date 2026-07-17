@@ -51,7 +51,30 @@
   "navigation": {
     "reroute": "Útvonal ehhez a megállóhoz",
     "rerouting": "Útvonaltervezés…",
-    "arrived": "Megérkeztél ide: {title}."
+    "walkingTools": "Sétaeszközök",
+    "openDirections": "Navigáció",
+    "manualNext": "Itt vagyok — következő megálló lejátszása",
+    "arrived": "Megérkeztél ide: {title}.",
+    "locationRequesting": "Helyzet meghatározása…",
+    "locationTracking": "Az automatikus érkezésérzékelés aktív.",
+    "locationWeak": "Gyenge a GPS-jel (±{accuracy} m).",
+    "locationPaused": "Az érkezésérzékelés szünetel, amíg az app nincs előtérben.",
+    "locationDenied": "A helyhozzáférés ki van kapcsolva. Használd a kézi gombot a megállóknál.",
+    "locationUnavailable": "A helyzeted nem elérhető. Kézzel folytathatod a túrát.",
+    "foregroundOnly": "Az automatikus érkezéshez séta közben tartsd nyitva a túrát.",
+    "retryLocation": "GPS újrapróbálása",
+    "manualPlay": "Itt vagyok — történet lejátszása",
+    "playNextStop": "Következő megálló lejátszása: {title}",
+    "downloadWalk": "Séta letöltése",
+    "downloadingWalk": "Séta mentése: {cached}/{total} hangfejezet",
+    "downloadReady": "A séta offline mentve ({count} hangfejezet)",
+    "downloadedWalk": "Séta letöltve",
+    "downloadWalkDescription": "Az útvonal és a megállólista offline is elérhető marad. A megtekintett térképrészletek is mentődnek.",
+    "preparingOffline": "A séta hanganyagainak előkészítése…",
+    "offlineReady": "A túra hanganyaga offline is elérhető.",
+    "offlinePartial": "Néhány hanganyagot nem sikerült offline menteni.",
+    "offlineUnavailable": "A hanganyaghoz internetkapcsolat szükséges.",
+    "offlineNow": "Offline vagy; a mentett hanganyagok továbbra is elérhetők."
   },
   "chronicle": {
     "title": "Krónika",
@@ -84,13 +107,26 @@
       "A mester történész megidézése…"
     ],
     "tryAgain": "Újra",
-    "cancel": "Mégse"
+    "cancel": "Mégse",
+    "generationProgress": "{current}/{total}. hangfejezet",
+    "safeToLeave": "Elhagyhatod ezt a képernyőt, és később visszatérhetsz.",
+    "generationStages": {
+      "queued": "A túrád várakozik",
+      "planning": "Útvonal tervezése",
+      "writing": "Forrásalapú történetek írása",
+      "audio": "Fejezetek hanganyagának készítése",
+      "saving": "Túra mentése",
+      "completed": "A túra elkészült",
+      "failed": "A generálás leállt"
+    }
   },
   "questionnaire": {
     "title": "Tervezd meg a túrád",
     "previousQuestion": "Előző kérdés",
     "close": "Bezárás",
     "quickStart": "Gyors indítás",
+    "readyMadeTours": "Válassz kész túrát",
+    "or": "VAGY",
     "quickStarts": {
       "flagshipTitle": "Hogyan lett Budapestből Budapest?",
       "flagshipTagline": "Kb. 2¼ óra · kilenc fordulópont",
@@ -98,6 +134,9 @@
     },
     "styleQuestion": "Hogyan szereted a történelmet?",
     "styleHelper": "Ez határozza meg a túra tempóját és mélységét.",
+    "durationQuestion": "Mennyi időd van?",
+    "durationHint": "Körülbelül {minutes} séta és hallgatás.",
+    "locationRequesting": "Helyzet meghatározása…",
     "topicsQuestion": "Mi vonz igazán?",
     "topicsHelper": "Válassz legfeljebb {max}-t — mi méretezzük hozzá a túrát.",
     "idealTime": "ideális idő",
@@ -108,6 +147,7 @@
     "startNearMe": "Induljunk innen",
     "startTour": "Túra indítása",
     "intentPlaceholder": "✨ Már tudom, mit szeretnék…",
+    "intentLabel": "Valami konkrétabbra vágysz?",
     "intentAriaLabel": "Írd le a saját túrádat",
     "intentSubmit": "Indítás ezzel az ötlettel"
   },

@@ -17,7 +17,7 @@ export const useReplaceStop = () => {
         const response = await fetch('/api/narratives/plan/replace', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ draft, replaceIndex }),
+          body: JSON.stringify({ draftId: draft.id, replaceIndex }),
         })
 
         const payload = await response.json()

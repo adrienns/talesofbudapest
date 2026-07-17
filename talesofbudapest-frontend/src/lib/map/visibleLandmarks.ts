@@ -1,8 +1,9 @@
 import { isTierAllowedAtZoom } from '@/lib/map/mapTierFilter'
 import type { MapPin } from '@/types/landmark'
 
-/** Below this zoom, non-selected markers are clustered (Google-style LOD). */
+/** MapLibre clusters through this integer zoom, matching the legacy map behavior. */
 export const CLUSTER_MAX_ZOOM = 15
+export const PIN_REVEAL_ZOOM = CLUSTER_MAX_ZOOM + 1
 
 export type MapBounds = {
   south: number
@@ -30,15 +31,15 @@ const isInBounds = (landmark: MapPin, bounds: MapBounds | null): boolean => {
   )
 }
 
-const markerVariant = (isSelected: boolean): 'dot' | 'photo' =>
-  isSelected ? 'photo' : 'dot'
+const markerVariant = (zoom: number, isSelected: boolean): 'dot' | 'photo' =>
+  isSelected || zoom >= PIN_REVEAL_ZOOM ? 'photo' : 'dot'
 
 const shouldCluster = (zoom: number, isSelected: boolean): boolean => {
   if (isSelected) {
     return false
   }
 
-  return zoom <= CLUSTER_MAX_ZOOM
+  return zoom < PIN_REVEAL_ZOOM
 }
 
 /** Tier/zoom filter only — no viewport culling (used for stable cluster layer). */
@@ -64,7 +65,7 @@ export const partitionVisibleLandmarks = (
     const isSelected = landmark.id === selectedLandmarkId
     const entry: VisibleLandmarkEntry = {
       landmark,
-      variant: markerVariant(isSelected),
+      variant: markerVariant(zoom, isSelected),
       cluster: shouldCluster(zoom, isSelected),
     }
 

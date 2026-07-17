@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { ChevronDown, Download, Share2 } from 'lucide-react'
+import { CheckCircle2, ChevronDown, Download, MapPin, Navigation, Play, Share2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { ChroniclePanel } from '@/components/chronicle/ChroniclePanel'
 import { IconButton } from '@/components/ui/IconButton'
@@ -34,9 +34,24 @@ export const TourSheetExpanded = ({
   onCollapse,
   readyGlow = false,
   chronicleLocationId = null,
+  offlineReadiness = null,
+  onPrepareOffline,
+  onOpenDirections,
+  onManualArrival,
+  onPlayNextStop,
+  onSelectRouteStop,
 }: TourSheetExpandedProps) => {
   const t = useTranslations('player')
+  const tNavigation = useTranslations('navigation')
   const nextStop = routeStops[currentStopIndex + 1]
+  const offlineActionLabel = offlineReadiness?.status === 'ready'
+    ? tNavigation('downloadReady', { count: offlineReadiness.totalCount })
+    : offlineReadiness?.status === 'preparing'
+      ? tNavigation('downloadingWalk', {
+          cached: offlineReadiness.cachedCount,
+          total: offlineReadiness.totalCount,
+        })
+      : tNavigation('downloadWalk')
 
   return (
     <div className="flex flex-col gap-5 pb-2">
@@ -102,6 +117,52 @@ export const TourSheetExpanded = ({
         <p className="text-center text-[0.75rem] text-accent">{generateError}</p>
       )}
 
+      {routeStops.length > 0 && (
+        <section className="grid grid-cols-2 gap-2" aria-label={tNavigation('walkingTools')}>
+          <button
+            type="button"
+            onClick={onManualArrival}
+            disabled={!onManualArrival || !hasAudio}
+            className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-accent px-3 text-sm font-bold text-on-primary transition active:scale-[0.98] disabled:opacity-40"
+          >
+            <MapPin className="h-4 w-4" aria-hidden="true" />
+            {tNavigation('manualPlay')}
+          </button>
+          <button
+            type="button"
+            onClick={onOpenDirections}
+            disabled={!onOpenDirections}
+            className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-outline-variant/50 bg-surface/70 px-3 text-sm font-bold text-on-surface transition active:scale-[0.98] disabled:opacity-40"
+          >
+            <Navigation className="h-4 w-4 text-accent" aria-hidden="true" />
+            {tNavigation('openDirections')}
+          </button>
+        </section>
+      )}
+
+      {offlineReadiness && (
+        <section className="rounded-2xl border border-outline-variant/35 bg-surface/60 p-3" aria-live="polite">
+          <div className="flex items-center gap-3">
+            <Download className="h-5 w-5 shrink-0 text-accent" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-on-surface">{offlineActionLabel}</p>
+              <p className="mt-0.5 text-xs leading-snug text-on-surface/55">
+                {tNavigation('downloadWalkDescription')}
+              </p>
+            </div>
+            {offlineReadiness.status === 'ready' && <CheckCircle2 className="h-5 w-5 shrink-0 text-accent" aria-hidden="true" />}
+          </div>
+          <button
+            type="button"
+            onClick={onPrepareOffline}
+            disabled={!onPrepareOffline || offlineReadiness.status === 'preparing' || offlineReadiness.status === 'ready'}
+            className="mt-3 w-full rounded-xl border border-accent/35 px-3 py-2 text-sm font-bold text-accent transition active:scale-[0.99] disabled:opacity-45"
+          >
+            {offlineReadiness.status === 'ready' ? tNavigation('downloadedWalk') : tNavigation('downloadWalk')}
+          </button>
+        </section>
+      )}
+
       <div className="flex items-center justify-between">
         <button
           type="button"
@@ -124,46 +185,65 @@ export const TourSheetExpanded = ({
         </button>
       </div>
 
-      {nextStop && (
+      {routeStops.length > 0 && (
         <section className="mt-8 border-t border-outline-variant/35 pt-5" aria-label={t('tourTimeline')}>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-[0.6875rem] font-semibold uppercase tracking-[0.16em] text-[var(--map-orange)]">
               {t('upNext')}
             </h2>
-            <span className="text-[0.6875rem] font-medium text-on-surface/45">
-              {t('stop', { number: currentStopIndex + 2 })}
-            </span>
+            <span className="text-[0.6875rem] font-medium text-on-surface/45">{t('stop', { number: currentStopIndex + 1 })}</span>
           </div>
 
-          <div className="flex items-center gap-3 rounded-2xl border border-white/55 bg-white/35 p-3 shadow-[0_8px_20px_rgba(45,41,38,0.07)]">
-            <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-surface-dim">
-              {nextStop.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={nextStop.imageUrl} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center font-serif text-lg font-bold text-[var(--map-orange)]/55">
-                  {currentStopIndex + 2}
-                </div>
-              )}
+          {nextStop && (
+            <div className="flex items-center gap-3 rounded-2xl border border-white/55 bg-white/35 p-3 shadow-[0_8px_20px_rgba(45,41,38,0.07)]">
+              <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-surface-dim">
+                {nextStop.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={nextStop.imageUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center font-serif text-lg font-bold text-[var(--map-orange)]/55">
+                    {currentStopIndex + 2}
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[0.625rem] font-semibold uppercase tracking-[0.12em] text-on-surface/45">{t('upNext')}</p>
+                <p className="mt-0.5 line-clamp-2 font-serif text-lg font-bold leading-tight text-on-surface">{nextStop.title}</p>
+              </div>
+              <button
+                type="button"
+                onClick={onPlayNextStop}
+                disabled={!onPlayNextStop}
+                aria-label={tNavigation('playNextStop', { title: nextStop.title })}
+                className="flex min-h-10 shrink-0 items-center justify-center gap-1 rounded-xl bg-accent px-2 text-xs font-bold text-on-primary transition active:scale-95 disabled:opacity-40"
+              >
+                <Play className="ml-0.5 h-4 w-4 fill-current" aria-hidden="true" />
+                <span>{tNavigation('manualNext')}</span>
+              </button>
             </div>
-            <div className="min-w-0">
-              <p className="text-[0.625rem] font-semibold uppercase tracking-[0.12em] text-on-surface/45">{t('upNext')}</p>
-              <p className="mt-0.5 line-clamp-2 font-serif text-lg font-bold leading-tight text-on-surface">{nextStop.title}</p>
-            </div>
-          </div>
+          )}
 
           <ol className="mt-5 space-y-0" aria-label={t('tourTimeline')}>
-            {routeStops.slice(currentStopIndex + 1).map((stop, index) => {
-              const stopNumber = currentStopIndex + index + 2
+            {routeStops.map((stop, index) => {
+              const stopNumber = index + 1
+              const isCurrent = index === currentStopIndex
               return (
                 <li key={stop.id} className="relative flex gap-3 pb-4 last:pb-0">
-                  {index < routeStops.slice(currentStopIndex + 1).length - 1 && (
+                  {index < routeStops.length - 1 && (
                     <span className="absolute left-[0.6875rem] top-7 h-[calc(100%-0.5rem)] border-l border-dashed border-[var(--map-orange)]/35" aria-hidden="true" />
                   )}
-                  <span className="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--map-orange)] text-[0.6875rem] font-bold text-white">
+                  <span className={`relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[0.6875rem] font-bold ${isCurrent ? 'bg-accent text-on-primary' : 'bg-[var(--map-orange)] text-white'}`}>
                     {stopNumber}
                   </span>
-                  <p className="pt-0.5 text-sm font-medium leading-tight text-on-surface/70">{stop.title}</p>
+                  <button
+                    type="button"
+                    onClick={() => onSelectRouteStop?.(stop.id)}
+                    disabled={!onSelectRouteStop || isCurrent}
+                    aria-current={isCurrent ? 'step' : undefined}
+                    className={`min-w-0 flex-1 pt-0.5 text-left text-sm font-medium leading-tight transition disabled:cursor-default ${isCurrent ? 'text-on-surface' : 'text-on-surface/70 active:text-accent'}`}
+                  >
+                    {stop.title}
+                  </button>
                 </li>
               )
             })}

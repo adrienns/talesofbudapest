@@ -23,6 +23,7 @@
   --marker-glass-bg: color-mix(in srgb, var(--color-marker-pin) 22%, var(--glass-bg));
   --marker-glass-border: color-mix(in srgb, var(--color-marker-pin) 38%, var(--glass-border));
   --color-blue:#3A6073;
+  --color-blue-02:#415E84;
 
   /* Premium map experience — intentionally scoped by map-specific components. */
   --map-cream: #fffaf3;

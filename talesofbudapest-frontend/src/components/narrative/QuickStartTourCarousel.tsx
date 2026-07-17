@@ -8,10 +8,11 @@ export type CarouselCard = {
 }
 
 type QuickStartTourCarouselProps = {
-  label: string
+  label?: string
   tours: CarouselCard[]
   onSelect?: (slug: string) => void
   variant?: 'tour' | 'place'
+  selectedSlug?: string | null
 }
 
 export const QuickStartTourCarousel = ({
@@ -19,15 +20,18 @@ export const QuickStartTourCarousel = ({
   tours,
   onSelect,
   variant = 'tour',
+  selectedSlug = null,
 }: QuickStartTourCarouselProps) => (
   <div className="w-full">
-    <p className="mb-2.5 px-1 text-xs font-semibold uppercase tracking-[0.08em] text-on-surface/45">
-      {label}
-    </p>
+    {label && (
+      <div className="mb-3 px-1">
+        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-on-surface/55">{label}</p>
+      </div>
+    )}
     <div
-      className="-mx-1 flex snap-x snap-mandatory gap-2.5 overflow-x-auto pb-1 pl-1 pr-5 scrollbar-hide"
+      className="-mx-1 flex snap-x snap-mandatory gap-2.5 overflow-x-auto pb-4 pl-1 pr-5 scrollbar-hide"
       role="list"
-      aria-label={label}
+      aria-label={label ?? 'Tours'}
     >
       {tours.map((tour, index) => (
         <div
@@ -44,7 +48,16 @@ export const QuickStartTourCarousel = ({
               onClick={onSelect ? () => onSelect(tour.slug) : undefined}
             />
           ) : (
-            <article className="flex aspect-[4/5] flex-col overflow-hidden rounded-2xl border border-outline-variant/20 bg-surface shadow-[0_8px_22px_rgba(45,41,38,0.08)]">
+            <button
+              type="button"
+              onClick={onSelect ? () => onSelect(tour.slug) : undefined}
+              aria-pressed={tour.slug === selectedSlug}
+              className={`flex aspect-[4/5] w-full flex-col overflow-hidden rounded-2xl border-2 bg-surface text-left shadow-[0_8px_22px_rgba(45,41,38,0.08)] transition-colors active:scale-[0.98] ${
+                tour.slug === selectedSlug
+                  ? 'border-[var(--color-accent)]'
+                  : 'border-transparent'
+              }`}
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={tour.imageSrc} alt={tour.imageAlt} className="h-[58%] w-full object-cover" />
               <div className="min-h-0 px-3.5 py-3">
@@ -56,7 +69,7 @@ export const QuickStartTourCarousel = ({
                 </h3>
                 <p className="mt-1 line-clamp-2 text-[0.6875rem] leading-snug text-on-surface/75">{tour.tagline}</p>
               </div>
-            </article>
+            </button>
           )}
         </div>
       ))}

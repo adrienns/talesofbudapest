@@ -1,7 +1,7 @@
 'use client'
 
-import { Marker } from 'react-leaflet'
-import { createChapterIcon } from '@/components/map/createLandmarkIcon'
+import { Marker } from '@vis.gl/react-maplibre'
+import { MapPhotoMarker } from '@/components/map/MapMarkerVisual'
 import type { NarrativeChapter } from '@/types/narrative'
 
 type ChapterMarkerProps = {
@@ -13,12 +13,24 @@ type ChapterMarkerProps = {
 
 export const ChapterMarker = ({ chapter, stopNumber, isSelected, onSelect }: ChapterMarkerProps) => (
   <Marker
-    position={[chapter.lat, chapter.lng]}
-    icon={createChapterIcon(isSelected, chapter, stopNumber)}
-    zIndexOffset={isSelected ? 1000 : 0}
-    riseOnHover
-    eventHandlers={{
-      click: () => onSelect(chapter),
+    longitude={chapter.lng}
+    latitude={chapter.lat}
+    anchor="bottom"
+    style={{ zIndex: isSelected ? 40 : 25 }}
+    onClick={(event) => {
+      event.originalEvent.stopPropagation()
+      onSelect(chapter)
     }}
-  />
+  >
+    <MapPhotoMarker
+      landmark={{
+        name: chapter.title,
+        image_url: chapter.imageUrl,
+        map_theme: 'history',
+        landmark_type: 'monument',
+      }}
+      isSelected={isSelected}
+      stopNumber={stopNumber}
+    />
+  </Marker>
 )

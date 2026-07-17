@@ -1,11 +1,8 @@
 'use client'
 
-import { memo, useMemo } from 'react'
-import { Marker } from 'react-leaflet'
-import {
-  createLandmarkDotIcon,
-  createLandmarkIcon,
-} from '@/components/map/createLandmarkIcon'
+import { memo } from 'react'
+import { Marker } from '@vis.gl/react-maplibre'
+import { MapDotMarker, MapPhotoMarker, resolveMarkerTheme } from '@/components/map/MapMarkerVisual'
 import type { MapPin } from '@/types/landmark'
 
 type LandmarkMarkerProps = {
@@ -21,22 +18,20 @@ export const LandmarkMarker = memo(function LandmarkMarker({
   variant,
   onSelect,
 }: LandmarkMarkerProps) {
-  const icon = useMemo(() => {
-    if (variant === 'dot') {
-      return createLandmarkDotIcon(isSelected, landmark.map_theme)
-    }
-
-    return createLandmarkIcon(landmark, isSelected)
-  }, [landmark, isSelected, variant])
-
   return (
     <Marker
-      position={[landmark.lat, landmark.lng]}
-      icon={icon}
-      zIndexOffset={isSelected ? 1000 : variant === 'photo' ? 200 : 0}
-      eventHandlers={{
-        click: () => onSelect(landmark),
+      longitude={landmark.lng}
+      latitude={landmark.lat}
+      anchor="bottom"
+      style={{ zIndex: isSelected ? 30 : variant === 'photo' ? 20 : 10 }}
+      onClick={(event) => {
+        event.originalEvent.stopPropagation()
+        onSelect(landmark)
       }}
-    />
+    >
+      {variant === 'photo'
+        ? <MapPhotoMarker landmark={landmark} isSelected={isSelected} />
+        : <MapDotMarker theme={resolveMarkerTheme(landmark)} />}
+    </Marker>
   )
 })

@@ -7,7 +7,74 @@
 @import '../styles/bottom-nav.css';
 @import '../styles/audio-player.css';
 @import '../styles/narrative.css';
-@import 'leaflet/dist/leaflet.css';
+@import 'maplibre-gl/dist/maplibre-gl.css';
+
+/* Keep required map credits accessible without covering the route preview. */
+.maplibregl-ctrl-attrib.maplibregl-compact {
+  margin: 4px;
+  min-height: 20px;
+  padding: 0 20px 0 0;
+  background: transparent;
+  animation: map-attribution-intro 5s forwards;
+}
+
+.maplibregl-ctrl-attrib.maplibregl-compact .maplibregl-ctrl-attrib-button {
+  width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  background-color: rgb(255 255 255 / 72%);
+  background-size: 18px 18px;
+  opacity: 0.62;
+}
+
+.maplibregl-ctrl-attrib.maplibregl-compact-show[open] {
+  max-width: calc(100% - 8px) !important;
+  padding: 3px 24px 3px 7px !important;
+  border-radius: 10px;
+  background-color: rgb(255 255 255 / 94%) !important;
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.maplibregl-ctrl-attrib.maplibregl-compact .maplibregl-ctrl-attrib-inner {
+  display: block;
+  animation: map-attribution-copy-intro 5s forwards;
+}
+
+.maplibregl-ctrl-attrib.maplibregl-compact-show[open] .maplibregl-ctrl-attrib-inner {
+  display: block !important;
+}
+
+.maplibregl-ctrl-attrib.maplibregl-compact-show[open] .maplibregl-ctrl-attrib-button {
+  background-color: rgb(255 255 255 / 94%);
+  opacity: 1;
+}
+
+@keyframes map-attribution-intro {
+  0%,
+  99% {
+    max-width: calc(100% - 8px);
+    padding: 3px 24px 3px 7px;
+    background-color: rgb(255 255 255 / 94%);
+  }
+
+  100% {
+    max-width: none;
+    padding: 0 20px 0 0;
+    background-color: transparent;
+  }
+}
+
+@keyframes map-attribution-copy-intro {
+  0%,
+  99% {
+    display: block;
+  }
+
+  100% {
+    display: none;
+  }
+}
 
 @layer base {
   html,

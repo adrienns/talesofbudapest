@@ -51,7 +51,30 @@
   "navigation": {
     "reroute": "Route to this stop",
     "rerouting": "Routing…",
-    "arrived": "You’ve arrived at {title}."
+    "walkingTools": "Walking tools",
+    "openDirections": "Directions",
+    "manualNext": "I’m here — play next stop",
+    "arrived": "You’ve arrived at {title}.",
+    "locationRequesting": "Finding your position…",
+    "locationTracking": "Automatic arrival is active.",
+    "locationWeak": "GPS signal is weak (±{accuracy} m).",
+    "locationPaused": "Arrival detection paused while the app was hidden.",
+    "locationDenied": "Location access is off. Use the manual button at each stop.",
+    "locationUnavailable": "Your position is unavailable. You can continue manually.",
+    "foregroundOnly": "Keep this tour open while walking for automatic arrivals.",
+    "retryLocation": "Retry GPS",
+    "manualPlay": "I’m here — play story",
+    "playNextStop": "Play next stop: {title}",
+    "downloadWalk": "Download this walk",
+    "downloadingWalk": "Saving walk: {cached} of {total} audio chapters",
+    "downloadReady": "Walk saved offline ({count} audio chapters)",
+    "downloadedWalk": "Walk downloaded",
+    "downloadWalkDescription": "Your route and stop list stay available offline. Map areas you view are saved for the walk too.",
+    "preparingOffline": "Preparing audio for your walk…",
+    "offlineReady": "Tour audio is ready offline.",
+    "offlinePartial": "Some audio could not be saved offline.",
+    "offlineUnavailable": "Audio needs an internet connection.",
+    "offlineNow": "You’re offline; saved audio remains available."
   },
   "chronicle": {
     "title": "Chronicle",
@@ -84,13 +107,26 @@
       "Summoning the master historian…"
     ],
     "tryAgain": "Try again",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "generationProgress": "Audio chapter {current} of {total}",
+    "safeToLeave": "You can leave this screen and return later.",
+    "generationStages": {
+      "queued": "Your tour is queued",
+      "planning": "Planning the route",
+      "writing": "Writing grounded stories",
+      "audio": "Generating chapter audio",
+      "saving": "Saving your tour",
+      "completed": "Tour ready",
+      "failed": "Generation stopped"
+    }
   },
   "questionnaire": {
     "title": "Plan your tour",
     "previousQuestion": "Previous question",
     "close": "Close",
     "quickStart": "Quick start",
+    "readyMadeTours": "Pick a ready-made tour",
+    "or": "OR",
     "quickStarts": {
       "flagshipTitle": "How Budapest Became Budapest",
       "flagshipTagline": "About 2¼ h · nine turning points",
@@ -98,6 +134,9 @@
     },
     "styleQuestion": "How do you like your history?",
     "styleHelper": "This sets the pace and depth of your tour.",
+    "durationQuestion": "How much time do you have?",
+    "durationHint": "About {minutes} of walking and listening.",
+    "locationRequesting": "Finding your position…",
     "topicsQuestion": "What pulls you in?",
     "topicsHelper": "Pick up to {max} — we'll size the tour for you.",
     "idealTime": "ideal time",
@@ -108,6 +147,7 @@
     "startNearMe": "Start near me",
     "startTour": "Start the tour",
     "intentPlaceholder": "✨ I already know what I want…",
+    "intentLabel": "Want something more specific?",
     "intentAriaLabel": "Describe your own tour",
     "intentSubmit": "Start with this idea"
   },

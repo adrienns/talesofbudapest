@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useLocale } from 'next-intl'
 import { LAST_NARRATIVE_STORAGE_KEY, lastNarrativeChapterKey } from '@/constants/narrative'
+import { loadOfflineTour } from '@/lib/narrative/offlineTour'
 import { useNarrativeStore } from '@/stores/narrativeStore'
 import type { NarrativeRoute, NarrativeSummary } from '@/types/narrative'
 
@@ -48,18 +49,20 @@ export const useNarratives = () => {
 
   const loadNarrativeById = useCallback(
     async (id: string, initialChapterIndex = 0) => {
-      const response = await fetch(`/api/narratives/${id}?locale=${locale}`)
-      const payload = await response.json()
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? 'Failed to load narrative')
-      }
-
-      const route: NarrativeRoute = {
-        id: payload.id,
-        title: payload.title,
-        chapters: payload.chapters,
-        walkingRoute: payload.walkingRoute ?? null,
+      let route: NarrativeRoute | null = null
+      try {
+        const response = await fetch(`/api/narratives/${id}?locale=${locale}`)
+        const payload = await response.json()
+        if (!response.ok) throw new Error(payload.error ?? 'Failed to load narrative')
+        route = {
+          id: payload.id,
+          title: payload.title,
+          chapters: payload.chapters,
+          walkingRoute: payload.walkingRoute ?? null,
+        }
+      } catch (error) {
+        route = loadOfflineTour(id)
+        if (!route) throw error
       }
 
       const safeIndex = Math.min(Math.max(initialChapterIndex, 0), route.chapters.length - 1)

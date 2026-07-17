@@ -11,6 +11,7 @@ import { NarrativeGeneratingOverlay } from '@/components/narrative/NarrativeGene
 import { ResumeTourBanner } from '@/components/narrative/ResumeTourBanner'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LoadingScreen } from '@/components/ui/LoadingScreen'
+import { SlideToStart } from '@/components/ui/SlideToStart'
 import { ChevronLeft } from 'lucide-react'
 import { IconButton } from '@/components/ui/IconButton'
 import { PromptBar } from '@/components/ui/PromptBar'
@@ -21,6 +22,7 @@ import { useNarratives, type LastNarrativePeek } from '@/features/narrative/hook
 import { usePlanNarrative } from '@/features/narrative/hooks/usePlanNarrative'
 import { requestWalkingRoute } from '@/features/narrative/hooks/useWalkingRoute'
 import { useArrivalDetection } from '@/features/narrative/hooks/useArrivalDetection'
+import { useTourReadiness } from '@/features/narrative/hooks/useTourReadiness'
 import { useResolveLandmark } from '@/features/landmarks/hooks/useResolveLandmark'
 import { useRouter } from '@/i18n/navigation'
 import { queryKeys } from '@/services/queryKeys'
@@ -28,7 +30,7 @@ import { useNarrativeStore } from '@/stores/narrativeStore'
 import { useTourPreferencesStore } from '@/stores/tourPreferencesStore'
 import { getLandmarkImageUrl } from '@/lib/landmarkImage'
 import type { Landmark, MapPin } from '@/types/landmark'
-import type { DraftNarrative, NarrativeChapter, PlaybackItem, WalkingRoute } from '@/types/narrative'
+import type { DraftNarrative, NarrativeChapter, NarrativeRequest, PlaybackItem, WalkingRoute } from '@/types/narrative'
 import type { SheetSnap } from '@/types/tourSheet'
 import type { NavTabId } from '@/types/navigation'
 import type { AppLocale } from '@/types/locale'
@@ -37,7 +39,7 @@ const MapView = dynamic(
   () => import('@/components/map/MapView').then((mod) => mod.MapView),
   {
     ssr: false,
-    loading: () => <div className="absolute inset-0 bg-surface" aria-hidden="true" />,
+    loading: () => <LoadingScreen coverImage="/quick-start/main-parliament.webp" />,
   },
 )
 
@@ -70,7 +72,7 @@ const HomePageContent = () => {
   const tNavigation = useTranslations('navigation')
   const { resolveLandmark } = useResolveLandmark()
   const queryClient = useQueryClient()
-  const narrativeContext = useNarrativeContext()
+  const { context: narrativeContext, locationStatus, requestLocation } = useNarrativeContext()
   const { generateNarrative, loadCuratedTour } = useGenerateNarrative()
   const { planNarrative } = usePlanNarrative()
   const { confirmNarrative } = useConfirmNarrative()
@@ -82,6 +84,8 @@ const HomePageContent = () => {
     activeRoute,
     activeChapterIndex,
     error: narrativeError,
+    generationStage,
+    generationProgress,
     setFlowState,
     setActiveChapterIndex,
     setError,
@@ -95,12 +99,13 @@ const HomePageContent = () => {
   const [lastExtras, setLastExtras] = useState<QuestionnaireExtras | undefined>(undefined)
   const [activeTab, setActiveTab] = useState<NavTabId>('map')
   const [lastNarrativePeek, setLastNarrativePeek] = useState<LastNarrativePeek | null>(null)
-  const [isExplorerOpen, setIsExplorerOpen] = useState(true)
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(true)
 
   const [sheetSnap, setSheetSnap] = useState<SheetSnap>('collapsed')
   const [temporaryRoute, setTemporaryRoute] = useState<WalkingRoute | null>(null)
   const [isRerouting, setIsRerouting] = useState(false)
   const [arrivalMessage, setArrivalMessage] = useState<string | null>(null)
+  const [manualPlayRequest, setManualPlayRequest] = useState<{ chapterId: string; requestId: number } | null>(null)
 
   const isPlanning = flowState === 'planning'
   const isGenerating = flowState === 'generating'
@@ -131,7 +136,17 @@ const HomePageContent = () => {
     setArrivalMessage(tNavigation('arrived', { title: chapter.title ?? '' }))
   }, [tNavigation])
 
-  useArrivalDetection(activeRoute ? activeChapter : null, handleArrival)
+  const arrivalDetection = useArrivalDetection(activeRoute ? activeChapter : null, handleArrival)
+  const tourReadiness = useTourReadiness(activeRoute)
+
+  const handleManualArrival = useCallback(() => {
+    if (!activeChapter) return
+    handleArrival(activeChapter)
+    setManualPlayRequest((current) => ({
+      chapterId: activeChapter.id,
+      requestId: (current?.requestId ?? 0) + 1,
+    }))
+  }, [activeChapter, handleArrival])
 
   useEffect(() => {
     setTemporaryRoute(null)
@@ -169,6 +184,7 @@ const HomePageContent = () => {
         audioUrl: activeChapter.audioUrl,
         imageUrl: activeChapter.imageUrl,
         imageAlt: activeChapter.title,
+        landmarkId: activeChapter.landmarkId ?? null,
         script: activeChapter.script ?? null,
         lat: activeChapter.lat,
         lng: activeChapter.lng,
@@ -182,6 +198,7 @@ const HomePageContent = () => {
         audioUrl: selectedLandmark.audio_url,
         imageUrl: getLandmarkImageUrl(selectedLandmark.image_url, selectedLandmark.images),
         imageAlt: selectedLandmark.images[0]?.alt ?? selectedLandmark.name,
+        landmarkId: selectedLandmark.id,
         lat: selectedLandmark.lat,
         lng: selectedLandmark.lng,
       }
@@ -223,8 +240,8 @@ const HomePageContent = () => {
   }, [router, searchParams, setFlowState])
 
   /** Style→Topics→Recap flow, and the free-text intent bar — both go through the route preview. */
-  const handlePlan = async (prompt: string, extras?: QuestionnaireExtras) => {
-    setLastPrompt(prompt)
+  const handlePlan = async (extras: QuestionnaireExtras) => {
+    setLastPrompt(JSON.stringify(extras))
     setLastExtras(extras)
     setSelectedLandmark(null)
     setLastNarrativePeek(null)
@@ -234,29 +251,34 @@ const HomePageContent = () => {
     }
 
     try {
-      await planNarrative(prompt, { ...narrativeContext, locale, ...extras })
+      await planNarrative(extras, { ...narrativeContext, locale, ...extras })
     } catch {
       // error handled in store
     }
   }
 
   /** One-tap curated starters skip the preview — the prompt is pre-vetted. */
-  const handleStartCurated = async (starter: CuratedStarter) => {
-    setLastPrompt(starter.kind === 'generated' ? starter.prompt : `curated:${starter.slug}`)
+  const handleStartCurated = async (starter: CuratedStarter, initialChapterIndex = 0) => {
+    setLastPrompt(`curated:${starter.slug}`)
     setSelectedLandmark(null)
     setLastNarrativePeek(null)
     setFromQuestionnaire({ styleId: starter.styleId, topicIds: starter.topicIds })
 
     try {
       if (starter.kind === 'fixed') {
-        await loadCuratedTour(starter.slug, locale)
+        await loadCuratedTour(starter.slug, locale, initialChapterIndex)
       } else {
-        await generateNarrative(starter.prompt, {
+        await generateNarrative({
+          styleId: starter.styleId,
+          topicIds: starter.topicIds,
+          timeBudgetMinutes: 90,
+          nearMe: false,
+        } satisfies NarrativeRequest, {
           ...narrativeContext,
           locale,
           styleId: starter.styleId,
           topicIds: starter.topicIds,
-        })
+        }, starter.slug)
       }
       setActiveTab('narrative')
     } catch {
@@ -278,8 +300,8 @@ const HomePageContent = () => {
   }, [reset])
 
   const handleRetry = () => {
-    if (lastPrompt) {
-      handlePlan(lastPrompt, lastExtras)
+    if (lastPrompt && lastExtras) {
+      handlePlan(lastExtras)
     }
   }
 
@@ -368,6 +390,29 @@ const HomePageContent = () => {
     }
   }, [activeRoute, setActiveChapterIndex])
 
+  const handlePlayNextStop = useCallback(() => {
+    if (!activeRoute || !activeChapter) return
+    const nextChapter = activeRoute.chapters[activeChapterIndex + 1]
+    if (!nextChapter) return
+
+    setActiveChapterIndex(activeChapterIndex + 1)
+    handleArrival(nextChapter)
+    setManualPlayRequest((current) => ({
+      chapterId: nextChapter.id,
+      requestId: (current?.requestId ?? 0) + 1,
+    }))
+  }, [activeChapter, activeChapterIndex, activeRoute, handleArrival, setActiveChapterIndex])
+
+  const handleOpenDirections = useCallback(() => {
+    if (!activeChapter || typeof window === 'undefined') return
+    const params = new URLSearchParams({
+      api: '1',
+      destination: `${activeChapter.lat},${activeChapter.lng}`,
+      travelmode: 'walking',
+    })
+    window.location.assign(`https://www.google.com/maps/dir/?${params.toString()}`)
+  }, [activeChapter])
+
   const selectAdjacentChapter = useCallback(
     (direction: -1 | 1) => {
       if (!activeRoute || activeRoute.chapters.length === 0) {
@@ -398,15 +443,47 @@ const HomePageContent = () => {
       />
 
       {showChrome && hasActiveRoute && activeChapter && (
-        <div className="absolute right-4 top-[max(4.25rem,env(safe-area-inset-top))] z-30 flex flex-col items-end gap-2">
-          <button
-            type="button"
-            onClick={handleReroute}
-            disabled={isRerouting}
-            className="rounded-full bg-surface px-4 py-2 text-xs font-bold text-on-surface shadow disabled:opacity-60"
-          >
-            {isRerouting ? tNavigation('rerouting') : tNavigation('reroute')}
-          </button>
+        <div className="absolute right-4 top-[max(4.25rem,env(safe-area-inset-top))] z-30 flex max-w-64 flex-col items-end gap-2">
+          <div className="rounded-2xl bg-surface/95 px-3 py-3 text-xs text-on-surface shadow-lg backdrop-blur">
+            <p className="font-bold">
+              {tourReadiness.status === 'ready' && tNavigation('offlineReady')}
+              {tourReadiness.status === 'preparing' && tNavigation('preparingOffline')}
+              {tourReadiness.status === 'partial' && tNavigation('offlinePartial')}
+              {tourReadiness.status === 'unavailable' && tNavigation('offlineUnavailable')}
+              {tourReadiness.status === 'offline' && tNavigation('offlineNow')}
+            </p>
+            <p className="mt-1 text-on-surface/65">
+              {arrivalDetection.status === 'tracking' && tNavigation('locationTracking')}
+              {arrivalDetection.status === 'requesting' && tNavigation('locationRequesting')}
+              {arrivalDetection.status === 'weak' && tNavigation('locationWeak', { accuracy: Math.round(arrivalDetection.accuracyMeters ?? 0) })}
+              {arrivalDetection.status === 'paused' && tNavigation('locationPaused')}
+              {arrivalDetection.status === 'denied' && tNavigation('locationDenied')}
+              {arrivalDetection.status === 'unavailable' && tNavigation('locationUnavailable')}
+            </p>
+            <p className="mt-1 text-on-surface/50">{tNavigation('foregroundOnly')}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleManualArrival}
+                className="rounded-full bg-accent px-3 py-2 font-bold text-on-primary"
+              >
+                {tNavigation('manualPlay')}
+              </button>
+              <button
+                type="button"
+                onClick={handleReroute}
+                disabled={isRerouting}
+                className="rounded-full border border-outline-variant/50 px-3 py-2 font-bold disabled:opacity-60"
+              >
+                {isRerouting ? tNavigation('rerouting') : tNavigation('reroute')}
+              </button>
+              {(arrivalDetection.status === 'denied' || arrivalDetection.status === 'unavailable') && (
+                <button type="button" onClick={arrivalDetection.retry} className="rounded-full px-3 py-2 font-bold text-accent">
+                  {tNavigation('retryLocation')}
+                </button>
+              )}
+            </div>
+          </div>
           {arrivalMessage && (
             <p role="status" className="max-w-56 rounded-xl bg-surface px-3 py-2 text-xs font-semibold text-on-surface shadow">
               {arrivalMessage}
@@ -415,26 +492,24 @@ const HomePageContent = () => {
         </div>
       )}
 
-      {isExplorerOpen && (
+      {isOnboardingOpen && (
         <section
-          className="absolute inset-0 z-40 bg-[#f9efd8]"
-          aria-label="Meet your explorer guide"
+          className="absolute inset-0 z-40 overflow-hidden bg-[#1d1611]"
+          aria-label="Welcome to Tales of Budapest"
           role="dialog"
           aria-modal="true"
         >
-          <div className="relative h-full w-full overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setIsExplorerOpen(false)}
-              className="absolute right-5 top-[max(1.25rem,env(safe-area-inset-top))] z-10 grid h-11 w-11 place-items-center rounded-full bg-[#3c281a] text-xl text-white shadow-lg transition hover:scale-105"
-              aria-label="Close explorer guide"
-            >
-              ×
-            </button>
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#3c281a]/80 to-transparent px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-20 text-center text-[#fff7e6]">
-              <p className="font-serif text-2xl">Your Budapest explorer</p>
-              <p className="mt-1 text-sm opacity-90">Drag to look around · Scroll or pinch to zoom</p>
-            </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/quick-start/main-parliament.webp"
+            alt="Hungarian Parliament Building"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          <div className="absolute inset-0" aria-hidden="true" />
+          <div className="absolute inset-x-0 bottom-0 px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-24 text-center text-white">
+            <p className="font-serif text-3xl font-semibold">Tales of Budapest</p>
+            <p className="mt-2 text-sm text-white/80">Stories waiting around every corner.</p>
+            <SlideToStart onComplete={() => setIsOnboardingOpen(false)} />
           </div>
         </section>
       )}
@@ -466,6 +541,8 @@ const HomePageContent = () => {
           onClose={() => setFlowState('idle')}
           onPlan={handlePlan}
           onStartCurated={handleStartCurated}
+          onRequestLocation={requestLocation}
+          locationStatus={locationStatus}
           focusInput={startDictation}
         />
       )}
@@ -487,9 +564,11 @@ const HomePageContent = () => {
           setError(null)
           setFlowState('idle')
         }}
+        stage={generationStage}
+        progress={generationProgress}
       />
 
-      {showChrome && playbackItem && (
+      {showChrome && playbackItem && !isOnboardingOpen && (
         <div className="pointer-events-none absolute inset-x-0 top-0 z-[35] flex justify-start px-4 pt-[max(0.875rem,env(safe-area-inset-top))]">
           <IconButton
             icon={ChevronLeft}
@@ -501,7 +580,7 @@ const HomePageContent = () => {
         </div>
       )}
 
-      {showChrome && playbackItem && (
+      {showChrome && playbackItem && !isOnboardingOpen && (
         <AudioDrawer
           playbackItem={playbackItem}
           routeTitle={hasActiveRoute ? activeRoute?.title : null}
@@ -519,6 +598,16 @@ const HomePageContent = () => {
           }
           snap={sheetSnap}
           onSnapChange={setSheetSnap}
+          offlineReadiness={hasActiveRoute ? tourReadiness : null}
+          onPrepareOffline={hasActiveRoute ? tourReadiness.prepare : undefined}
+          onOpenDirections={hasActiveRoute ? handleOpenDirections : undefined}
+          onManualArrival={hasActiveRoute ? handleManualArrival : undefined}
+          onPlayNextStop={hasActiveRoute ? handlePlayNextStop : undefined}
+          onSelectRouteStop={hasActiveRoute ? (id) => {
+            const chapter = activeRoute?.chapters.find((item) => item.id === id)
+            if (chapter) handleChapterSelect(chapter)
+          } : undefined}
+          manualPlayRequest={manualPlayRequest}
         />
       )}
 
@@ -538,7 +627,7 @@ const HomePage = () => {
   const t = useTranslations('home')
 
   return (
-    <Suspense fallback={<LoadingScreen message={t('loadingMap')} />}>
+    <Suspense fallback={<LoadingScreen message={t('loadingMap')} coverImage="/quick-start/main-parliament.webp" />}>
       <HomePageContent />
     </Suspense>
   )

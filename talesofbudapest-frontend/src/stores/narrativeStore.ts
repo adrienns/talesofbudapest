@@ -8,11 +8,14 @@ type NarrativeStore = {
   activeRoute: NarrativeRoute | null
   activeChapterIndex: number
   error: string | null
+  generationStage: string | null
+  generationProgress: { current: number; total: number }
   setFlowState: (state: NarrativeFlowState) => void
   setDraftRoute: (draft: DraftNarrative | null) => void
   setActiveRoute: (route: NarrativeRoute | null, initialChapterIndex?: number) => void
   setActiveChapterIndex: (index: number) => void
   setError: (error: string | null) => void
+  setGenerationProgress: (stage: string | null, current?: number, total?: number) => void
   reset: () => void
 }
 
@@ -22,6 +25,8 @@ export const useNarrativeStore = create<NarrativeStore>((set, get) => ({
   activeRoute: null,
   activeChapterIndex: 0,
   error: null,
+  generationStage: null,
+  generationProgress: { current: 0, total: 0 },
 
   setFlowState: (flowState) => set({ flowState }),
   setDraftRoute: (draftRoute) => set({ draftRoute }),
@@ -40,6 +45,8 @@ export const useNarrativeStore = create<NarrativeStore>((set, get) => ({
     }
   },
   setError: (error) => set({ error }),
+  setGenerationProgress: (generationStage, current = 0, total = 0) =>
+    set({ generationStage, generationProgress: { current, total } }),
   reset: () =>
     set({
       flowState: 'idle',
@@ -47,5 +54,7 @@ export const useNarrativeStore = create<NarrativeStore>((set, get) => ({
       activeRoute: null,
       activeChapterIndex: 0,
       error: null,
+      generationStage: null,
+      generationProgress: { current: 0, total: 0 },
     }),
 }))

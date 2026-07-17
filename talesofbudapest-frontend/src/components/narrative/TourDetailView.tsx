@@ -2,7 +2,7 @@
 
 import { ChevronLeft, Clock3, Footprints, MapPinned, Route } from 'lucide-react'
 import dynamic from 'next/dynamic'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { getCuratedTourDetail } from '@/constants/curatedTourDetails'
 import type { CuratedStarter } from '@/constants/questionnaire'
 import { QuickStartTourCarousel } from '@/components/narrative/QuickStartTourCarousel'
@@ -17,16 +17,17 @@ type TourDetailViewProps = {
   starter: CuratedStarter
   title: string
   onClose: () => void
-  onStart: () => void
+  onStart: (initialChapterIndex: number) => void
 }
 
 export const TourDetailView = ({ starter, title, onClose, onStart }: TourDetailViewProps) => {
   const detail = getCuratedTourDetail(starter)
   const [selectedStopId, setSelectedStopId] = useState(detail.chapters[0]?.id ?? null)
-  const selectedStop = useMemo(
-    () => detail.chapters.find((stop) => stop.id === selectedStopId) ?? detail.chapters[0],
-    [detail.chapters, selectedStopId],
+  const selectedStopIndex = Math.max(
+    detail.chapters.findIndex((chapter) => chapter.id === selectedStopId),
+    0,
   )
+  const selectedStopNumber = selectedStopIndex + 1
   const places = detail.chapters.map((chapter) => ({
     slug: chapter.id,
     title: chapter.title,
@@ -77,30 +78,27 @@ export const TourDetailView = ({ starter, title, onClose, onStart }: TourDetailV
           <p className="text-[0.98rem] leading-relaxed text-on-surface/75">{detail.summary}</p>
           </div>
           <div className="mt-7">
-            <QuickStartTourCarousel label="What you’ll see" tours={places} variant="place" />
+            <QuickStartTourCarousel
+              label="What you’ll see"
+              tours={places}
+              variant="place"
+              selectedSlug={selectedStopId}
+              onSelect={setSelectedStopId}
+            />
           </div>
           <div className="mt-6">
-            <div className="mb-2 flex items-center gap-2"><MapPinned className="h-4 w-4 text-accent" aria-hidden="true" /><h2 className="text-sm font-bold">Route preview</h2><span className="text-xs text-on-surface/45">Tap a stop to explore</span></div>
-            <div className="h-52 overflow-hidden rounded-2xl border border-outline-variant/30 shadow-sm">
+            <div className="mb-2 flex items-center gap-2"><MapPinned className="h-4 w-4 text-accent" aria-hidden="true" /><h2 className="text-sm font-bold">Route preview</h2><span className="ml-auto text-xs font-medium text-on-surface/50">Stop {selectedStopNumber} of {detail.chapters.length}</span></div>
+            <div className="isolate z-0 h-52 overflow-hidden rounded-2xl border border-outline-variant/30 shadow-sm">
               <RoutePreviewMap chapters={detail.chapters} selectedChapterId={selectedStopId} onChapterSelect={(stop) => setSelectedStopId(stop.id)} fitKey={starter.slug} walkingRoute={detail.walkingRoute} />
-            </div>
-            {selectedStop && (
-              <button type="button" onClick={() => setSelectedStopId(selectedStop.id)} className="mt-3 flex w-full items-center gap-3 rounded-2xl bg-surface-dim/70 p-2.5 text-left">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={selectedStop.imageUrl ?? starter.imageSrc} alt="" className="h-14 w-14 rounded-xl object-cover" />
-                <span className="min-w-0"><span className="text-xs font-semibold text-accent">Stop {selectedStop.chapterIndex + 1}</span><span className="block truncate text-sm font-bold text-on-surface">{selectedStop.title}</span></span>
-              </button>
-            )}
-            <div className="mt-3 flex gap-2 overflow-x-auto pb-1 scrollbar-hide" aria-label="Tour stops">
-              {detail.chapters.map((stop) => <button key={stop.id} type="button" onClick={() => setSelectedStopId(stop.id)} aria-pressed={stop.id === selectedStopId} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold transition ${stop.id === selectedStopId ? 'bg-accent text-white' : 'bg-surface-dim text-on-surface/60'}`}>{stop.chapterIndex + 1}. {stop.title}</button>)}
             </div>
           </div>
         </div>
       </div>
 
-      <div className="absolute inset-x-0 bottom-0 border-t border-outline-variant/25 bg-background/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
-        <button type="button" onClick={onStart} className="q-start-btn mx-auto flex w-full max-w-md items-center justify-center gap-2 rounded-full px-6 py-4 text-base font-bold text-white active:scale-[0.98]">
-          <Footprints className="h-5 w-5" aria-hidden="true" /> Start This Tour
+      <div className="absolute inset-x-0 bottom-0 z-[1000] border-t border-outline-variant/25 bg-background/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+        <button type="button" onClick={() => onStart(selectedStopIndex)} className="q-start-btn mx-auto flex w-full max-w-md items-center justify-center gap-2 rounded-full px-6 py-4 text-base font-bold text-white active:scale-[0.98]">
+          <Footprints className="h-5 w-5" aria-hidden="true" />
+          {selectedStopIndex === 0 ? 'Start This Tour' : `Start at stop ${selectedStopNumber}`}
         </button>
       </div>
     </section>

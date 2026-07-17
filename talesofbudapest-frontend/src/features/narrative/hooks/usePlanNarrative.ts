@@ -2,14 +2,14 @@
 
 import { useCallback } from 'react'
 import { useNarrativeStore } from '@/stores/narrativeStore'
-import type { DraftNarrative, NarrativeContext } from '@/types/narrative'
+import type { DraftNarrative, NarrativeContext, NarrativeRequest } from '@/types/narrative'
 
 /** Plans a route (fast, no audio synthesis yet) and hands it to the preview screen. */
 export const usePlanNarrative = () => {
   const { setFlowState, setDraftRoute, setError } = useNarrativeStore()
 
   const planNarrative = useCallback(
-    async (userPrompt: string, context: NarrativeContext) => {
+    async (request: NarrativeRequest, context: NarrativeContext) => {
       setFlowState('planning')
       setError(null)
 
@@ -17,7 +17,7 @@ export const usePlanNarrative = () => {
         const response = await fetch('/api/narratives/plan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userPrompt, context }),
+          body: JSON.stringify({ request, context }),
         })
 
         const payload = await response.json()

@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl'
 import { useMapSettingsStore } from '@/stores/mapSettingsStore'
-import { CLUSTER_MAX_ZOOM } from '@/lib/map/visibleLandmarks'
+import { PIN_REVEAL_ZOOM } from '@/lib/map/visibleLandmarks'
 
 type MapZoomHintProps = {
   zoom: number
@@ -14,7 +14,7 @@ export const MapZoomHint = ({ zoom, showAllBuildings }: MapZoomHintProps) => {
   const hintDismissed = useMapSettingsStore((state) => state.hintDismissed)
   const dismissHint = useMapSettingsStore((state) => state.dismissHint)
 
-  if (hintDismissed || showAllBuildings || zoom > CLUSTER_MAX_ZOOM) {
+  if (hintDismissed || showAllBuildings || zoom >= PIN_REVEAL_ZOOM) {
     return null
   }
 

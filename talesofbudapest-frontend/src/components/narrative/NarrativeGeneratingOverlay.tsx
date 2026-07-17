@@ -10,6 +10,8 @@ type NarrativeGeneratingOverlayProps = {
   error?: string | null
   onRetry?: () => void
   onDismiss?: () => void
+  stage?: string | null
+  progress?: { current: number; total: number }
 }
 
 export const NarrativeGeneratingOverlay = ({
@@ -18,6 +20,8 @@ export const NarrativeGeneratingOverlay = ({
   error,
   onRetry,
   onDismiss,
+  stage,
+  progress,
 }: NarrativeGeneratingOverlayProps) => {
   const t = useTranslations('narrative')
   const generatingMessages = useMemo(
@@ -84,6 +88,25 @@ export const NarrativeGeneratingOverlay = ({
             <p className="text-headline text-on-primary">
               {generatingMessages[messageIndex]}
             </p>
+            {mode === 'generating' && stage && (
+              <div className="w-full rounded-2xl border border-on-primary/20 bg-on-primary/10 px-4 py-3 text-on-primary">
+                <p className="text-sm font-semibold">{t(`generationStages.${stage}`)}</p>
+                {Boolean(progress?.total) && (
+                  <>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-on-primary/20">
+                      <div
+                        className="h-full rounded-full bg-on-primary transition-all"
+                        style={{ width: `${Math.min(100, ((progress?.current ?? 0) / (progress?.total ?? 1)) * 100)}%` }}
+                      />
+                    </div>
+                    <p className="mt-2 text-xs text-on-primary/75">
+                      {t('generationProgress', { current: progress?.current ?? 0, total: progress?.total ?? 0 })}
+                    </p>
+                  </>
+                )}
+                <p className="mt-2 text-xs text-on-primary/65">{t('safeToLeave')}</p>
+              </div>
+            )}
           </>
         )}
       </div>

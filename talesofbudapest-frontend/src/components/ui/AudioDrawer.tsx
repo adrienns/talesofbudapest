@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { SwipeableTourSheet } from '@/components/ui/SwipeableTourSheet'
 import { TourSheetCollapsed } from '@/components/ui/tour-sheet/TourSheetCollapsed'
@@ -9,7 +9,12 @@ import { usePlaybackAudio } from '@/features/landmarks/hooks/usePlaybackAudio'
 import { buildLandmarkMeta, buildTourChapterMeta } from '@/lib/narrative/tourSheetMeta'
 import type { NarrativeRoute } from '@/types/narrative'
 import type { PlaybackItem } from '@/types/narrative'
-import type { SheetSnap } from '@/types/tourSheet'
+import type { SheetSnap, TourOfflineReadiness } from '@/types/tourSheet'
+
+type ManualPlayRequest = {
+  chapterId: string
+  requestId: number
+}
 
 type AudioDrawerProps = {
   playbackItem: PlaybackItem | null
@@ -24,6 +29,13 @@ type AudioDrawerProps = {
   chronicleLocationId?: string | null
   snap?: SheetSnap
   onSnapChange?: (snap: SheetSnap) => void
+  offlineReadiness?: TourOfflineReadiness | null
+  onPrepareOffline?: () => void
+  onOpenDirections?: () => void
+  onManualArrival?: () => void
+  onPlayNextStop?: () => void
+  onSelectRouteStop?: (stopId: string) => void
+  manualPlayRequest?: ManualPlayRequest | null
 }
 
 export const AudioDrawer = ({
@@ -39,6 +51,13 @@ export const AudioDrawer = ({
   chronicleLocationId = null,
   snap: controlledSnap,
   onSnapChange,
+  offlineReadiness = null,
+  onPrepareOffline,
+  onOpenDirections,
+  onManualArrival,
+  onPlayNextStop,
+  onSelectRouteStop,
+  manualPlayRequest = null,
 }: AudioDrawerProps) => {
   const t = useTranslations('player')
   const [internalSnap, setInternalSnap] = useState<SheetSnap>('collapsed')
@@ -61,6 +80,36 @@ export const AudioDrawer = ({
     setInternalSnap('collapsed')
   }, [controlledSnap, playbackItem?.id])
 
+  const [resolvedLandmarkImageUrl, setResolvedLandmarkImageUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    const landmarkId = playbackItem?.landmarkId
+
+    if (playbackItem?.imageUrl || !landmarkId) {
+      setResolvedLandmarkImageUrl(null)
+      return
+    }
+
+    let cancelled = false
+
+    void fetch(`/api/landmarks/${encodeURIComponent(landmarkId)}`)
+      .then(async (response) => {
+        if (!response.ok) return null
+        const body = await response.json() as { landmark?: { image_url?: string | null } }
+        return body.landmark?.image_url ?? null
+      })
+      .then((imageUrl) => {
+        if (!cancelled) setResolvedLandmarkImageUrl(imageUrl)
+      })
+      .catch(() => {
+        if (!cancelled) setResolvedLandmarkImageUrl(null)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [playbackItem?.id, playbackItem?.imageUrl, playbackItem?.landmarkId])
+
   const handleAudioReady = useCallback(
     (audioUrl: string) => {
       onLandmarkAudioReady?.(audioUrl)
@@ -80,6 +129,7 @@ export const AudioDrawer = ({
     audioUrl,
     historyDepth,
     togglePlayPause,
+    play,
     seek,
   } = usePlaybackAudio(playbackItem?.audioUrl ?? null, playbackItem?.id ?? null, {
     enableOnDemand: enableOnDemandAudio,
@@ -87,8 +137,17 @@ export const AudioDrawer = ({
     onAudioReady: handleAudioReady,
   })
 
-  const displayImageUrl = playbackItem?.imageUrl ?? (activeRoute ? '/quick-start/parliement.webp' : null)
+  const displayImageUrl = playbackItem?.imageUrl ?? resolvedLandmarkImageUrl
   const displayTitle = playbackItem?.title ?? routeTitle ?? ''
+  const handledManualRequest = useRef(0)
+
+  useEffect(() => {
+    if (!manualPlayRequest || manualPlayRequest.requestId === handledManualRequest.current) return
+    if (manualPlayRequest.chapterId !== playbackItem?.id || !hasAudio) return
+
+    handledManualRequest.current = manualPlayRequest.requestId
+    void play().catch(() => {})
+  }, [hasAudio, manualPlayRequest, play, playbackItem?.id])
 
   const handleShare = useCallback(() => {
     if (typeof navigator === 'undefined') {
@@ -203,6 +262,12 @@ export const AudioDrawer = ({
           {...transportProps}
           onCollapse={() => setSnap('collapsed')}
           chronicleLocationId={chronicleLocationId}
+          offlineReadiness={offlineReadiness}
+          onPrepareOffline={onPrepareOffline}
+          onOpenDirections={onOpenDirections}
+          onManualArrival={onManualArrival}
+          onPlayNextStop={onPlayNextStop}
+          onSelectRouteStop={onSelectRouteStop}
         />
       }
     />

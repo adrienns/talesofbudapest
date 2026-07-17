@@ -6,7 +6,7 @@ import {
   partitionVisibleLandmarks,
   type MapBounds,
   type VisibleLandmarkEntry,
-  CLUSTER_MAX_ZOOM,
+  PIN_REVEAL_ZOOM,
 } from '@/lib/map/visibleLandmarks'
 import { useMapSettingsStore } from '@/stores/mapSettingsStore'
 import type { MapPin } from '@/types/landmark'
@@ -31,7 +31,7 @@ export const useVisibleLandmarks = (
   )
 
   const clustered = useMemo(() => {
-    if (zoom > CLUSTER_MAX_ZOOM) {
+    if (zoom >= PIN_REVEAL_ZOOM) {
       return []
     }
 
@@ -45,7 +45,7 @@ export const useVisibleLandmarks = (
   }, [selectedLandmarkId, tierFiltered, zoom])
 
   const prominent = useMemo(() => {
-    if (zoom <= CLUSTER_MAX_ZOOM) {
+    if (zoom < PIN_REVEAL_ZOOM) {
       const selected = tierFiltered.find((landmark) => landmark.id === selectedLandmarkId)
       if (!selected) {
         return []

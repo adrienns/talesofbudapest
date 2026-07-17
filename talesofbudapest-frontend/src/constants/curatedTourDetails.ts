@@ -9,13 +9,15 @@ export type CuratedTourDetail = {
   walkingRoute?: WalkingRoute
 }
 
-type Stop = Pick<NarrativeChapter, 'title' | 'lat' | 'lng'>
+type Stop = Pick<NarrativeChapter, 'title' | 'lat' | 'lng'> & {
+  imageUrl?: string
+}
 
 const makeChapters = (slug: string, stops: Stop[], imageUrl: string): NarrativeChapter[] =>
-  stops.map((stop, chapterIndex) => ({
+  stops.map(({ imageUrl: stopImageUrl, ...stop }, chapterIndex) => ({
     id: `${slug}-${chapterIndex}`,
     chapterIndex,
-    imageUrl,
+    imageUrl: stopImageUrl ?? imageUrl,
     audioUrl: null,
     ...stop,
   }))
@@ -28,12 +30,12 @@ const tours: Record<string, CuratedTourDetail> = {
       'A first-day walk through the ambitions, ruptures, and reinventions that made modern Budapest. Follow the Danube from city-making monuments to the places where memory still speaks back.',
     chapters: makeChapters('how-budapest-became-budapest', [
       { title: 'Deák Ferenc Square', lat: 47.49755, lng: 19.05478 },
-      { title: "St Stephen's Basilica", lat: 47.50088, lng: 19.0538 },
+      { title: "St Stephen's Basilica", lat: 47.50088, lng: 19.0538, imageUrl: '/quick-start/basilica.webp' },
       { title: 'Liberty Square', lat: 47.50455, lng: 19.05021 },
       { title: 'Parliament & Kossuth Square', lat: 47.50718, lng: 19.04567 },
-      { title: 'Shoes on the Danube Bank', lat: 47.50391, lng: 19.04485 },
-      { title: 'Chain Bridge', lat: 47.50076, lng: 19.04632 },
-      { title: 'Gresham Palace', lat: 47.49964, lng: 19.04835 },
+      { title: 'Shoes on the Danube Bank', lat: 47.50391, lng: 19.04485, imageUrl: '/quick-start/shoes-jewish.webp' },
+      { title: 'Chain Bridge', lat: 47.50076, lng: 19.04632, imageUrl: '/quick-start/chain-bridge.webp' },
+      { title: 'Gresham Palace', lat: 47.49964, lng: 19.04835, imageUrl: '/quick-start/gresham.webp' },
       { title: 'Vörösmarty Square', lat: 47.49686, lng: 19.05043 },
       { title: 'Vigadó Promenade', lat: 47.49624, lng: 19.04853 },
     ], '/quick-start/parliement.webp'),

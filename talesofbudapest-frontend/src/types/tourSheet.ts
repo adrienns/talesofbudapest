@@ -15,6 +15,12 @@ export type TourSheetRouteStop = {
   imageUrl?: string | null
 }
 
+export type TourOfflineReadiness = {
+  status: 'idle' | 'preparing' | 'ready' | 'partial' | 'unavailable' | 'offline'
+  cachedCount: number
+  totalCount: number
+}
+
 export type TourSheetMediaProps = {
   title: string
   chapterLabel?: string
@@ -37,6 +43,12 @@ export type TourSheetExpandedProps = TourSheetMediaProps &
   PlaybackTransportProps & {
     onCollapse: () => void
     chronicleLocationId?: string | null
+    offlineReadiness?: TourOfflineReadiness | null
+    onPrepareOffline?: () => void
+    onOpenDirections?: () => void
+    onManualArrival?: () => void
+    onPlayNextStop?: () => void
+    onSelectRouteStop?: (stopId: string) => void
   }
 
 export type SwipeableTourSheetProps = {

@@ -3,16 +3,15 @@ import {
   Building2,
   Camera,
   Coffee,
-  Compass,
   Crown,
   Drama,
   Glasses,
+  Landmark,
   Martini,
-  Shield,
+  Music2,
+  ShipWheel,
   Sparkles,
   Sunset,
-  Waves,
-  Wine,
 } from 'lucide-react'
 
 export const TOPIC_COLORS = [
@@ -33,28 +32,15 @@ export type TourStyle = {
   icon: LucideIcon
   /** Multiplier applied to the summed topic minutes. */
   modifier: number
-  /** Woven into the generation prompt. */
-  promptPhrase: string
   /** "{adjective} … {noun}" pair used by the recap sentence. */
   recapAdjective: string
   recapNoun: string
 }
 
-export type GeoCluster = 'buda-castle' | 'pest-core' | 'district7' | 'citywide'
-
-export type TopicTip = 'camera' | 'shoes' | 'coffee' | 'thirst' | 'reflective'
-
 export type TourTopic = {
   id: string
   label: string
   icon: LucideIcon
-  /** Standalone exploration time at storyteller pace. */
-  baseMinutes: number
-  /** Neighbourhood footprint — overlapping topics get a time discount. */
-  geoCluster: GeoCluster
-  tip: TopicTip
-  /** Woven into the generation prompt. */
-  promptPhrase: string
 }
 
 export const TOUR_STYLES: TourStyle[] = [
@@ -64,7 +50,6 @@ export const TOUR_STYLES: TourStyle[] = [
     blurb: 'Light pacing, photo-worthy stops',
     icon: Camera,
     modifier: 0.75,
-    promptPhrase: 'light, visual',
     recapAdjective: 'breezy',
     recapNoun: 'stroll',
   },
@@ -74,7 +59,6 @@ export const TOUR_STYLES: TourStyle[] = [
     blurb: 'Legends, characters and drama',
     icon: Drama,
     modifier: 1,
-    promptPhrase: 'vivid, story-driven',
     recapAdjective: 'tailored',
     recapNoun: 'trek',
   },
@@ -84,7 +68,6 @@ export const TOUR_STYLES: TourStyle[] = [
     blurb: 'Rich context, archival detail',
     icon: Glasses,
     modifier: 1.5,
-    promptPhrase: 'richly detailed, historian-grade',
     recapAdjective: 'comprehensive',
     recapNoun: 'exploration',
   },
@@ -92,99 +75,35 @@ export const TOUR_STYLES: TourStyle[] = [
 
 export const TOUR_TOPICS: TourTopic[] = [
   {
-    id: 'underground',
-    label: 'Underground Budapest & Thermal Secrets',
-    icon: Waves,
-    baseMinutes: 105,
-    geoCluster: 'buda-castle',
-    tip: 'shoes',
-    promptPhrase:
-      'the labyrinth beneath Buda Castle, thermal bath culture and Cold War bunkers',
+    id: 'architecture', label: 'Architecture & design', icon: Building2,
   },
   {
-    id: 'shadows',
-    label: 'Shadows of the 20th Century',
-    icon: Shield,
-    baseMinutes: 90,
-    geoCluster: 'pest-core',
-    tip: 'reflective',
-    promptPhrase:
-      'the scars of WWII and communism, the Jewish Quarter and the 1956 revolution',
+    id: 'local-life', label: 'Local life & neighborhoods', icon: Coffee,
   },
   {
-    id: 'duel',
-    label: 'The Duel of Two Cities',
-    icon: Compass,
-    baseMinutes: 80,
-    geoCluster: 'citywide',
-    tip: 'shoes',
-    promptPhrase:
-      'the architectural rivalry between royal medieval Buda and booming 19th-century Pest',
+    id: 'power-history', label: 'Kings, politics & revolutions', icon: Crown,
   },
   {
-    id: 'architecture',
-    label: 'Gilded Age Masterpieces',
-    icon: Building2,
-    baseMinutes: 75,
-    geoCluster: 'pest-core',
-    tip: 'camera',
-    promptPhrase:
-      'gilded age splendor from the Opera House and Basilica to the Parliament',
+    id: 'jewish-budapest', label: 'Jewish Budapest', icon: Landmark,
   },
   {
-    id: 'liquid',
-    label: 'Liquid History: Ruin Bars & Wine',
-    icon: Wine,
-    baseMinutes: 40,
-    geoCluster: 'district7',
-    tip: 'thirst',
-    promptPhrase:
-      "District VII's ruin bars born from abandoned WWII spaces, with Tokaj wine and Unicum lore",
+    id: 'arts-culture', label: 'Artists, writers & music', icon: Music2,
   },
   {
-    id: 'coffeehouse',
-    label: "Coffeehouse Culture & Writers' Secrets",
-    icon: Coffee,
-    baseMinutes: 30,
-    geoCluster: 'pest-core',
-    tip: 'coffee',
-    promptPhrase:
-      'the golden age coffeehouses where writers, artists and rebels plotted',
+    id: 'food-nightlife', label: 'Food, cafés & nightlife', icon: Martini,
+  },
+  {
+    id: 'danube-engineering', label: 'Danube, bridges & engineering', icon: ShipWheel,
+  },
+  {
+    id: 'legends-mysteries', label: 'Legends, scandals & mysteries', icon: Sparkles,
   },
 ]
 
-export const MAX_TOPICS = 2
+export const MAX_TOPICS = 3
 
-export const MIN_TOUR_MINUTES = 45
-export const MAX_TOUR_MINUTES = 240
-export const TOUR_MINUTES_STEP = 30
-
-/** Fixed getting-started / transit overhead baked into every tour. */
-const BASE_OVERHEAD_MINUTES = 30
-/** Discount applied to additional topics sharing a geo cluster. */
-const CLUSTER_OVERLAP_FACTOR = 0.5
-
-const roundTo15 = (minutes: number) => Math.round(minutes / 15) * 15
-
-const clampMinutes = (minutes: number) =>
-  Math.min(MAX_TOUR_MINUTES, Math.max(MIN_TOUR_MINUTES, minutes))
-
-/**
- * Estimates the ideal tour duration: topics sum with an overlap discount for
- * shared neighbourhoods, then the style's pacing modifier is applied.
- */
-export const estimateTourMinutes = (style: TourStyle, topics: TourTopic[]): number => {
-  const seenClusters = new Set<GeoCluster>()
-  const sum = [...topics]
-    .sort((a, b) => b.baseMinutes - a.baseMinutes)
-    .reduce((total, topic) => {
-      const overlaps = seenClusters.has(topic.geoCluster)
-      seenClusters.add(topic.geoCluster)
-      return total + topic.baseMinutes * (overlaps ? CLUSTER_OVERLAP_FACTOR : 1)
-    }, 0)
-
-  return clampMinutes(roundTo15((BASE_OVERHEAD_MINUTES + sum) * style.modifier))
-}
+export const TOUR_DURATIONS = [45, 60, 90, 120, 180] as const
+export const DEFAULT_TOUR_MINUTES = 90
 
 /** "≈ 2 h 30" — compact form for the live chip and adjuster. */
 export const formatMinutesShort = (minutes: number): string => {
@@ -193,58 +112,6 @@ export const formatMinutesShort = (minutes: number): string => {
   if (hours === 0) return `${rest} min`
   if (rest === 0) return `${hours} h`
   return `${hours} h ${rest.toString().padStart(2, '0')}`
-}
-
-/** "1.5-hour" / "45-minute" — adjective form for the recap sentence. */
-const formatMinutesProse = (minutes: number): string => {
-  if (minutes % 30 === 0) return `${minutes / 60}-hour`
-  return `${minutes}-minute`
-}
-
-/** "1.5 hours" / "45 minutes" — noun form for the generation prompt. */
-const formatMinutesNoun = (minutes: number): string => {
-  if (minutes % 30 === 0) {
-    const hours = minutes / 60
-    return `${hours} hour${hours === 1 ? '' : 's'}`
-  }
-  return `${minutes} minutes`
-}
-
-const CLUSTER_DISPLAY: Record<GeoCluster, string> = {
-  'buda-castle': "the Castle's hidden depths",
-  'pest-core': 'the heart of Pest',
-  district7: "District VII's storied ruins",
-  citywide: 'both banks of the Danube',
-}
-
-const TIP_SENTENCES: Record<TopicTip, string> = {
-  camera: 'Bring your camera!',
-  shoes: 'Wear comfortable shoes.',
-  coffee: 'It ends with a coffee recommendation.',
-  thirst: 'Come thirsty.',
-  reflective: 'Expect stories that stay with you.',
-}
-
-const joinPhrases = (phrases: string[]): string =>
-  phrases.length <= 1 ? (phrases[0] ?? '') : `${phrases.slice(0, -1).join(', ')} and ${phrases[phrases.length - 1]}`
-
-/** Deterministic, personalized recap line — no LLM round-trip needed. */
-export const buildRecap = (style: TourStyle, topics: TourTopic[], minutes: number): string => {
-  const clusters = joinPhrases([...new Set(topics.map((t) => CLUSTER_DISPLAY[t.geoCluster]))])
-  const heaviest = [...topics].sort((a, b) => b.baseMinutes - a.baseMinutes)[0]
-  const tip = heaviest ? TIP_SENTENCES[heaviest.tip] : ''
-
-  return `We've crafted a ${style.recapAdjective} ${formatMinutesProse(minutes)} ${style.recapNoun} through ${clusters}. ${tip}`
-}
-
-/** Weaves the picks into a single natural-language prompt for the generator. */
-export const composeNarrativePrompt = (
-  style: TourStyle,
-  topics: TourTopic[],
-  minutes: number,
-): string => {
-  const themes = joinPhrases(topics.map((t) => t.promptPhrase))
-  return `Create a ${style.promptPhrase} Budapest audio walking tour exploring ${themes}, sized for about ${formatMinutesNoun(minutes)} of walking and listening.`
 }
 
 /**
@@ -273,7 +140,6 @@ export type GeneratedCuratedStarter = CuratedStarterBase & {
   title: string
   tagline: string
   imageAlt: string
-  prompt: string
 }
 
 export type CuratedStarter = FixedCuratedStarter | GeneratedCuratedStarter
@@ -300,8 +166,6 @@ export const CURATED_STARTERS: CuratedStarter[] = [
     icon: Crown,
     styleId: 'storyteller',
     topicIds: ['duel'],
-    prompt:
-      'Create a vivid, story-driven audio walking tour of the Buda Castle District — Buda Castle, Matthias Church, and Fisherman’s Bastion — full of royal history, sieges, and the legends that still haunt the hill. [v2]',
   },
   {
     kind: 'generated',
@@ -313,8 +177,6 @@ export const CURATED_STARTERS: CuratedStarter[] = [
     icon: Martini,
     styleId: 'storyteller',
     topicIds: ['shadows', 'liquid'],
-    prompt:
-      "Create a vivid, story-driven audio walking tour of District VII's Jewish Quarter — the Dohány Street Synagogue, Kazinczy Street, and the Gozsdu Passage — tracing its history and how its ruined WWII-era spaces became the world's first ruin bars. [v2]",
   },
   {
     kind: 'generated',
@@ -326,8 +188,6 @@ export const CURATED_STARTERS: CuratedStarter[] = [
     icon: Sparkles,
     styleId: 'deep-dive',
     topicIds: ['coffeehouse'],
-    prompt:
-      'Create a richly detailed, historian-grade audio walking tour of downtown Pest that skips the famous landmarks in favor of lesser-known residential buildings, hidden courtyards, and golden-age coffeehouses with real, specific local history. [v2]',
   },
   {
     kind: 'generated',
@@ -339,7 +199,5 @@ export const CURATED_STARTERS: CuratedStarter[] = [
     icon: Sunset,
     styleId: 'storyteller',
     topicIds: ['duel'],
-    prompt:
-      'Create a vivid, story-driven evening audio walking tour along the Danube at golden hour, taking in the Chain Bridge and the view of Buda Castle across the water, with romantic and reflective storytelling. [v2]',
   },
 ]
