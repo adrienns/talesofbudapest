@@ -62,15 +62,24 @@ export const buildSubjectEntityIndex = ({ sourceId, mentions }) => {
   for (const mention of rows) {
     const label = mentionLabel(mention);
     const type = mention.type ?? 'thing';
-    const canonical = isNameLike(mention) ? canonicalForPerson(mention) : phrase(label);
+    // An address anchor distinguishes same-named buildings: the "great"
+    // synagogue at 23 and the "small" synagogue at 26 are separate entities,
+    // not one generic synagogue.
+    const anchor = !isNameLike(mention) ? mention.address_anchor : null;
+    const base = isNameLike(mention) ? canonicalForPerson(mention) : phrase(label);
+    const canonical = anchor?.key ? `${base} @ ${anchor.key}` : base;
     const id = entityId(sourceId, entityClass(type), canonical || `${mention.page}:${mention.start_offset}`);
     mention.subject_entity_id = id;
     let entity = entities.get(id);
     if (!entity) {
-      entity = { entity_id: id, type, entity_class: entityClass(type), label: label || canonical, aliases: new Set(), roles: new Set(), mention_ids: [], last_mention_id: null, last_page: null, last_offset: null };
+      entity = { entity_id: id, type, entity_class: entityClass(type), label: anchor ? `${label || base} (${anchor.display})` : (label || canonical), aliases: new Set(), roles: new Set(), mention_ids: [], last_mention_id: null, last_page: null, last_offset: null };
+      if (anchor) entity.address = { street: anchor.street, house_number: anchor.house_number, display: anchor.display, center: anchor.center };
       entities.set(id, entity);
     }
-    entity.aliases.add(label); entity.aliases.add(canonical);
+    // Aliases keep the plain surface form; the anchored canonical key is an
+    // identity device, not something a reader ever writes.
+    entity.aliases.add(label); entity.aliases.add(base);
+    if (anchor?.display) entity.aliases.add(anchor.display);
     for (const token of words(label)) if (ROLE_WORDS.has(token)) entity.roles.add(token);
     if (/^\s*r\.\s+/iu.test(label)) entity.roles.add('rabbi');
     if (type === 'building' && /\bsynagog(?:ue|ues)\b/iu.test(label)) entity.roles.add('synagogue');

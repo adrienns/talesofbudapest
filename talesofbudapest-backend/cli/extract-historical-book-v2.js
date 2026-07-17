@@ -7,7 +7,7 @@ import dotenv from 'dotenv';
 import { createChatCompletion, getOpenRouterApiKey } from '../lib/openRouterClient.js';
 import { estimateExtractionCeiling, fetchOpenRouterCatalog, formatUsd, pricingForModels } from '../lib/openRouterCostGuard.js';
 import { maskPdfFurniture } from '../lib/historicalPdfLayout.js';
-import { buildStreetIndex, extractAddressReferences } from '../lib/historicalAddresses.js';
+import { anchorBuildingMentions, buildStreetIndex, extractAddressReferences, resolveAmbiguousStreets } from '../lib/historicalAddresses.js';
 import {
   buildSubjectEntityIndex,
   createSubjectState,
@@ -504,32 +504,47 @@ const main = async () => {
   const nlp = await runLocalNlp(nlpContextPages);
   const nounPhrases = V3 ? nlp.noun_phrases : [];
   if (V3 && !Array.isArray(nounPhrases)) throw new Error('V3 requires the local noun-phrase ledger; local NLP returned none');
-  const indexedMentions = buildSubjectEntityIndex({ sourceId: SOURCE_ID, mentions: assignMentionIds(SOURCE_ID, nlp.mentions ?? []) });
-  const mentions = indexedMentions.mentions;
   const targetReadingPages = (nlp.reading_pages ?? []).filter((page) => targetSet.has(page.page));
-  const clauses = buildClauseLedger({ sourceId: SOURCE_ID, targetPages, readingPages: targetReadingPages, mentions });
-  if (!clauses.length) throw new Error('Local clause ledger is empty');
-  const mentionById = new Map(mentions.map((mention) => [mention.mention_id, mention]));
-  const clauseById = new Map(clauses.map((clause) => [clause.clause_id, clause]));
-  // Street/address fact layer: deterministic, local, gazetteer-matched.
+  const rawMentions = assignMentionIds(SOURCE_ID, nlp.mentions ?? []);
+  // Street/address fact layer: deterministic, local, gazetteer-matched. It runs
+  // before the entity index so a building mention followed by an address
+  // ("the great synagogue (23 Tancsics Mihaly utca)") mints its own entity
+  // instead of collapsing into a generic class bucket.
   let addressReferences = [];
   let gazetteerSources = [];
+  let anchoredBuildings = 0;
   if (V3) {
     try {
       const gazetteer = JSON.parse(await fs.readFile(GAZETTEER_PATH, 'utf8'));
       const streetIndex = buildStreetIndex(gazetteer);
       gazetteerSources = gazetteer.sources ?? [];
-      addressReferences = targetReadingPages.flatMap((page) => extractAddressReferences(page.text, streetIndex).map((row) => ({
+      // Anchor over every NLP page (including boundary context) so a building's
+      // identity does not depend on which batch a page landed in.
+      const allAddresses = (nlp.reading_pages ?? []).flatMap((page) => extractAddressReferences(page.text, streetIndex).map((row) => ({
         ...row,
         page_ref: page.page,
         start_offset: page.raw_starts[row.reading_start] ?? null,
         end_offset: page.raw_ends[Math.min(row.reading_end, page.raw_ends.length) - 1] ?? null,
       })));
+      // A fifth of Budapest street names repeat across districts; place those
+      // from unambiguous addresses on the same page before anchoring, so a
+      // building never inherits a centre from the wrong district.
+      const placed = resolveAmbiguousStreets({ rows: allAddresses });
+      if (placed) console.log(`Address context: ${placed} ambiguous street references placed from page context.`);
+      anchoredBuildings = anchorBuildingMentions({ mentions: rawMentions, addresses: allAddresses });
+      addressReferences = allAddresses.filter((row) => targetSet.has(row.page_ref));
     } catch (error) {
       if (error?.code !== 'ENOENT') throw error;
       console.warn(`Gazetteer missing at ${GAZETTEER_PATH}; address layer skipped. Run: node cli/build-budapest-gazetteer.js`);
     }
   }
+  const indexedMentions = buildSubjectEntityIndex({ sourceId: SOURCE_ID, mentions: rawMentions });
+  const mentions = indexedMentions.mentions;
+  const clauses = buildClauseLedger({ sourceId: SOURCE_ID, targetPages, readingPages: targetReadingPages, mentions });
+  if (!clauses.length) throw new Error('Local clause ledger is empty');
+  const mentionById = new Map(mentions.map((mention) => [mention.mention_id, mention]));
+  const clauseById = new Map(clauses.map((clause) => [clause.clause_id, clause]));
+  if (V3 && anchoredBuildings) console.log(`Address anchors: ${anchoredBuildings} building mentions bound to a street address.`);
   const persistedSubjectMemory = V3 ? await readSubjectMemory(SUBJECT_MEMORY_OUTPUT, SOURCE_ID, firstPage - 1) : null;
   const subjectState = V3 ? createSubjectState({ sourceId: SOURCE_ID, entities: indexedMentions.entities, aliasIndex: indexedMentions.aliasIndex, persisted: persistedSubjectMemory }) : null;
   const subjectTransitions = [];
