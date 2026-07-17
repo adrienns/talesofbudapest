@@ -18,8 +18,8 @@ answer must leave a machine-readable confession we can read, classify, and fix.
 
 ## Where things stand
 
-Branch: `historical-extraction-v3` (24 commits ahead of the base).
-Tests: `node --test lib/` → 331 tests, 330 pass. The single failure
+Branch: `historical-extraction-v3` (26 commits ahead of the base).
+Tests: `node --test lib/` → 337 tests, 336 pass. The single failure
 (`kgEmbeddings: embedTexts...`) is pre-existing and env-dependent
 (`OPENROUTER_API_KEY is not configured`); it is unrelated to V3.
 
@@ -100,6 +100,32 @@ truncate the TSV protocol.
   by head + street + house number, so `synagogue (Táncsics Mihály utca 23)` and
   `(26)` are different buildings. House numbers parse in both Hungarian
   (`Király utca 77`) and English (`26 Táncsics Mihály utca`) order.
+
+### OCR damage (`lib/historicalOcrLexicon.js`)
+
+Page 21's great synagogue used to vanish: OCR wrote `syna-\ngoque`, and while
+de-hyphenation already worked, the `g→q` left a word no detector recognised.
+
+**The measured reason we do not repair text by similarity.** A book-wide scan
+found 27 tokens within edit distance 1 of a domain word (330 occurrences), of
+which only ~18 were real damage. `schools`, `prayers`, `streets` are plurals;
+`horse`, `player`, `Prater` are ordinary words; `yeshivah` is a variant
+spelling. Similarity repair would corrupt 300+ correct words to fix 18. **Do
+not add a confusion-table or edit-distance repair pass over the reading view.**
+
+Instead, three narrow layers, none of which rewrites the source:
+1. the building detector in `nlp/gliner2_mentions.py` tolerates the forms the
+   scan actually found (`synago[q]ue`, `synago[g]e`, `[s]ynagogue`,
+   `syn[e]agogue`) and still rejects `analogue`/`dialogue`/`synagogal`;
+2. entity identity folds those exact, curated forms, so `synagoque` is not a
+   second building — the damaged surface survives as a searchable alias, and
+   address identity still separates 23 from 26;
+3. `ocr_damage_log` in every run record (preflight included) reports each
+   damaged word with exact raw offsets — damage we chose not to repair stays
+   visible instead of silently eating mentions.
+
+Extend the lexicon only with forms verified in the corpus that are not words in
+their own right.
 - `npm run export:historical:map` → GeoJSON for the app's own map rendering.
 - `npm run hungaricana:lookup -- --query "..."` — builds targeted Hungaricana
   search URLs for a **human** and records confirmed facts to a provenance
@@ -135,9 +161,10 @@ truncate the TSV protocol.
    Stephen V", "Portrait of Mendel on his seal". Layout masking only covers
    header/footer zones. Caption/quote/bibliography zone classification and the
    99% body-alignment `incomplete_layout` gate are still open.
-2. **OCR damage blocks recognition.** Page 21's "great synagogue" never anchors
-   because OCR wrote `syna-goque` (line break + g→q), so GLiNER saw no
-   building. Gazetteer-driven OCR repair is proposed but unbuilt.
+2. ~~OCR damage blocks recognition.~~ **Fixed** (see the OCR section above):
+   page 21's great synagogue now anchors, and `synagogue (Táncsics Mihály utca
+   23)` exists alongside 26. Residual damage outside the curated lexicon still
+   costs mentions, but every instance is reported in `ocr_damage_log`.
 3. **Quote-speaker attribution is missing.** Inside the Eszéki school-play
    quote, "the Jew considered king of Jews" is Shabbetai Tzvi, but only via
    quote context. The judge rejects such items — correct until a quote/
@@ -152,8 +179,8 @@ truncate the TSV protocol.
 
 ## Suggested next steps, in order
 
-1. **Rebuild the 10-page HTML** with the address/entity fixes and re-inspect
-   (`--pages 15-24`). Cheap: model cache makes reruns nearly free.
+1. **Rebuild the 10-page HTML** with the address/entity/OCR fixes and
+   re-inspect (`--pages 15-24`). Cheap: model cache makes reruns nearly free.
 2. **Inline caption masking** (defect 1) — biggest quality win, has concrete
    failing cases to test against.
 3. **Keep GLiNER warm across batches** — roughly halves the full-book clock.
