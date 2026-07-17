@@ -615,6 +615,40 @@ The default 6,000-character Qwen chunk remains intentional. An 8,000-character
 experiment reduced the nominal request count but returned invalid JSON twice,
 so it was rejected rather than trading reliability for a smaller call count.
 
+### Implemented constrained discourse-reference pilot
+
+The reference pilot resolves pronouns, possessive owners, and repeated noun
+phrases from a noun-complete local ledger. It uses one shared normalized source
+view, short request-local IDs, merged discourse blocks, typed and
+number-constrained candidates, Flash-Lite/Qwen agreement, and Flash only for
+real disagreements. It is generic: Efraim and synagogue examples are
+regression cases, not prompt lookup rules.
+
+The current revision processes pages in order and persists a compact subject
+memory through the exactly next page. It combines that memory with up to three
+previous raw pages, clause-complete omission auditing, real page-continuation
+detection, direct-object salience, explicit-name alias canonicalization, and
+OCR/source-zone guards. Context-only items can guide resolution but cannot
+hide a fact missing from target output.
+
+The final fresh measurements were USD 0.000306 for 16 page-46 references and
+USD 0.001134 for 21 page-301 references with previous-page context. An exact
+cached replay cost USD 0. The complete selective extraction pipeline measured
+USD 0.001394/page on page 301, but adding the exhaustive resolver as an extra
+remote stage would exceed the total cost gate. Production must reuse extraction
+votes and remotely audit only unresolved/risky chains.
+
+A sequential pages 89-90 regression recovered the page-spanning Szapáry,
+Boráros, Wahrmann, school-location, and Nationalschule facts; page 90 loaded 48
+supported memory items from page 89. Fresh complete costs were USD 0.002896 and
+USD 0.002201 per page before removing a USD 0.000196 false caption-boundary
+call. The representative USD 0.002/page gate therefore remains unproven and
+the pilot remains private.
+
+The full algorithm, ownership semantics, candidate constraints, measured
+failures, commands, artifacts, and promotion gates are in
+[Historical Reference Resolution](HISTORICAL_REFERENCE_RESOLUTION.md).
+
 ### Implemented semi-open V2
 
 V2 runs beside the pilot and keeps the earlier commands unchanged:

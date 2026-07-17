@@ -108,6 +108,7 @@ openrouter.ai/models before each batch — prices move monthly.** The
 | T3-R | Current restricted-book extraction (Prompt P1-R) | `qwen/qwen3-coder:free` | Live preflight | `deepseek/deepseek-v4-flash` → `google/gemini-2.5-flash-lite` | implemented ladder; 5,000 max output tokens, 10 items/array, one request/rung, conservative `$1` default ceiling |
 | T4 | Address-book page → JSON (Prompt P3) | `google/gemini-2.5-flash` (vision) | ~$0.30 / $2.50 | `gemini-2.5-pro` | worth the mid-tier: these produce your highest-value edges; volume is small |
 | T5 | Entity adjudication, yes/no (Prompt P4) | `google/gemma-3-27b-it:free` | $0 | `gemini-2.5-flash-lite` | trivially small calls |
+| T5-R | Historical discourse reference resolution | local noun ledger + existing extraction vote | local / included | `qwen/qwen3-30b-a3b-instruct-2507` audit, then `google/gemini-2.5-flash` only on disagreement | batched per discourse block, never one call per pronoun; see the reference-resolution design |
 | T6 | Fact re-ranking per location (Prompt P5) | `google/gemini-2.5-flash-lite` | ~$0.10 / $0.40 | `gemini-2.5-flash` | needs mild judgment; ~500 calls total |
 | T7 | Translation hu↔en (Prompt P6) | `google/gemini-2.5-flash-lite` | ~$0.10 / $0.40 | `gemini-2.5-flash` | validate 30 samples with a native speaker (plan task Q-04) |
 | T8 | Faithfulness audit (Prompt P7) | **different family than T3**: if T3=Gemma → audit with `deepseek/deepseek-chat-v3` or `qwen/qwen3-*` | ~$0.3 / $1 | `claude-sonnet` spot checks | only on the 50-fact random samples, not everything |
@@ -158,6 +159,41 @@ the schedule assume uncapped free throughput.
 | MAPIRE / Budapest Time Machine (Arcanum + BFL) | georeferenced map tiles (WMTS) + plot/house person data | **BLOCKED — RED**; negotiate access (see [licensing.md](licensing.md#budapest-time-machine--mapire--partnership-target-red)) | — | none until licensed; own scans → manual georef |
 | Europeana | API JSON + files | DIRECT + per-file | per rights | P1 for text records |
 | műemlékem.hu | HTML | TEXT | — | P1 |
+
+### 3.0 Historical Extraction V3 (restricted monographs) — the current path
+
+V3 is the pipeline used for the restricted `jewish-budapest` monograph. Design
+lives in [HISTORICAL_EXTRACTION_V3_HANDOFF.md](HISTORICAL_EXTRACTION_V3_HANDOFF.md);
+current state, measured costs, and known defects live in
+[HISTORICAL_EXTRACTION_V3_HANDOFF_2026-07-17.md](HISTORICAL_EXTRACTION_V3_HANDOFF_2026-07-17.md).
+Entry point: `npm run extract:historical:v3` (add `--preflight-only` for a free
+local dry run that makes no paid calls).
+
+Stages, in order. Everything before stage 6 is deterministic, local, and free:
+
+| # | Stage | What it does |
+|---|---|---|
+| 1 | Layout mask (`lib/historicalPdfLayout.js`) | Poppler `-bbox-layout` coordinates mask header/footer furniture **while preserving text length**, so raw offsets stay immutable. Fails closed if Poppler fails. |
+| 2 | Reading view (`nlp/gliner2_mentions.py`) | Joins line-broken words (`syna-\ngogue`), repairs letter-adjacent Hungarian umlaut damage (`temet6` → `temető`), and keeps a reversible per-character map back to raw offsets. |
+| 3 | Local NLP | GLiNER2 entity mentions + a spaCy noun-phrase ledger (`nlp/noun_phrases.py`, `--noun-ledger`) for the ordinary heads GLiNER misses (tomb, school, gravestone). |
+| 4 | Addresses (`lib/historicalAddresses.js`) | Gazetteer-matched street/address references with exact offsets; ambiguous multi-district streets placed from page context only; building mentions anchored to a following address. |
+| 5 | Identity + clauses | Source-local entity index (aliases merged only when unambiguous; buildings keyed by head + street + house number; OCR variants folded via `lib/historicalOcrLexicon.js`), then the clause ledger: every clause gets an ID, exact offsets, mentions, and risk flags. |
+| 6 | Subject memory (`lib/historicalSubjectMemory.js`) | Typed focus stack resolves pronouns, possessives, and definite descriptions **before any paid call**. Owner and owned stay distinct (`his tomb`). Ambiguity is recorded, never guessed. State persists across strictly ascending pages. |
+| 7 | Primary extraction | One cheap call per page. Model returns compact TSV referencing supplied clause/mention IDs only — it never writes quotations, so evidence cannot be misquoted by construction. |
+| 8 | Independent audit | A second model reads the same pages without seeing the first model's answers. Agreement ⇒ `supported`. |
+| 9 | Quality adjudication | Disagreements and risky items escalate to the judge, which must rule per candidate with a written reason. Funded from a reserve that the whole batch must afford up front, or the run stops `incomplete_budget` — quality is never downgraded to fit a budget. |
+| 10 | Artifacts | Items, coverage, subject transitions, addresses, layout, the subject-memory state file, a report, and the self-contained facts browser. |
+
+Non-negotiables specific to V3:
+
+- **Evidence is attached from local clause offsets, never from model output.**
+- **Supported ≠ true.** It means two independent models agreed *and* every
+  reference in the item resolved. Two cheap models have agreed on caption junk.
+- **Nothing fails silently.** `unresolved_references_log`, `ocr_damage_log`,
+  ambiguity records, and per-item verdict reasons exist so every defect can be
+  found, classified, and fixed. See the confession loop in the handoff.
+- **No promotion claim without human-adjudicated held-out gold.** The eval
+  harness (`npm run eval:historical:v3`) fails closed and stamps `gold_source`.
 
 ### 3.1 Next monograph runbook
 
@@ -486,6 +522,29 @@ Describe this historical photograph for a tourist app in one sentence
 unless architectural/vehicle evidence makes it obvious; never invent
 street names. Photo metadata: {year}, {location_name}.
 ```
+
+### Historical discourse references (task T5-R)
+
+Historical prose needs a separate identity layer for `he`, `his tomb`,
+`its institutions`, `the synagogue`, and similar references. The implemented
+pilot scans every noun phrase locally, preserves raw offsets, batches a shared
+discourse view, and constrains models to exact candidate IDs. It distinguishes
+the entity introduced by a possessive noun phrase from its owner.
+
+Pages run sequentially. Each completed page writes a compact supported-subject
+memory; only the exactly following page may load it. The local resolver also
+keeps up to three previous raw pages, so a page-top pronoun or repeated
+description can resolve to the preceding page. Clause-complete Qwen auditing
+recovers atomic omissions, while strong Flash is reserved for real boundary
+continuations and single-model discoveries. Captions, page numbers, source
+zones, and hidden context cannot masquerade as or suppress target facts.
+
+This is not one API call per pronoun. Flash-Lite and Qwen resolve the page/block
+independently; Flash sees only real disagreement. Production must reuse the
+page extractor's vote and remotely audit only risky chains, because adding a
+second exhaustive remote pass to every page can fail the USD 0.002/page total
+gate. See [Historical Reference Resolution](HISTORICAL_REFERENCE_RESOLUTION.md)
+for the algorithm, measured costs, cache, commands, and held-out gate.
 
 ### Geocoding (restricted-book locations, `cli/geocode-kg.js`)
 

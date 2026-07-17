@@ -19,6 +19,12 @@ All npm commands from the monorepo root and workspaces.
 | `npm run generate:audio:all` | backend | Generate TTS for all landmarks |
 | `npm run db:migrate` | backend | Apply SQL migrations |
 | `npm run setup` | backend | migrate → seed → generate all audio |
+| `npm run extract:historical:v3` | backend | V3 restricted-book extraction (add `--preflight-only` for a free local dry run) |
+| `npm run eval:historical:v3` | backend | Evaluate V3 output against the V3 gold fixture; fails closed until gold exists |
+| `npm run build:historical:v3-browser` | backend | Build the self-contained V3 facts browser HTML |
+| `npm run build:gazetteer` | backend | Build the Budapest street gazetteer from OpenStreetMap Overpass (ODbL) |
+| `npm run export:historical:map` | backend | Export extracted address facts to GeoJSON for the app map |
+| `npm run hungaricana:lookup` | backend | Print Hungaricana search URLs for human verification and record confirmed facts |
 | `npm run scrape:budapest100` | ingest | Scrape budapest100.hu → JSON |
 | `npm run ingest:wikipedia` | ingest | Fetch Wikidata landmarks → JSON |
 | `npm run ingest:muemlekem` | ingest | Scrape muemlekem.hu → JSON |
