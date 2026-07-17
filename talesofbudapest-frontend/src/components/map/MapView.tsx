@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Layer, Map as MapLibreMap, Source, type MapLayerMouseEvent, type MapRef } from '@vis.gl/react-maplibre'
-import type { GeoJSONSource } from 'maplibre-gl'
+import type { GeoJSONSource, LayerSpecification, Map as MapLibreMapInstance } from 'maplibre-gl'
 import { ChapterMarker } from '@/components/map/ChapterMarker'
 import {
   LandmarkClusterLayer,
@@ -25,11 +25,25 @@ type MapViewport = { zoom: number; bounds: MapBounds | null }
 
 const INITIAL_VIEWPORT: MapViewport = { zoom: MAP_DEFAULT_ZOOM, bounds: null }
 
+const ROAD_LAYER_EXCLUSIONS = /(?:cablecar|ferry|railway)/
+
 const lineFeature = (positions: [number, number][]) => ({
   type: 'Feature' as const,
   properties: {},
   geometry: { type: 'LineString' as const, coordinates: positions.map(([lat, lng]) => [lng, lat]) },
 })
+
+const isRoadLineLayer = (layer: LayerSpecification) =>
+  layer.type === 'line'
+  && layer['source-layer'] === 'transportation'
+  && !ROAD_LAYER_EXCLUSIONS.test(layer.id)
+
+/** Keep OpenFreeMap's road geometry and widths while neutralising its warm road palette. */
+const setRoadLinesWhite = (map: MapLibreMapInstance) => {
+  map.getStyle().layers
+    .filter(isRoadLineLayer)
+    .forEach((layer) => map.setPaintProperty(layer.id, 'line-color', '#ffffff'))
+}
 
 export const MapView = ({
   selectedLandmarkId,
@@ -64,6 +78,14 @@ export const MapView = ({
       },
     })
   }, [])
+
+  const handleMapLoad = useCallback(() => {
+    const map = mapRef.current?.getMap()
+    if (!map) return
+
+    setRoadLinesWhite(map)
+    publishViewport()
+  }, [publishViewport])
 
   const handleMapClick = useCallback((event: MapLayerMouseEvent) => {
     const feature = event.features?.[0]
@@ -115,7 +137,7 @@ export const MapView = ({
         maxZoom={MAP_MAX_ZOOM}
         attributionControl={MAP_ATTRIBUTION_CONTROL}
         interactiveLayerIds={showLandmarks ? [LANDMARK_CLUSTER_LAYER_ID, LANDMARK_CLUSTER_DOT_LAYER_ID] : []}
-        onLoad={publishViewport}
+        onLoad={handleMapLoad}
         onMoveEnd={publishViewport}
         onClick={handleMapClick}
         reuseMaps
