@@ -1,5 +1,14 @@
 # Historical Extraction V3 — implementation handoff
 
+> **Architecture reference. For current state, read
+> [HISTORICAL_EXTRACTION_V3_HANDOFF_2026-07-17.md](HISTORICAL_EXTRACTION_V3_HANDOFF_2026-07-17.md)
+> first.** The goal and design below still hold. Everything describing status
+> is a record of 2026-07-16 and is now out of date: the files listed as
+> "uncommitted" are committed, the model configuration is frozen (DeepSeek V4
+> Flash primary with reasoning off), verification fixes raised supported items
+> from 71% to 91-97% on sampled pages, and address/geography and OCR layers
+> were added.
+
 ## Read first
 
 User goal: extract every meaningful historical event/assertion from a book,
@@ -70,17 +79,7 @@ cluster now correctly contains `R. Efraim`, `R. Efraim haKohen`, and
 existing package script passes `lib/` as a Node test path. Use direct test file
 commands until that separate script bug is fixed.
 
-## Status — SUPERSEDED
-
-> **This document is the architecture reference. For current state, read
-> [HISTORICAL_EXTRACTION_V3_HANDOFF_2026-07-17.md](HISTORICAL_EXTRACTION_V3_HANDOFF_2026-07-17.md)
-> first.** The status below is kept as the record of 2026-07-16 and is now
-> partly out of date: the model configuration has since been frozen
-> (DeepSeek V4 Flash primary, reasoning off), verification recovery fixes
-> raised supported items from 71% to 91-97% on the sampled pages, and an
-> address/geography layer and OCR lexicon were added.
-
-## Status 2026-07-16 (branch `historical-extraction-v3`)
+## Status 2026-07-16 — historical record (branch `historical-extraction-v3`)
 
 Committed on the branch (five commits from the baseline through eval gates):
 

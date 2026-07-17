@@ -154,6 +154,40 @@ their own right.
   heavy jobs on the Mac**; use satoshi/nakamoto. Ask the user before touching
   infrastructure.
 
+### File map
+
+| Path | Role |
+|---|---|
+| `cli/extract-historical-book-v2.js` (`--v3`) | The pipeline. Flags: `--from-page`, `--page-count`, `--preflight-only`, `--max-cost-usd`, `--state-file`, `--experiment-id`, `--primary-reasoning`/`--audit-reasoning`, `--gazetteer`, `--pdf` |
+| `lib/historicalSubjectMemory.js` | Entity index + typed focus stack + resolution + confessions |
+| `lib/historicalExtractionV2.js` | Clause ledger, segmentation, coverage, item normalisation, reference gate |
+| `lib/historicalPdfLayout.js` | Poppler bbox header/footer masking (offset-preserving) |
+| `lib/historicalAddresses.js` | Street/address extraction, gazetteer matching, ambiguity resolution, building anchoring |
+| `lib/historicalOcrLexicon.js` | Curated OCR folding + `findOcrDamage` confession |
+| `nlp/gliner2_mentions.py` | Reading view, GLiNER mentions, `--noun-ledger` |
+| `nlp/noun_phrases.py` | Reusable spaCy noun-phrase classification |
+| `cli/build-budapest-gazetteer.js` | OSM Overpass → street gazetteer (clustered, ODbL) |
+| `cli/run-historical-v3-batches.js` | Chapter-scoped orchestrator (`--dry-run`, budget caps, ledger, resume) |
+| `cli/build-langextract-browser.mjs` | Facts browser (`--v3 --pages A-B [--annotate] [--experiment ID]`) |
+| `cli/transform-v3-to-kg.js` | Dry-run KG load plan for the app |
+| `cli/merge-gold-annotations.js` | Merge gold with `gold_source` stamping |
+| `cli/eval-historical-items-v2.js` (`--v3`) | Fail-closed evaluation gates |
+| `cli/hungaricana-lookup.js` | Human lookup assist + provenance ledger (not a scraper) |
+| `cli/export-address-geojson.js` | Address facts → GeoJSON |
+| `data/jewish-budapest.chapters.json` | 17 chapters; illustrations/bibliography `skip: true` |
+| `data/budapest-street-renames.json` | Seeded historical street renames (facts) |
+| `fixtures/historical-book-items-golden-v3.json` | Gold manifest, 32 dev / 16 held-out pages |
+| `scripts/setup-historical-nlp-remote.sh` | Server prep for the full pass |
+
+### Run artifacts (all under `ingest/corpus/restricted/extractions/`)
+
+`*.historical-items-v3.jsonl` (items + `unresolved_references_log` +
+`ocr_damage_log` + `ambiguous_references` + `budget`), `*-coverage-v3.jsonl`,
+`*-subject-transitions-v3.jsonl`, `*-addresses-v3.jsonl`, `*-layout-v3.jsonl`,
+`*-subject-memory-v3.json` (state), `*-v3-model-cache.jsonl`,
+`*.historical-v3.report.json`, `*.historical-map.geojson`,
+`*.kg-load-plan.json`, `*.v3-run-ledger.jsonl`.
+
 ## Known defects, with named failing cases
 
 1. **Inline figure captions leak into body facts.** Pages 15-24 produced
