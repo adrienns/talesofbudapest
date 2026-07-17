@@ -211,8 +211,23 @@ const entities = [...entityGroups.values()].map((group) => ({
   owner_key: v3Entities.get(group.key)?.owner_entity_id ?? null,
   roles: [...(v3Entities.get(group.key)?.roles ?? [])],
   origin: v3Entities.get(group.key)?.origin ?? null,
-  mentions: [...group.mentions.values()].map((mention) => ({ ...mention, item_ids: [...mention.item_ids] }))
-    .sort((a, b) => a.page - b.page || a.start - b.start),
+  address: v3Entities.get(group.key)?.address ?? null,
+  // One occurrence in the book must appear once. A name span (954-963) and the
+  // clause evidence span (954-1083) quoting the same sentence are the same
+  // occurrence: collapse by page + quote, keep the tightest span, union the
+  // linked facts.
+  mentions: (() => {
+    const byQuote = new Map();
+    for (const mention of group.mentions.values()) {
+      const quoteKey = `${mention.page}${String(mention.quote ?? '').replace(/\s+/g, ' ').trim()}`;
+      const current = byQuote.get(quoteKey);
+      const itemIds = new Set([...(current?.item_ids ?? []), ...mention.item_ids]);
+      const tighter = !current || (mention.end - mention.start) < (current.end - current.start) ? mention : current;
+      byQuote.set(quoteKey, { ...tighter, item_ids: itemIds, confidence: tighter.confidence ?? current?.confidence ?? null });
+    }
+    return [...byQuote.values()].map((mention) => ({ ...mention, item_ids: [...mention.item_ids] }))
+      .sort((a, b) => a.page - b.page || a.start - b.start);
+  })(),
 })).sort((a, b) => b.mentions.length - a.mentions.length || a.label.localeCompare(b.label));
 
 // Ambiguities are first-class: a chip must say when identity is not settled.
@@ -393,12 +408,14 @@ const fragment = `<!doctype html>
     const entity = byEntity.get(key);
     if (!entity) return;
     els.dialogTitle.textContent = entity.label;
-    els.dialogMeta.textContent = label(entity.type) + ' · ' + entity.mentions.length + ' mentions · ' + entity.item_ids.length + ' linked facts' + (entity.origin === 'noun_ledger' ? ' · provisional (noun ledger)' : '');
+    els.dialogMeta.textContent = label(entity.type) + ' · ' + entity.mentions.length + ' mentions · ' + entity.item_ids.length + ' linked facts'
+      + (entity.address ? ' · ' + entity.address.display : '')
+      + (entity.origin === 'noun_ledger' ? ' · provisional (noun ledger)' : '');
     els.dialogAliases.innerHTML = entity.aliases.map((alias) => '<span class="viz-badge">' + esc(alias) + '</span>').join('')
       + (entity.roles ?? []).filter((role) => !entity.aliases.includes(role)).map((role) => '<span class="viz-badge">role: ' + esc(role) + '</span>').join('')
       + (entity.owner_key && byEntity.has(entity.owner_key) ? '<span class="lfb-entity-line"><span class="lfb-label">owned by</span>' + entityButton(entity.owner_key, byEntity.get(entity.owner_key).label) + '</span>' : '');
     els.dialogMentions.innerHTML = entity.mentions.map((mention) => {
-      const statements = mention.item_ids.map((id) => byItem.get(id)?.statement).filter(Boolean);
+      const statements = [...new Set(mention.item_ids.map((id) => byItem.get(id)?.statement).filter(Boolean))];
       return '<div class="lfb-mention"><div><span class="viz-badge">page ' + esc(mention.page) + '</span> <span class="viz-badge">offsets ' + esc(mention.start) + '–' + esc(mention.end) + '</span></div><div class="lfb-quote">' + esc(mention.quote) + '</div><div class="text-small text-muted">mention: ' + esc(mention.text) + (mention.confidence == null ? '' : ' · confidence ' + Number(mention.confidence).toFixed(3)) + '</div>' + (statements.length ? '<div>' + statements.map(esc).join('<br>') + '</div>' : '') + '</div>';
     }).join('') || '<div class="lfb-empty">No grounded mentions</div>';
     els.dialog.showModal();

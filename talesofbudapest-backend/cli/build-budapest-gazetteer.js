@@ -33,6 +33,34 @@ export const normalizeStreetKey = (value) => String(value ?? '')
   .normalize('NFKD').replace(/[̀-ͯ]/gu, '')
   .toLowerCase().replace(/[^a-z0-9]+/gu, ' ').trim();
 
+const KILOMETRES_PER_DEGREE = 111;
+const distanceKm = (left, right) => Math.hypot(
+  (left.lat - right.lat) * KILOMETRES_PER_DEGREE,
+  (left.lon - right.lon) * KILOMETRES_PER_DEGREE * Math.cos((left.lat * Math.PI) / 180),
+);
+
+/**
+ * Group a street's way centres into geographic clusters.
+ *
+ * Budapest reuses street names across districts (there are several
+ * `Táncsics Mihály utca`). Averaging them produces a confident point in the
+ * wrong place, which is worse for a tour than no point at all, so a name whose
+ * ways form more than one cluster is reported as ambiguous instead.
+ */
+export const clusterCenters = (centers, radiusKm = 1.2) => {
+  const clusters = [];
+  for (const center of centers) {
+    const hit = clusters.find((cluster) => distanceKm(cluster.seed, center) <= radiusKm);
+    if (hit) hit.members.push(center);
+    else clusters.push({ seed: center, members: [center] });
+  }
+  return clusters.map((cluster) => ({
+    lat: Number((cluster.members.reduce((sum, row) => sum + row.lat, 0) / cluster.members.length).toFixed(6)),
+    lon: Number((cluster.members.reduce((sum, row) => sum + row.lon, 0) / cluster.members.length).toFixed(6)),
+    way_count: cluster.members.length,
+  })).sort((left, right) => right.way_count - left.way_count);
+};
+
 const main = async () => {
   console.error('Fetching Budapest streets from Overpass (OpenStreetMap, ODbL)...');
   const response = await fetch(OVERPASS_URL, {
@@ -55,32 +83,32 @@ const main = async () => {
     if (!name) continue;
     const key = normalizeStreetKey(name);
     if (!key) continue;
-    const entry = byName.get(key) ?? { modern: name, key, way_count: 0, lat_sum: 0, lon_sum: 0, center_count: 0 };
+    const entry = byName.get(key) ?? { modern: name, key, way_count: 0, centers: [] };
     entry.way_count += 1;
-    if (element.center) {
-      entry.lat_sum += element.center.lat;
-      entry.lon_sum += element.center.lon;
-      entry.center_count += 1;
-    }
+    if (element.center) entry.centers.push({ lat: element.center.lat, lon: element.center.lon });
     byName.set(key, entry);
   }
 
   const renameTable = JSON.parse(await fs.readFile(RENAMES, 'utf8'));
   const renamesByKey = new Map(renameTable.renames.map((row) => [normalizeStreetKey(row.modern), row.historical ?? []]));
 
-  const streets = [...byName.values()].map((entry) => ({
+  const streets = [...byName.values()].map((entry) => {
+    const clusters = clusterCenters(entry.centers);
+    // One cluster: a usable street point. Several: the name is reused across
+    // districts, so refuse a centre and hand the caller the candidates.
+    const center = clusters.length === 1 ? { lat: clusters[0].lat, lon: clusters[0].lon, precision: 'street' } : null;
+    return {
     modern: entry.modern,
     key: entry.key,
-    center: entry.center_count ? {
-      lat: Number((entry.lat_sum / entry.center_count).toFixed(6)),
-      lon: Number((entry.lon_sum / entry.center_count).toFixed(6)),
-      precision: 'street',
-    } : null,
+    center,
+    ambiguous_location: clusters.length > 1 ? true : undefined,
+    location_clusters: clusters.length > 1 ? clusters : undefined,
     historical: (renamesByKey.get(entry.key) ?? []).map((row) => ({
       ...row,
       key: normalizeStreetKey(row.name),
     })),
-  })).sort((a, b) => a.key.localeCompare(b.key));
+    };
+  }).sort((a, b) => a.key.localeCompare(b.key));
 
   // Historical names whose modern street was not found in OSM still belong in
   // the gazetteer so OCR matching can find them.
