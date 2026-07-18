@@ -5,6 +5,10 @@
   },
   "nav": {
     "home": "Kezdőlap",
+    "explore": "Felfedezés",
+    "createTour": "Túra",
+    "myTours": "Túráim",
+    "aiGuide": "AI kalauz",
     "narrative": "Narratíva",
     "archives": "Archívum",
     "settings": "Beállítások",
@@ -89,6 +93,38 @@
     "placeholder": "Szőj új történelmi narratívát…",
     "startVoicePrompt": "Hangalapú prompt indítása"
   },
+  "search": {
+    "placeholder": "Látnivalók és helyek keresése",
+    "title": "Mit szeretnél felfedezni?",
+    "helper": "Keress budapesti látnivalóra vagy helyre.",
+    "suggestionParliament": "Országház",
+    "suggestionChainBridge": "Lánchíd",
+    "suggestionCastle": "Budai Vár",
+    "results": "Keresési találatok",
+    "loading": "Keresés",
+    "empty": "Nincs találat. Próbálj másik nevet, vagy böngészd a térképet.",
+    "error": "A keresés most nem érhető el.",
+    "retry": "Újra",
+    "clear": "Keresés törlése",
+    "back": "Vissza a térképhez"
+  },
+  "guide": {
+    "title": "AI kalauz",
+    "subtitle": "Budapest történelmi forrásaira támaszkodva",
+    "close": "AI kalauz bezárása",
+    "newConversation": "Új beszélgetés",
+    "welcomeTitle": "Kérdezz Budapestről",
+    "welcomeBody": "Mesélek a város helyeiről, alakjairól és eseményeiről, és megmutatom, hol találod őket.",
+    "suggestionOne": "Miért ennyire különböző Buda és Pest?",
+    "suggestionTwo": "Mire figyeljek az Országház környékén?",
+    "suggestionThree": "Mesélj egy meglepő történetet a Lánchídról.",
+    "placeholder": "Kérdezz Budapestről…",
+    "send": "Kérdés küldése",
+    "thinking": "Keresés az archívumban…",
+    "sources": "A válaszhoz kapcsolódó helyek",
+    "error": "Erre most nem sikerült válaszolnom.",
+    "retry": "Újra"
+  },
   "narrative": {
     "greetings": [
       "Milyen narratívát szőjünk?",
@@ -164,11 +200,11 @@
     "dismiss": "Most nem"
   },
   "archives": {
-    "label": "Archívum",
-    "title": "Mentett narratívák",
-    "subtitle": "Egyedi séta történeteid, készen az újrálátogatásra.",
-    "loading": "Archívum betöltése…",
-    "empty": "Még nincs narratíva. Koppints a prompt sávra a térképen az első történethez.",
+    "label": "Túráim",
+    "title": "Saját túráid",
+    "subtitle": "Sétatörténeteid, folytatásra vagy újrahallgatásra készen.",
+    "loading": "Túrák betöltése…",
+    "empty": "Még nincs túrád. Válaszd a Túra gombot az első sétatörténet elkészítéséhez.",
     "chapters": "{count} fejezet"
   },
   "settings": {

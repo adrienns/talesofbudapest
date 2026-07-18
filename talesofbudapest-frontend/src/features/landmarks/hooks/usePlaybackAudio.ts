@@ -11,12 +11,15 @@ type UsePlaybackAudioOptions = {
   enableOnDemand?: boolean
   initialScript?: string | null
   onAudioReady?: (audioUrl: string) => void
+  initialPlaybackPosition?: number
+  onPlaybackEnded?: () => void
 }
 
 type UsePlaybackAudioResult = {
   isPlaying: boolean
   currentTime: number
   duration: number
+  playbackRate: number
   hasAudio: boolean
   isGenerating: boolean
   generateError: string | null
@@ -27,6 +30,7 @@ type UsePlaybackAudioResult = {
   togglePlayPause: () => Promise<void>
   play: () => Promise<void>
   seek: (time: number) => void
+  setPlaybackRate: (rate: number) => void
 }
 
 export const usePlaybackAudio = (
@@ -38,7 +42,13 @@ export const usePlaybackAudio = (
   const t = useTranslations('errors')
   const styleId = useTourPreferencesStore((state) => state.styleId)
   const topicIds = useTourPreferencesStore((state) => state.topicIds)
-  const { enableOnDemand = false, initialScript = null, onAudioReady } = options
+  const {
+    enableOnDemand = false,
+    initialScript = null,
+    onAudioReady,
+    initialPlaybackPosition = 0,
+    onPlaybackEnded,
+  } = options
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(audioUrl)
   const [script, setScript] = useState<string | null>(initialScript)
   const [historyDepth, setHistoryDepth] = useState<string | null>(null)
@@ -66,8 +76,8 @@ export const usePlaybackAudio = (
   }, [audioUrl, landmarkId, locale, initialScript, styleId, topicKey])
 
   const activeUrl = resolvedUrl ?? audioUrl
-  const { isPlaying, currentTime, duration, hasAudio, togglePlayPause, seek, play } =
-    useAudioPlayer(activeUrl)
+  const { isPlaying, currentTime, duration, playbackRate, hasAudio, togglePlayPause, seek, play, setPlaybackRate } =
+    useAudioPlayer(activeUrl, { initialTime: initialPlaybackPosition, onEnded: onPlaybackEnded })
 
   useEffect(() => {
     if (!activeUrl || !shouldAutoPlayRef.current) {
@@ -122,6 +132,7 @@ export const usePlaybackAudio = (
     isPlaying,
     currentTime,
     duration,
+    playbackRate,
     hasAudio: Boolean(activeUrl),
     isGenerating,
     generateError,
@@ -132,5 +143,6 @@ export const usePlaybackAudio = (
     togglePlayPause: handlePlayPause,
     play,
     seek,
+    setPlaybackRate,
   }
 }

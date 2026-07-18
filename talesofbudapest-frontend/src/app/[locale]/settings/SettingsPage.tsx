@@ -27,18 +27,14 @@ const SettingsPage = () => {
   const t = useTranslations('settings')
 
   const handleTabChange = (tab: NavTabId) => {
-    if (tab === 'map') {
+    if (tab === 'explore') {
       router.push('/')
       return
     }
 
-    if (tab === 'archives') {
-      router.push('/archives')
+    if (tab === 'tours') {
+      router.push('/tours')
     }
-  }
-
-  const handleAiGuideClick = () => {
-    router.push('/?ai=1')
   }
 
   return (
@@ -136,7 +132,8 @@ const SettingsPage = () => {
       <BottomNav
         activeTab="settings"
         onTabChange={handleTabChange}
-        onAiGuideClick={handleAiGuideClick}
+        onCreateTour={() => router.push('/?createTour=1&returnTo=settings')}
+        onOpenAiGuide={() => router.push('/?guide=1&returnTo=settings')}
       />
     </main>
   )

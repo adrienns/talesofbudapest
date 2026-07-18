@@ -18,3 +18,7 @@ export const LAST_NARRATIVE_STORAGE_KEY = 'tob:lastNarrativeId'
 /** Per-narrative chapter progress, so resuming picks up where you left off. */
 export const lastNarrativeChapterKey = (narrativeId: string): string =>
   `tob:lastChapterIndex:${narrativeId}`
+
+/** Per-stop audio position, so a visitor can continue a story after reopening the app. */
+export const narrativePlaybackPositionKey = (narrativeId: string, chapterId: string): string =>
+  `tob:playbackPosition:${narrativeId}:${chapterId}`

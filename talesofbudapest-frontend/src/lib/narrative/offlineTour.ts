@@ -38,3 +38,5 @@ export const loadOfflineTour = (tourId: string): NarrativeRoute | null => {
     return null
   }
 }
+
+export const hasOfflineTour = (tourId: string): boolean => Boolean(loadOfflineTour(tourId))

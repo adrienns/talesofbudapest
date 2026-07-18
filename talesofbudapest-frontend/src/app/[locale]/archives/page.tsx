@@ -1,18 +1,13 @@
-import { setRequestLocale } from 'next-intl/server'
+import { redirect } from 'next/navigation'
 import { routing } from '@/i18n/routing'
-import ArchivesPage from './ArchivesPage'
 
 type PageProps = {
   params: Promise<{ locale: string }>
 }
 
-export const generateStaticParams = () =>
-  routing.locales.map((locale) => ({ locale }))
-
-const Page = async ({ params }: PageProps) => {
+const LegacyArchivesPage = async ({ params }: PageProps) => {
   const { locale } = await params
-  setRequestLocale(locale)
-  return <ArchivesPage />
+  redirect(locale === routing.defaultLocale ? '/tours' : `/${locale}/tours`)
 }
 
-export default Page
+export default LegacyArchivesPage

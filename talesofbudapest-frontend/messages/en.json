@@ -5,6 +5,10 @@
   },
   "nav": {
     "home": "Home",
+    "explore": "Explore",
+    "createTour": "Create tour",
+    "myTours": "My tours",
+    "aiGuide": "AI Guide",
     "narrative": "Narrative",
     "archives": "Archives",
     "settings": "Settings",
@@ -89,6 +93,38 @@
     "placeholder": "Weave a new historical narrative…",
     "startVoicePrompt": "Start voice prompt"
   },
+  "search": {
+    "placeholder": "Search landmarks and places",
+    "title": "Where do you want to explore?",
+    "helper": "Search by landmark or place in Budapest.",
+    "suggestionParliament": "Parliament",
+    "suggestionChainBridge": "Chain Bridge",
+    "suggestionCastle": "Buda Castle",
+    "results": "Search results",
+    "loading": "Searching",
+    "empty": "No matching places found. Try another name or browse the map.",
+    "error": "Search is unavailable right now.",
+    "retry": "Try again",
+    "clear": "Clear search",
+    "back": "Back to map"
+  },
+  "guide": {
+    "title": "AI Guide",
+    "subtitle": "Grounded in Budapest's historical sources",
+    "close": "Close AI Guide",
+    "newConversation": "New conversation",
+    "welcomeTitle": "Ask about Budapest",
+    "welcomeBody": "I can explain the people, places, and events behind the city—and show you where to find them.",
+    "suggestionOne": "Why are Buda and Pest so different?",
+    "suggestionTwo": "What should I notice around the Parliament?",
+    "suggestionThree": "Tell me a surprising story about the Chain Bridge.",
+    "placeholder": "Ask about Budapest…",
+    "send": "Send question",
+    "thinking": "Looking through the archives…",
+    "sources": "Places behind this answer",
+    "error": "I couldn't answer that right now.",
+    "retry": "Try again"
+  },
   "narrative": {
     "greetings": [
       "What narrative shall we weave?",
@@ -164,11 +200,11 @@
     "dismiss": "Not now"
   },
   "archives": {
-    "label": "Archives",
-    "title": "Saved narratives",
-    "subtitle": "Your custom walking stories, ready to revisit.",
+    "label": "My tours",
+    "title": "Your tours",
+    "subtitle": "Your walking stories, ready to resume or revisit.",
     "loading": "Loading archives…",
-    "empty": "No narratives yet. Tap the prompt bar on the map to weave your first story.",
+    "empty": "No tours yet. Choose Create tour to make your first walking story.",
     "chapters": "{count} chapters"
   },
   "settings": {

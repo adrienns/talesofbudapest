@@ -22,6 +22,7 @@ type Props = {
   onRequestLocation: () => Promise<boolean>
   locationStatus: QuestionnaireLocationStatus
   focusInput?: boolean
+  initialIntent?: string
 }
 
 export const NarrativeQuestionnaire = ({
@@ -32,9 +33,10 @@ export const NarrativeQuestionnaire = ({
   onRequestLocation,
   locationStatus,
   focusInput = false,
+  initialIntent = '',
 }: Props) => {
   const t = useTranslations('questionnaire')
-  const questionnaire = useQuestionnaire({ isOpen, locationStatus, onRequestLocation })
+  const questionnaire = useQuestionnaire({ isOpen, initialIntent, locationStatus, onRequestLocation })
 
   if (!isOpen) return null
 

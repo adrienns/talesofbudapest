@@ -14,19 +14,19 @@ const formatDate = (value: string, locale: string) =>
     year: 'numeric',
   })
 
-const ArchivesPage = () => {
+const ToursPage = () => {
   const router = useRouter()
   const locale = useLocale()
   const t = useTranslations('archives')
   const { narratives, isLoading, error } = useNarratives()
 
   const handleTabChange = (tab: NavTabId) => {
-    if (tab === 'map') {
+    if (tab === 'explore') {
       router.push('/')
       return
     }
 
-    if (tab === 'archives') {
+    if (tab === 'tours') {
       return
     }
 
@@ -37,10 +37,6 @@ const ArchivesPage = () => {
 
   const handleOpenNarrative = (id: string) => {
     router.push(`/?narrativeId=${id}`)
-  }
-
-  const handleAiGuideClick = () => {
-    router.push('/?ai=1')
   }
 
   return (
@@ -90,12 +86,13 @@ const ArchivesPage = () => {
       </div>
 
       <BottomNav
-        activeTab="archives"
+        activeTab="tours"
         onTabChange={handleTabChange}
-        onAiGuideClick={handleAiGuideClick}
+        onCreateTour={() => router.push('/?createTour=1&returnTo=tours')}
+        onOpenAiGuide={() => router.push('/?guide=1&returnTo=tours')}
       />
     </main>
   )
 }
 
-export default ArchivesPage
+export default ToursPage

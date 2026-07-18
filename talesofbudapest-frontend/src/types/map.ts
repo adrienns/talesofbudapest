@@ -3,6 +3,8 @@ import type { NarrativeChapter, NarrativeRoute, WalkingRoute } from './narrative
 
 export type MapViewProps = {
   selectedLandmarkId: string | null
+  focusLandmark?: MapPin | null
+  onCenterChange?: (center: { lat: number; lng: number }) => void
   onLandmarkSelect: (landmark: MapPin) => void
   activeRoute?: NarrativeRoute | null
   selectedChapterId?: string | null

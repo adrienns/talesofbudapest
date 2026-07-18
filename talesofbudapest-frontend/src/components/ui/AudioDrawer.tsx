@@ -36,6 +36,8 @@ type AudioDrawerProps = {
   onPlayNextStop?: () => void
   onSelectRouteStop?: (stopId: string) => void
   manualPlayRequest?: ManualPlayRequest | null
+  initialPlaybackPosition?: number
+  onPlaybackPositionChange?: (seconds: number) => void
 }
 
 export const AudioDrawer = ({
@@ -58,6 +60,8 @@ export const AudioDrawer = ({
   onPlayNextStop,
   onSelectRouteStop,
   manualPlayRequest = null,
+  initialPlaybackPosition = 0,
+  onPlaybackPositionChange,
 }: AudioDrawerProps) => {
   const t = useTranslations('player')
   const [internalSnap, setInternalSnap] = useState<SheetSnap>('collapsed')
@@ -117,10 +121,15 @@ export const AudioDrawer = ({
     [onLandmarkAudioReady],
   )
 
+  const handlePlaybackEnded = useCallback(() => {
+    onPlaybackPositionChange?.(0)
+  }, [onPlaybackPositionChange])
+
   const {
     isPlaying,
     currentTime,
     duration,
+    playbackRate,
     hasAudio,
     isGenerating,
     generateError,
@@ -131,15 +140,51 @@ export const AudioDrawer = ({
     togglePlayPause,
     play,
     seek,
+    setPlaybackRate,
   } = usePlaybackAudio(playbackItem?.audioUrl ?? null, playbackItem?.id ?? null, {
     enableOnDemand: enableOnDemandAudio,
     initialScript: playbackItem?.script ?? null,
     onAudioReady: handleAudioReady,
+    initialPlaybackPosition,
+    onPlaybackEnded: handlePlaybackEnded,
   })
 
   const displayImageUrl = playbackItem?.imageUrl ?? resolvedLandmarkImageUrl
   const displayTitle = playbackItem?.title ?? routeTitle ?? ''
   const handledManualRequest = useRef(0)
+  const latestPlaybackPosition = useRef(0)
+  const lastSavedPlaybackPosition = useRef(0)
+
+  useEffect(() => {
+    latestPlaybackPosition.current = currentTime
+
+    if (!onPlaybackPositionChange || currentTime <= 0 || duration <= 0) return
+    if (Math.abs(currentTime - lastSavedPlaybackPosition.current) < 5) return
+
+    lastSavedPlaybackPosition.current = currentTime
+    onPlaybackPositionChange(currentTime)
+  }, [currentTime, duration, onPlaybackPositionChange])
+
+  useEffect(() => {
+    lastSavedPlaybackPosition.current = 0
+    latestPlaybackPosition.current = 0
+  }, [playbackItem?.id])
+
+  useEffect(() => {
+    if (!onPlaybackPositionChange) return
+
+    const saveLatestPosition = () => {
+      if (latestPlaybackPosition.current > 0) {
+        onPlaybackPositionChange(latestPlaybackPosition.current)
+      }
+    }
+
+    window.addEventListener('pagehide', saveLatestPosition)
+    return () => {
+      window.removeEventListener('pagehide', saveLatestPosition)
+      saveLatestPosition()
+    }
+  }, [onPlaybackPositionChange, playbackItem?.id])
 
   useEffect(() => {
     if (!manualPlayRequest || manualPlayRequest.requestId === handledManualRequest.current) return
@@ -148,6 +193,46 @@ export const AudioDrawer = ({
     handledManualRequest.current = manualPlayRequest.requestId
     void play().catch(() => {})
   }, [hasAudio, manualPlayRequest, play, playbackItem?.id])
+
+  useEffect(() => {
+    if (!('mediaSession' in navigator) || !('MediaMetadata' in window)) return
+
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: displayTitle,
+      artist: routeTitle ?? 'Tales of Budapest',
+      artwork: displayImageUrl ? [{ src: displayImageUrl }] : undefined,
+    })
+
+    const setAction = (action: MediaSessionAction, handler: MediaSessionActionHandler | null) => {
+      try {
+        navigator.mediaSession.setActionHandler(action, handler)
+      } catch {
+        // Not every browser supports every media-session action.
+      }
+    }
+
+    setAction('play', () => { void play() })
+    setAction('pause', () => { void togglePlayPause() })
+    setAction('seekbackward', (details) => seek(Math.max(0, currentTime - (details.seekOffset ?? 10))))
+    setAction('seekforward', (details) => seek(Math.min(duration, currentTime + (details.seekOffset ?? 10))))
+    setAction('previoustrack', onSkipBack ?? null)
+    setAction('nexttrack', onSkipForward ?? null)
+
+    return () => {
+      setAction('play', null)
+      setAction('pause', null)
+      setAction('seekbackward', null)
+      setAction('seekforward', null)
+      setAction('previoustrack', null)
+      setAction('nexttrack', null)
+    }
+  }, [currentTime, displayImageUrl, displayTitle, duration, onSkipBack, onSkipForward, play, routeTitle, seek, togglePlayPause])
+
+  useEffect(() => {
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused'
+    }
+  }, [isPlaying])
 
   const handleShare = useCallback(() => {
     if (typeof navigator === 'undefined') {
@@ -204,6 +289,12 @@ export const AudioDrawer = ({
   const onShare = hasAudio || canRequestAudio ? handleShare : undefined
   const onDownload = hasAudio ? handleDownload : undefined
 
+  const cyclePlaybackRate = () => {
+    const rates = [1, 1.25, 1.5, 2]
+    const currentIndex = rates.indexOf(playbackRate)
+    setPlaybackRate(rates[(currentIndex + 1) % rates.length])
+  }
+
   const meta = activeRoute
     ? buildTourChapterMeta(activeRoute, chapterIndex)
     : buildLandmarkMeta(playbackItem.title)
@@ -212,6 +303,7 @@ export const AudioDrawer = ({
     isPlaying,
     currentTime,
     duration,
+    playbackRate,
     hasAudio,
     isGenerating,
     canRequestAudio,
@@ -221,6 +313,7 @@ export const AudioDrawer = ({
       void togglePlayPause()
     },
     onSeek: seek,
+    onPlaybackRateChange: cyclePlaybackRate,
     onSkipBack,
     onSkipForward,
     readyGlow,

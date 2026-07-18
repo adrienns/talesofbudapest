@@ -2,6 +2,7 @@ export type AudioPlayerAdapter = {
   play(): Promise<void>
   pause(): void
   seek(time: number): void
+  setPlaybackRate(rate: number): void
   getCurrentTime(): number
   getDuration(): number
   onTimeUpdate(callback: (time: number) => void): () => void
@@ -14,6 +15,7 @@ export type PlaybackTransportProps = {
   isPlaying: boolean
   currentTime: number
   duration: number
+  playbackRate: number
   hasAudio: boolean
   isGenerating?: boolean
   canRequestAudio?: boolean
@@ -21,6 +23,7 @@ export type PlaybackTransportProps = {
   historyDepth?: string | null
   onPlayPause: () => void
   onSeek: (time: number) => void
+  onPlaybackRateChange?: () => void
   onSkipBack?: () => void
   onSkipForward?: () => void
   readyGlow?: boolean

@@ -13,6 +13,9 @@ export const createWebAudioPlayer = (audioUrl: string): AudioPlayerAdapter => {
     seek: (time: number) => {
       audio.currentTime = time
     },
+    setPlaybackRate: (rate: number) => {
+      audio.playbackRate = rate
+    },
     getCurrentTime: () => audio.currentTime,
     getDuration: () => audio.duration || 0,
     onTimeUpdate: (callback) => {

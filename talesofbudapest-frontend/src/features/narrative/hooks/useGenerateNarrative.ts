@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect } from 'react'
 import { LAST_NARRATIVE_STORAGE_KEY, lastNarrativeChapterKey } from '@/constants/narrative'
+import { prepareCuratedRoute } from '@/lib/narrative/curatedRoute'
 import { useNarrativeStore } from '@/stores/narrativeStore'
 import type { NarrativeContext, NarrativeRequest, NarrativeRoute } from '@/types/narrative'
 import { getPendingNarrativeJobId, submitNarrativeJob, waitForNarrativeJob } from '@/features/narrative/narrativeJobClient'
@@ -65,7 +66,7 @@ export const useGenerateNarrative = () => {
         const response = await fetch(`/api/curated-tours/${encodeURIComponent(slug)}?locale=${locale}`)
         const payload = await response.json()
         if (!response.ok) throw new Error(payload.error ?? 'Failed to load curated tour')
-        const route = payload as NarrativeRoute
+        const route = prepareCuratedRoute(payload as NarrativeRoute & { curatedSlug?: string | null })
         return acceptRoute(route, initialChapterIndex)
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to load curated tour'

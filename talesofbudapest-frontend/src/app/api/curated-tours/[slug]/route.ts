@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { prepareCuratedRoute } from '@/lib/narrative/curatedRoute'
 import { getSupabaseRead } from '@/lib/server/supabaseAdmin'
 // @ts-expect-error backend content is plain JS in sibling workspace
 import { findCuratedTour } from '@backend/content/curated/index.js'
@@ -29,7 +30,7 @@ export const GET = async (request: Request, { params }: RouteParams) => {
         { status: 503 },
       )
     }
-    return NextResponse.json(narrative)
+    return NextResponse.json(prepareCuratedRoute(narrative))
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to load curated tour'
     return NextResponse.json({ error: message }, { status: 500 })

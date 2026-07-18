@@ -2,8 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useLocale } from 'next-intl'
-import { LAST_NARRATIVE_STORAGE_KEY, lastNarrativeChapterKey } from '@/constants/narrative'
+import {
+  LAST_NARRATIVE_STORAGE_KEY,
+  lastNarrativeChapterKey,
+  narrativePlaybackPositionKey,
+} from '@/constants/narrative'
 import { loadOfflineTour } from '@/lib/narrative/offlineTour'
+import { prepareCuratedRoute } from '@/lib/narrative/curatedRoute'
 import { useNarrativeStore } from '@/stores/narrativeStore'
 import type { NarrativeRoute, NarrativeSummary } from '@/types/narrative'
 
@@ -18,6 +23,29 @@ const readStoredChapterIndex = (narrativeId: string): number => {
   const raw = localStorage.getItem(lastNarrativeChapterKey(narrativeId))
   const parsed = raw ? Number(raw) : 0
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
+}
+
+export const readNarrativePlaybackPosition = (narrativeId: string, chapterId: string): number => {
+  try {
+    const raw = localStorage.getItem(narrativePlaybackPositionKey(narrativeId, chapterId))
+    const value = raw ? Number(raw) : 0
+    return Number.isFinite(value) && value > 0 ? value : 0
+  } catch {
+    return 0
+  }
+}
+
+export const saveNarrativePlaybackPosition = (
+  narrativeId: string,
+  chapterId: string,
+  seconds: number,
+) => {
+  try {
+    const value = Number.isFinite(seconds) && seconds > 0 ? seconds : 0
+    localStorage.setItem(narrativePlaybackPositionKey(narrativeId, chapterId), String(value))
+  } catch {
+    // Best-effort only: tour and chapter progress still work without storage.
+  }
 }
 
 export const useNarratives = () => {
@@ -54,12 +82,13 @@ export const useNarratives = () => {
         const response = await fetch(`/api/narratives/${id}?locale=${locale}`)
         const payload = await response.json()
         if (!response.ok) throw new Error(payload.error ?? 'Failed to load narrative')
-        route = {
+        route = prepareCuratedRoute({
           id: payload.id,
           title: payload.title,
           chapters: payload.chapters,
           walkingRoute: payload.walkingRoute ?? null,
-        }
+          curatedSlug: payload.curatedSlug,
+        })
       } catch (error) {
         route = loadOfflineTour(id)
         if (!route) throw error
@@ -95,8 +124,19 @@ export const useNarratives = () => {
 
       return { id: lastId, title: payload.title, chapterIndex, chapterCount }
     } catch {
-      localStorage.removeItem(LAST_NARRATIVE_STORAGE_KEY)
-      return null
+      const offlineRoute = loadOfflineTour(lastId)
+      if (!offlineRoute?.chapters.length) {
+        localStorage.removeItem(LAST_NARRATIVE_STORAGE_KEY)
+        return null
+      }
+
+      const chapterIndex = Math.min(readStoredChapterIndex(lastId), offlineRoute.chapters.length - 1)
+      return {
+        id: offlineRoute.id,
+        title: offlineRoute.title,
+        chapterIndex,
+        chapterCount: offlineRoute.chapters.length,
+      }
     }
   }, [locale])
 

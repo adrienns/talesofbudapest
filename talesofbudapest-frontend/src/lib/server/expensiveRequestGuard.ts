@@ -8,6 +8,7 @@ export type ExpensiveAction =
   | 'tour_generate'
   | 'landmark_audio'
   | 'walking_route'
+  | 'guide_chat'
 
 type SupabaseRpcClient = {
   rpc: (name: string, params: Record<string, unknown>) => PromiseLike<{

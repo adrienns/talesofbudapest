@@ -21,16 +21,18 @@ Locales: `en`, `hu` — configured in `src/i18n/routing.ts`, enforced by `src/mi
 | URL | Page | File |
 |-----|------|------|
 | `/[locale]` | Map home | `src/app/[locale]/page.tsx` → `HomePage.tsx` |
-| `/[locale]/archives` | Saved tours | `src/app/[locale]/archives/ArchivesPage.tsx` |
+| `/[locale]/tours` | Saved tours | `src/app/[locale]/archives/ArchivesPage.tsx` |
+| `/[locale]/archives` | Legacy redirect to My Tours | `src/app/[locale]/archives/page.tsx` |
 | `/[locale]/settings` | Tour style, locale, map options | `src/app/[locale]/settings/SettingsPage.tsx` |
 
-Bottom navigation tabs: `map`, `narrative`, `archives`, `settings` (`src/constants/navigation.ts`).
+Bottom navigation destinations are Explore, My Tours, and Settings, with a separate Create Tour action and AI Guide button (`src/constants/navigation.ts`).
 
 ## API routes
 
 | Method | Endpoint | File | Purpose |
 |--------|----------|------|---------|
 | GET | `/api/landmarks/map` | `app/api/landmarks/map/route.ts` | Bbox-filtered map pins with translations |
+| GET | `/api/landmarks/search` | `app/api/landmarks/search/route.ts` | Locale-aware landmark name search |
 | POST | `/api/landmarks/[id]/audio` | `app/api/landmarks/[id]/audio/route.ts` | Generate or return cached landmark audio |
 | GET | `/api/narratives` | `app/api/narratives/route.ts` | List saved narratives |
 | GET | `/api/narratives/[id]` | `app/api/narratives/[id]/route.ts` | Single narrative with chapters |
@@ -38,6 +40,7 @@ Bottom navigation tabs: `map`, `narrative`, `archives`, `settings` (`src/constan
 | POST | `/api/narratives/plan/replace` | `app/api/narratives/plan/replace/route.ts` | Replace one stop in draft |
 | POST | `/api/narratives/generate` | `app/api/narratives/generate/route.ts` | Synthesize full tour audio |
 | POST | `/api/narratives/suggestions` | `app/api/narratives/suggestions/route.ts` | Contextual tour prompt ideas |
+| POST | `/api/guide/chat` | `app/api/guide/chat/route.ts` | Grounded Budapest history chat |
 
 API routes delegate to backend libs (`@backend/lib/...`) for LLM and TTS.
 
@@ -48,6 +51,7 @@ API routes delegate to backend libs (`@backend/lib/...`) for LLM and TTS.
 | Component | Role |
 |-----------|------|
 | `MapView` | Main Leaflet map container |
+| `PlaceSearch` | Landmark search panel and map selection handoff |
 | `LandmarkMarker` | Individual pin |
 | `LandmarkClusterLayer` | Clustered pins at low zoom |
 | `MapViewportTracker` | Tracks bbox for on-demand fetch |
@@ -75,7 +79,9 @@ API routes delegate to backend libs (`@backend/lib/...`) for LLM and TTS.
 
 ### Shell (`src/components/ui/`)
 
-`AudioDrawer`, `BottomNav`, `PromptBar`, `MiniPlayerControls`, `LandmarkImageGallery`, `SearchBar`
+`AudioDrawer`, `BottomNav`, `MiniPlayerControls`, `LandmarkImageGallery`, `SearchBar`
+
+`AiGuideChat` provides the full-screen, session-scoped historical guide conversation and explicit map/tour handoffs.
 
 ## Zustand stores (`src/stores/`)
 

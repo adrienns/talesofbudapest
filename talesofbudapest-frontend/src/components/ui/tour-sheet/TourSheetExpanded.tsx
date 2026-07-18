@@ -19,12 +19,14 @@ export const TourSheetExpanded = ({
   isPlaying,
   currentTime,
   duration,
+  playbackRate,
   hasAudio,
   isGenerating = false,
   canRequestAudio = false,
   generateError = null,
   onPlayPause,
   onSeek,
+  onPlaybackRateChange,
   onSkipBack,
   onSkipForward,
   onShare,
@@ -100,18 +102,29 @@ export const TourSheetExpanded = ({
         onSeek={onSeek}
       />
 
-      <PlayerTransport
-        size="lg"
-        isPlaying={isPlaying}
-        hasAudio={hasAudio}
-        isGenerating={isGenerating}
-        canRequestAudio={canRequestAudio}
-        onPlayPause={onPlayPause}
-        onSkipBack={onSkipBack}
-        onSkipForward={onSkipForward}
-        readyGlow={readyGlow}
-        playLayoutId="tour-player-primary-control"
-      />
+      <div className="flex items-center justify-center gap-4">
+        <PlayerTransport
+          size="lg"
+          isPlaying={isPlaying}
+          hasAudio={hasAudio}
+          isGenerating={isGenerating}
+          canRequestAudio={canRequestAudio}
+          onPlayPause={onPlayPause}
+          onSkipBack={onSkipBack}
+          onSkipForward={onSkipForward}
+          readyGlow={readyGlow}
+          playLayoutId="tour-player-primary-control"
+        />
+        <button
+          type="button"
+          onClick={onPlaybackRateChange}
+          disabled={!onPlaybackRateChange || !hasAudio}
+          aria-label={`Playback speed: ${playbackRate} times. Change speed.`}
+          className="min-w-12 rounded-xl border border-outline-variant/50 px-2 py-2 text-sm font-bold text-accent transition active:scale-95 disabled:opacity-30"
+        >
+          {playbackRate}×
+        </button>
+      </div>
 
       {generateError && (
         <p className="text-center text-[0.75rem] text-accent">{generateError}</p>

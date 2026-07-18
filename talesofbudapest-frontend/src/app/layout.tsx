@@ -1,4 +1,4 @@
-import type { Viewport } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Plus_Jakarta_Sans, Source_Serif_4 } from 'next/font/google'
 import { Providers } from '@/app/providers'
 import { colors } from '@/constants/designTokens'
@@ -18,6 +18,20 @@ const sourceSerif = Source_Serif_4({
 
 export const viewport: Viewport = {
   themeColor: colors.primary,
+}
+
+export const metadata: Metadata = {
+  applicationName: 'Tales of Budapest',
+  manifest: '/manifest.webmanifest',
+  icons: {
+    icon: '/icon.svg',
+    apple: '/icon.svg',
+  },
+  appleWebApp: {
+    capable: true,
+    title: 'Tales of Budapest',
+    statusBarStyle: 'black-translucent',
+  },
 }
 
 const RootLayout = ({ children }: { children: React.ReactNode }) => (

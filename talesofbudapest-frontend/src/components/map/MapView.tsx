@@ -47,6 +47,8 @@ const setRoadLinesWhite = (map: MapLibreMapInstance) => {
 
 export const MapView = ({
   selectedLandmarkId,
+  focusLandmark = null,
+  onCenterChange,
   onLandmarkSelect,
   activeRoute = null,
   selectedChapterId = null,
@@ -68,6 +70,8 @@ export const MapView = ({
     const map = mapRef.current?.getMap()
     if (!map) return
     const bounds = map.getBounds()
+    const center = map.getCenter()
+    onCenterChange?.({ lat: center.lat, lng: center.lng })
     setViewport({
       zoom: map.getZoom(),
       bounds: {
@@ -77,7 +81,7 @@ export const MapView = ({
         east: bounds.getEast(),
       },
     })
-  }, [])
+  }, [onCenterChange])
 
   const handleMapLoad = useCallback(() => {
     const map = mapRef.current?.getMap()
@@ -123,6 +127,17 @@ export const MapView = ({
       { padding: 80, maxZoom: 15, duration: 700 },
     )
   }, [activeRoute?.id, activeRoute?.chapters])
+
+  useEffect(() => {
+    if (!focusLandmark) return
+    const map = mapRef.current?.getMap()
+    if (!map) return
+    map.easeTo({
+      center: [focusLandmark.lng, focusLandmark.lat],
+      zoom: Math.max(map.getZoom(), 16),
+      duration: 650,
+    })
+  }, [focusLandmark])
 
   const routePositions = activeRoute?.walkingRoute?.geometry
     ?? activeRoute?.chapters.map((chapter) => [chapter.lat, chapter.lng] as [number, number])

@@ -33,13 +33,13 @@ type Action =
   | { type: 'set-intent'; intent: string }
   | { type: 'set-curated-tour'; tour: CuratedStarter | null }
 
-const initialState = (): QuestionnaireState => ({
+const initialState = (intent = ''): QuestionnaireState => ({
   step: 'setup',
   styleId: null,
   minutes: DEFAULT_TOUR_MINUTES,
   nearMe: false,
   topicIds: [],
-  intent: '',
+  intent,
   selectedCuratedTour: null,
 })
 
@@ -74,24 +74,31 @@ const reducer = (state: QuestionnaireState, action: Action): QuestionnaireState 
 
 type UseQuestionnaireArgs = {
   isOpen: boolean
+  initialIntent?: string
   locationStatus: QuestionnaireLocationStatus
   onRequestLocation: () => Promise<boolean>
 }
 
 export const useQuestionnaire = ({
   isOpen,
+  initialIntent = '',
   locationStatus,
   onRequestLocation,
 }: UseQuestionnaireArgs) => {
-  const [state, dispatch] = useReducer(reducer, undefined, initialState)
+  const [state, dispatch] = useReducer(reducer, initialIntent, initialState)
   const locationRequestVersion = useRef(0)
+  const wasOpen = useRef(isOpen)
 
   useEffect(() => {
     if (!isOpen) {
       locationRequestVersion.current += 1
       dispatch({ type: 'reset' })
     }
-  }, [isOpen])
+    if (isOpen && !wasOpen.current && initialIntent.trim()) {
+      dispatch({ type: 'set-intent', intent: initialIntent.trim() })
+    }
+    wasOpen.current = isOpen
+  }, [initialIntent, isOpen])
 
   useEffect(() => {
     if (locationStatus === 'denied' || locationStatus === 'unavailable') {

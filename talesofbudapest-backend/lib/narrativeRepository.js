@@ -98,6 +98,7 @@ export const fetchNarrativeById = async (supabase, id, requestedLocale = null, o
   return {
     id: narrative.id,
     title: narrative.title,
+    curatedSlug: narrative.curated_slug ?? null,
     userPrompt: narrative.user_prompt,
     createdAt: narrative.created_at,
     locale: narrativeLocale,

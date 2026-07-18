@@ -1,3 +1,4 @@
+const APP_CACHE = 'tales-app-shell-v1'
 const TOUR_CACHE = 'tales-tour-audio-v1'
 const MAP_CACHE = 'tales-tour-map-v1'
 const MAP_HOST = 'https://tiles.openfreemap.org/'
@@ -10,7 +11,8 @@ self.addEventListener('activate', (event) => {
       self.clients.claim(),
       caches.keys().then((keys) =>
         Promise.all(keys.filter((key) =>
-          (key.startsWith('tales-tour-audio-') && key !== TOUR_CACHE)
+          (key.startsWith('tales-app-shell-') && key !== APP_CACHE)
+          || (key.startsWith('tales-tour-audio-') && key !== TOUR_CACHE)
           || (key.startsWith('tales-tour-map-') && key !== MAP_CACHE),
         ).map((key) => caches.delete(key))),
       ),
@@ -68,17 +70,47 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  if (event.request.destination !== 'audio') return
+  if (event.request.destination === 'audio') {
+    event.respondWith((async () => {
+      const cached = await caches.match(event.request, { ignoreVary: true })
+      if (cached) return cached
 
-  event.respondWith((async () => {
-    const cached = await caches.match(event.request, { ignoreVary: true })
-    if (cached) return cached
+      const response = await fetch(event.request)
+      if (response.ok || response.type === 'opaque') {
+        const cache = await caches.open(TOUR_CACHE)
+        await cache.put(event.request, response.clone())
+      }
+      return response
+    })())
+    return
+  }
 
-    const response = await fetch(event.request)
-    if (response.ok || response.type === 'opaque') {
-      const cache = await caches.open(TOUR_CACHE)
-      await cache.put(event.request, response.clone())
-    }
-    return response
-  })())
+  const requestUrl = new URL(event.request.url)
+  if (requestUrl.origin !== self.location.origin) return
+
+  if (event.request.mode === 'navigate') {
+    event.respondWith((async () => {
+      const cache = await caches.open(APP_CACHE)
+      try {
+        const response = await fetch(event.request)
+        if (response.ok) await cache.put(event.request, response.clone())
+        return response
+      } catch {
+        return (await cache.match(event.request)) || (await cache.match('/')) || Response.error()
+      }
+    })())
+    return
+  }
+
+  if (['script', 'style', 'font', 'image'].includes(event.request.destination)) {
+    event.respondWith((async () => {
+      const cache = await caches.open(APP_CACHE)
+      const cached = await cache.match(event.request)
+      if (cached) return cached
+
+      const response = await fetch(event.request)
+      if (response.ok) await cache.put(event.request, response.clone())
+      return response
+    })())
+  }
 })

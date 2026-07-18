@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { prepareCuratedRoute } from '@/lib/narrative/curatedRoute'
 import { getSupabaseAdmin } from '@/lib/server/supabaseAdmin'
 import { getOrCreateVisitorId } from '@/lib/server/visitorIdentity'
 // @ts-expect-error backend lib is plain JS in sibling workspace
@@ -21,7 +22,7 @@ export const GET = async (request: Request, { params }: RouteParams) => {
       return NextResponse.json({ error: 'Narrative not found' }, { status: 404 })
     }
 
-    return NextResponse.json(narrative)
+    return NextResponse.json(prepareCuratedRoute(narrative))
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch narrative'
     return NextResponse.json({ error: message }, { status: 500 })

@@ -83,4 +83,7 @@ const tours: Record<string, CuratedTourDetail> = {
   },
 }
 
-export const getCuratedTourDetail = (starter: CuratedStarter): CuratedTourDetail => tours[starter.slug]
+export const getCuratedTourDetailBySlug = (slug: string): CuratedTourDetail | undefined => tours[slug]
+
+export const getCuratedTourDetail = (starter: CuratedStarter): CuratedTourDetail =>
+  getCuratedTourDetailBySlug(starter.slug)!

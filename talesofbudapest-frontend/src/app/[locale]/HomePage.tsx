@@ -9,16 +9,22 @@ import type { CuratedStarter } from '@/constants/questionnaire'
 import type { QuestionnaireExtras } from '@/components/narrative/NarrativeQuestionnaire'
 import { NarrativeGeneratingOverlay } from '@/components/narrative/NarrativeGeneratingOverlay'
 import { ResumeTourBanner } from '@/components/narrative/ResumeTourBanner'
+import { AiGuideChat } from '@/components/guide/AiGuideChat'
+import { PlaceSearch } from '@/components/map/PlaceSearch'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { LoadingScreen } from '@/components/ui/LoadingScreen'
 import { SlideToStart } from '@/components/ui/SlideToStart'
 import { ChevronLeft } from 'lucide-react'
 import { IconButton } from '@/components/ui/IconButton'
-import { PromptBar } from '@/components/ui/PromptBar'
 import { useConfirmNarrative } from '@/features/narrative/hooks/useConfirmNarrative'
 import { useGenerateNarrative } from '@/features/narrative/hooks/useGenerateNarrative'
 import { useNarrativeContext } from '@/features/narrative/hooks/useNarrativeContext'
-import { useNarratives, type LastNarrativePeek } from '@/features/narrative/hooks/useNarratives'
+import {
+  readNarrativePlaybackPosition,
+  saveNarrativePlaybackPosition,
+  useNarratives,
+  type LastNarrativePeek,
+} from '@/features/narrative/hooks/useNarratives'
 import { usePlanNarrative } from '@/features/narrative/hooks/usePlanNarrative'
 import { requestWalkingRoute } from '@/features/narrative/hooks/useWalkingRoute'
 import { useArrivalDetection } from '@/features/narrative/hooks/useArrivalDetection'
@@ -26,6 +32,7 @@ import { useTourReadiness } from '@/features/narrative/hooks/useTourReadiness'
 import { useResolveLandmark } from '@/features/landmarks/hooks/useResolveLandmark'
 import { useRouter } from '@/i18n/navigation'
 import { queryKeys } from '@/services/queryKeys'
+import { getLandmarkById } from '@/services/repositories/landmarksRepository'
 import { useNarrativeStore } from '@/stores/narrativeStore'
 import { useTourPreferencesStore } from '@/stores/tourPreferencesStore'
 import { getLandmarkImageUrl } from '@/lib/landmarkImage'
@@ -94,10 +101,15 @@ const HomePageContent = () => {
   const setFromQuestionnaire = useTourPreferencesStore((state) => state.setFromQuestionnaire)
 
   const [selectedLandmark, setSelectedLandmark] = useState<Landmark | null>(null)
+  const [focusLandmark, setFocusLandmark] = useState<MapPin | null>(null)
+  const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | undefined>(undefined)
   const [startDictation, setStartDictation] = useState(false)
+  const [questionnaireInitialIntent, setQuestionnaireInitialIntent] = useState('')
+  const [isGuideOpen, setIsGuideOpen] = useState(false)
+  const [overlayReturnTo, setOverlayReturnTo] = useState<'tours' | 'settings' | null>(null)
   const [lastPrompt, setLastPrompt] = useState('')
   const [lastExtras, setLastExtras] = useState<QuestionnaireExtras | undefined>(undefined)
-  const [activeTab, setActiveTab] = useState<NavTabId>('map')
+  const [activeTab, setActiveTab] = useState<NavTabId>('explore')
   const [lastNarrativePeek, setLastNarrativePeek] = useState<LastNarrativePeek | null>(null)
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(true)
 
@@ -132,8 +144,23 @@ const HomePageContent = () => {
 
   const activeChapter = activeRoute?.chapters[activeChapterIndex] ?? null
 
+  const initialPlaybackPosition = useMemo(
+    () => activeRoute && activeChapter
+      ? readNarrativePlaybackPosition(activeRoute.id, activeChapter.id)
+      : 0,
+    [activeChapter, activeRoute],
+  )
+
+  const handlePlaybackPositionChange = useCallback((seconds: number) => {
+    if (!activeRoute || !activeChapter) return
+    saveNarrativePlaybackPosition(activeRoute.id, activeChapter.id, seconds)
+  }, [activeChapter, activeRoute])
+
   const handleArrival = useCallback((chapter: { title?: string }) => {
     setArrivalMessage(tNavigation('arrived', { title: chapter.title ?? '' }))
+    // GPS callbacks are not trusted user gestures, so browsers may block
+    // autoplay. Open the player and leave the final play action to the visitor.
+    setSheetSnap('expanded')
   }, [tNavigation])
 
   const arrivalDetection = useArrivalDetection(activeRoute ? activeChapter : null, handleArrival)
@@ -221,22 +248,32 @@ const HomePageContent = () => {
     if (hasActiveRoute) {
       reset()
     }
-    setActiveTab('map')
+    setActiveTab('explore')
   }, [hasActiveRoute, reset, sheetSnap])
 
-  const handleOpenElicitation = useCallback((withMic = false) => {
-    setStartDictation(withMic)
+  const handleOpenElicitation = useCallback((initialIntent = '') => {
+    setStartDictation(false)
+    setQuestionnaireInitialIntent(initialIntent)
     setFlowState('eliciting')
   }, [setFlowState])
 
   useEffect(() => {
-    if (searchParams.get('ai') !== '1') {
+    const returnTo = searchParams.get('returnTo')
+    const safeReturnTo = returnTo === 'tours' || returnTo === 'settings' ? returnTo : null
+    if (searchParams.get('createTour') === '1' || searchParams.get('ai') === '1') {
+      setOverlayReturnTo(safeReturnTo)
+      setStartDictation(false)
+      setQuestionnaireInitialIntent('')
+      setFlowState('eliciting')
+      router.replace('/')
       return
     }
 
-    setStartDictation(false)
-    setFlowState('eliciting')
-    router.replace('/')
+    if (searchParams.get('guide') === '1') {
+      setOverlayReturnTo(safeReturnTo)
+      setIsGuideOpen(true)
+      router.replace('/')
+    }
   }, [router, searchParams, setFlowState])
 
   /** Style→Topics→Recap flow, and the free-text intent bar — both go through the route preview. */
@@ -280,7 +317,7 @@ const HomePageContent = () => {
           topicIds: starter.topicIds,
         }, starter.slug)
       }
-      setActiveTab('narrative')
+      setActiveTab('explore')
     } catch {
       // error handled in store
     }
@@ -289,7 +326,7 @@ const HomePageContent = () => {
   const handleConfirmDraft = async (draft: DraftNarrative) => {
     try {
       await confirmNarrative(draft)
-      setActiveTab('narrative')
+      setActiveTab('explore')
     } catch {
       // error handled in store
     }
@@ -311,7 +348,7 @@ const HomePageContent = () => {
     }
 
     resumeLastNarrative(lastNarrativePeek)
-      .then(() => setActiveTab('narrative'))
+      .then(() => setActiveTab('explore'))
       .catch(() => {})
     setLastNarrativePeek(null)
   }, [lastNarrativePeek, resumeLastNarrative])
@@ -324,8 +361,8 @@ const HomePageContent = () => {
   const handleTabChange = useCallback((tab: NavTabId) => {
     setActiveTab(tab)
 
-    if (tab === 'archives') {
-      router.push('/archives')
+    if (tab === 'tours') {
+      router.push('/tours')
       return
     }
 
@@ -334,7 +371,7 @@ const HomePageContent = () => {
       return
     }
 
-    if (tab === 'map') {
+    if (tab === 'explore') {
       setSelectedLandmark(null)
       if (hasActiveRoute) {
         reset()
@@ -373,10 +410,16 @@ const HomePageContent = () => {
       setLastNarrativePeek(null)
       const detail = await resolveLandmark(pin)
       setSelectedLandmark(detail)
-      setActiveTab('narrative')
+      setFocusLandmark(pin)
+      setActiveTab('explore')
     },
     [reset, resolveLandmark],
   )
+
+  const handleSearchLandmarkSelect = useCallback((pin: MapPin) => {
+    setFocusLandmark(pin)
+    setActiveTab('explore')
+  }, [])
 
   const handleChapterSelect = useCallback((chapter: NarrativeChapter) => {
     if (!activeRoute) {
@@ -386,7 +429,7 @@ const HomePageContent = () => {
     const index = activeRoute.chapters.findIndex((item) => item.id === chapter.id)
     if (index >= 0) {
       setActiveChapterIndex(index)
-      setActiveTab('narrative')
+      setActiveTab('explore')
     }
   }, [activeRoute, setActiveChapterIndex])
 
@@ -434,6 +477,8 @@ const HomePageContent = () => {
     <main className="map-experience relative h-[100dvh] w-full overflow-hidden bg-background">
       <MapView
         selectedLandmarkId={selectedLandmarkId}
+        focusLandmark={focusLandmark}
+        onCenterChange={setMapCenter}
         onLandmarkSelect={handleLandmarkSelect}
         activeRoute={activeRoute}
         selectedChapterId={activeChapter?.id ?? null}
@@ -515,12 +560,9 @@ const HomePageContent = () => {
       )}
 
       {showChrome && !playbackItem && !isEliciting && (
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col gap-2.5 pb-4 pt-[max(0.875rem,env(safe-area-inset-top))]">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-[31] flex flex-col gap-2.5 pb-4 pt-[max(0.875rem,env(safe-area-inset-top))]">
           <div className="pointer-events-auto px-3 pt-3">
-            <PromptBar
-              onOpen={() => handleOpenElicitation(false)}
-              onMicClick={() => handleOpenElicitation(true)}
-            />
+            <PlaceSearch onSelect={handleSearchLandmarkSelect} />
           </div>
 
           {lastNarrativePeek && (
@@ -538,12 +580,19 @@ const HomePageContent = () => {
       {isEliciting && (
         <NarrativeQuestionnaire
           isOpen={isEliciting}
-          onClose={() => setFlowState('idle')}
+          onClose={() => {
+            setFlowState('idle')
+            if (overlayReturnTo) {
+              router.push(overlayReturnTo === 'tours' ? '/tours' : '/settings')
+              setOverlayReturnTo(null)
+            }
+          }}
           onPlan={handlePlan}
           onStartCurated={handleStartCurated}
           onRequestLocation={requestLocation}
           locationStatus={locationStatus}
           focusInput={startDictation}
+          initialIntent={questionnaireInitialIntent}
         />
       )}
 
@@ -608,6 +657,8 @@ const HomePageContent = () => {
             if (chapter) handleChapterSelect(chapter)
           } : undefined}
           manualPlayRequest={manualPlayRequest}
+          initialPlaybackPosition={initialPlaybackPosition}
+          onPlaybackPositionChange={hasActiveRoute ? handlePlaybackPositionChange : undefined}
         />
       )}
 
@@ -615,10 +666,47 @@ const HomePageContent = () => {
         <BottomNav
           activeTab={activeTab}
           onTabChange={handleTabChange}
-          onAiGuideClick={() => handleOpenElicitation(false)}
+          onCreateTour={() => handleOpenElicitation('')}
+          onOpenAiGuide={() => {
+            setOverlayReturnTo(null)
+            setIsGuideOpen(true)
+          }}
+          showNavigation={!hasActiveRoute}
           variant="map"
         />
       )}
+
+      <AiGuideChat
+        isOpen={isGuideOpen}
+        context={{
+          locale,
+          mapCenter,
+          selectedLandmarkId: selectedLandmark?.id ?? activeChapter?.landmarkId ?? undefined,
+          activeChapterId: activeChapter?.id,
+        }}
+        onClose={() => {
+          setIsGuideOpen(false)
+          if (overlayReturnTo) {
+            router.push(overlayReturnTo === 'tours' ? '/tours' : '/settings')
+            setOverlayReturnTo(null)
+          }
+        }}
+        onShowLandmark={(landmarkId) => {
+          void getLandmarkById(landmarkId, locale).then((landmark) => {
+            if (!landmark) return
+            reset()
+            setIsGuideOpen(false)
+            setOverlayReturnTo(null)
+            setSelectedLandmark(landmark)
+            setFocusLandmark(landmark)
+            setActiveTab('explore')
+          })
+        }}
+        onCreateTour={(intent) => {
+          setIsGuideOpen(false)
+          handleOpenElicitation(intent)
+        }}
+      />
     </main>
   )
 }
