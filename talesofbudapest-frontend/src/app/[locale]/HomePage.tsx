@@ -560,20 +560,22 @@ const HomePageContent = () => {
       )}
 
       {showChrome && !playbackItem && !isEliciting && (
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-[31] flex flex-col gap-2.5 pb-4 pt-[max(0.875rem,env(safe-area-inset-top))]">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-[31] pt-[max(0.875rem,env(safe-area-inset-top))]">
           <div className="pointer-events-auto px-3 pt-3">
             <PlaceSearch onSelect={handleSearchLandmarkSelect} />
           </div>
+        </div>
+      )}
 
-          {lastNarrativePeek && (
-            <div className="pointer-events-auto px-3">
-              <ResumeTourBanner
-                peek={lastNarrativePeek}
-                onResume={handleResumeTour}
-                onDismiss={handleDismissResume}
-              />
-            </div>
-          )}
+      {showChrome && !playbackItem && !isEliciting && lastNarrativePeek && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-[calc(4.75rem+max(0.75rem,env(safe-area-inset-bottom)))] z-[31] px-3">
+          <div className="pointer-events-auto">
+            <ResumeTourBanner
+              peek={lastNarrativePeek}
+              onResume={handleResumeTour}
+              onDismiss={handleDismissResume}
+            />
+          </div>
         </div>
       )}
 

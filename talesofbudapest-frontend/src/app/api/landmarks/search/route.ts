@@ -18,6 +18,15 @@ const SEARCH_SELECT = `
   location_translations (locale, name, audio_url)
 `
 
+const DEFAULT_LOCATION_NAMES = [
+  'Hungarian Parliament Building',
+  'Buda Castle',
+  "Fisherman's Bastion",
+  "St. Stephen's Basilica",
+  'Gellért Hill',
+  'Gellert Hill',
+] as const
+
 const normalize = (value: string) =>
   value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase().trim()
 
@@ -36,7 +45,7 @@ export const GET = async (request: Request) => {
     const { searchParams } = new URL(request.url)
     const query = searchParams.get('q')?.trim() ?? ''
     const searchTerm = query.replace(/[%_]/g, ' ').replace(/\s+/g, ' ').trim()
-    if (searchTerm.length < 2 || query.length > 80) {
+    if ((searchTerm.length > 0 && searchTerm.length < 2) || query.length > 80) {
       return NextResponse.json({ error: 'Search must be between 2 and 80 characters' }, { status: 400 })
     }
 
@@ -44,6 +53,23 @@ export const GET = async (request: Request) => {
       ? (searchParams.get('locale') as AppLocale)
       : DEFAULT_LOCALE
     const supabase = getSupabaseRead()
+
+    if (!searchTerm) {
+      const featuredResult = await supabase
+        .from('locations')
+        .select(SEARCH_SELECT)
+        .in('name', [...DEFAULT_LOCATION_NAMES])
+
+      if (featuredResult.error) throw new Error(featuredResult.error.message)
+      const order = new Map(DEFAULT_LOCATION_NAMES.map((name, index) => [name, Math.min(index, 4)]))
+      const pins = (featuredResult.data as MapPinRow[])
+        .sort((a, b) =>
+          (order.get(a.name as typeof DEFAULT_LOCATION_NAMES[number]) ?? 99)
+          - (order.get(b.name as typeof DEFAULT_LOCATION_NAMES[number]) ?? 99))
+        .slice(0, 4)
+        .map((row) => mapLocationToMapPin(row, locale))
+      return NextResponse.json({ pins })
+    }
 
     const [canonicalResult, translationResult] = await Promise.all([
       supabase.from('locations').select(SEARCH_SELECT).ilike('name', `%${searchTerm}%`).limit(24),

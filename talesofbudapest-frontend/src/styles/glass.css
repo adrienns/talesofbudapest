@@ -40,6 +40,16 @@
     var(--glass-inset-highlight);
 }
 
+.glass-dropdown__panel {
+  background: rgba(255, 255, 255, 0.54);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.86),
+    0 14px 28px rgba(39, 54, 52, 0.14);
+}
+
 @utility scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;

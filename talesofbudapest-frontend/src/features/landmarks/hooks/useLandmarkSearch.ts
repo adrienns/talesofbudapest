@@ -6,8 +6,9 @@ import { searchLandmarks } from '@/services/landmarkSearchService'
 import { queryKeys } from '@/services/queryKeys'
 import type { AppLocale } from '@/types/locale'
 
-export const useLandmarkSearch = (query: string, locale: AppLocale) => {
+export const useLandmarkSearch = (query: string, locale: AppLocale, enabled = true) => {
   const [debouncedQuery, setDebouncedQuery] = useState(query.trim())
+  const canSearch = enabled && (debouncedQuery.length === 0 || debouncedQuery.length >= 2)
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 250)
@@ -17,7 +18,7 @@ export const useLandmarkSearch = (query: string, locale: AppLocale) => {
   const result = useQuery({
     queryKey: queryKeys.landmarkSearch(locale, debouncedQuery),
     queryFn: ({ signal }) => searchLandmarks(debouncedQuery, locale, signal),
-    enabled: debouncedQuery.length >= 2,
+    enabled: canSearch,
     retry: 1,
   })
 

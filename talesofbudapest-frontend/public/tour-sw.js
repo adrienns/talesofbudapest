@@ -1,4 +1,4 @@
-const APP_CACHE = 'tales-app-shell-v1'
+const APP_CACHE = 'tales-app-shell-v2'
 const TOUR_CACHE = 'tales-tour-audio-v1'
 const MAP_CACHE = 'tales-tour-map-v1'
 const MAP_HOST = 'https://tiles.openfreemap.org/'
@@ -102,7 +102,21 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  if (['script', 'style', 'font', 'image'].includes(event.request.destination)) {
+  if (['script', 'style'].includes(event.request.destination)) {
+    event.respondWith((async () => {
+      const cache = await caches.open(APP_CACHE)
+      try {
+        const response = await fetch(event.request)
+        if (response.ok) await cache.put(event.request, response.clone())
+        return response
+      } catch {
+        return (await cache.match(event.request)) || Response.error()
+      }
+    })())
+    return
+  }
+
+  if (['font', 'image'].includes(event.request.destination)) {
     event.respondWith((async () => {
       const cache = await caches.open(APP_CACHE)
       const cached = await cache.match(event.request)
