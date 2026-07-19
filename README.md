@@ -1,5 +1,8 @@
 # Tales of Budapest
 
+The canonical place/tour data model is documented in
+[`docs/landmark-architecture.md`](docs/landmark-architecture.md).
+
 Monorepo for the Tales of Budapest audio tour app.
 
 **Full documentation:** [docs/README.md](docs/README.md)
@@ -17,6 +20,8 @@ talesofbudapest-admin/      # Private KG operations/review console (port 3100)
 ```
 
 ## Setup
+
+Use Node.js 22 or newer. The current Supabase client requires a native WebSocket implementation that is not available in the repository's former Node 18 runtime.
 
 ```bash
 npm install
@@ -130,10 +135,21 @@ python ingest.py --file corpus/sample.txt --source-id budapest-sample-001
 | `npm run generate:audio` | Generate audio, upload to Storage, update audio_url |
 | `npm run db:migrate` | Apply SQL migrations via DATABASE_URL |
 | `bash infra/scripts/migrate.sh` | Apply migrations via Docker when host DB URL fails |
-| `npm run seed:curated-tours` | Validate, upsert, and pre-generate bilingual fixed-tour audio (`-- --local-audio` for private macOS TTS; `-- --skip-audio` for scripts only) |
+| `npm run seed:curated-tours` | Validate and seed fixed tours; supports locale/slug filters, resumable direct Gemini audio, private macOS TTS, or scripts only |
 | `npm run scrape:budapest100` | Scrape Budapest100 houses to JSON |
 | `node infra/scripts/generate-keys.mjs` | Generate self-hosted Supabase secrets |
 | `bash infra/scripts/setup.sh` | Start local Supabase Docker stack |
+
+### Refresh the flagship English voice with direct Gemini
+
+Create a Free-tier API key in [Google AI Studio](https://aistudio.google.com/apikey), leave billing disabled, and add it as `GEMINI_API_KEY` in `talesofbudapest-backend/.env`. Seed the unchanged Hungarian version first by inheriting matching audio from the previous version, then generate the new English version:
+
+```bash
+npm run seed:curated-tours -- --slug how-budapest-became-budapest --locale hu --skip-audio
+npm run seed:curated-tours -- --slug how-budapest-became-budapest --locale en --audio-provider gemini --fresh-audio
+```
+
+`--fresh-audio` replaces older-version URLs temporarily inherited into the current record but still resumes audio already uploaded to the current version's path. Direct Gemini generation uses `Sulafat` by default and does not change the app's OpenRouter TTS default.
 
 ### Knowledge-graph pipeline scripts
 

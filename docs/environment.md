@@ -51,6 +51,10 @@ Copy from `talesofbudapest-backend/.env.example`.
 | `OPENROUTER_TTS_MODEL` | Text-to-speech | Gemini flash TTS (multilingual HU) |
 | `OPENROUTER_TTS_VOICE` | TTS voice preset | |
 | `OPENROUTER_TTS_RESPONSE_FORMAT` | Text-to-speech | Optional response-format override; normally inferred from model |
+| `GEMINI_API_KEY` | Direct Gemini curated TTS | Server-only Google AI Studio key; not used by default runtime TTS |
+| `GEMINI_TTS_MODEL` | Direct Gemini curated TTS | Defaults to `gemini-3.1-flash-tts-preview` |
+| `GEMINI_TTS_VOICE` | Direct Gemini curated TTS | Defaults to the warm `Sulafat` voice |
+| `GEMINI_TTS_REQUEST_INTERVAL_MS` | Direct Gemini curated TTS | Defaults to `31000` for conservative free-tier pacing |
 | `OPENROUTER_SITE_URL` | OpenRouter requests | HTTP referer used by shared chat/TTS client; defaults to localhost |
 | `OPENROUTER_HTTP_REFERER` | Embedding requests | Optional HTTP referer for embedding calls |
 | `OPENROUTER_APP_NAME` | Embedding requests | Optional OpenRouter `X-Title` attribution |
@@ -130,6 +134,7 @@ See `infra/.env.example` for port settings.
 | Frontend dev (map only) | `SUPABASE_URL`, `SUPABASE_ANON_KEY` |
 | Admin console | `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` |
 | Landmark audio generation | + `SUPABASE_SERVICE_ROLE_KEY`, `OPENROUTER_API_KEY` |
+| Direct Gemini curated audio | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY` |
 | Restricted-book cost preflight | `OPENROUTER_API_KEY` is not used for `--preflight-only`, but live catalog access is required |
 | Restricted-book extraction | `OPENROUTER_API_KEY`; optional `KG_EXTRACTION_MAX_COST_USD` |
 | KG load/resolve/placeholder creation | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` |

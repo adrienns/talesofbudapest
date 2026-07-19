@@ -1,5 +1,6 @@
 import { Mp3Encoder } from '@breezystack/lamejs';
 import { createSpeech, GEMINI_TTS_PCM_CHANNELS, GEMINI_TTS_PCM_SAMPLE_RATE } from './openRouterClient.js';
+import { createGeminiSpeech } from './geminiTtsClient.js';
 import { prepareSpeechText } from './prepareSpeechText.js';
 import { chunkTextForTts } from './ttsChunking.js';
 import { DEFAULT_LOCALE } from './locale.js';
@@ -49,7 +50,7 @@ export const pcmToMp3 = (
 
 /** Returns `{ buffer, contentType }` — headerless PCM is transcoded to MP3; already-encoded formats pass through. */
 export const synthesizeSpeech = async (script, locale = DEFAULT_LOCALE, options = {}) => {
-  const { speechLexicon = [] } = options;
+  const { speechLexicon = [], provider = 'openrouter', voice } = options;
   const { speechText } = prepareSpeechText(script, locale, speechLexicon);
   const chunks = chunkTextForTts(speechText);
 
@@ -58,9 +59,10 @@ export const synthesizeSpeech = async (script, locale = DEFAULT_LOCALE, options 
   }
 
   const pcmBuffers = [];
+  const speechCreator = getTtsSpeechCreator(provider);
 
   for (const chunk of chunks) {
-    const { buffer, format } = await createSpeech({ input: chunk });
+    const { buffer, format } = await speechCreator({ input: chunk, locale, ...(voice ? { voice } : {}) });
     if (format !== 'pcm') {
       return { buffer, contentType: CONTENT_TYPES[format] ?? CONTENT_TYPES.mp3 };
     }
@@ -69,6 +71,12 @@ export const synthesizeSpeech = async (script, locale = DEFAULT_LOCALE, options 
 
   const combined = Buffer.concat(pcmBuffers);
   return { buffer: pcmToMp3(combined), contentType: CONTENT_TYPES.mp3 };
+};
+
+export const getTtsSpeechCreator = (provider = 'openrouter') => {
+  if (provider === 'openrouter') return createSpeech;
+  if (provider === 'gemini') return createGeminiSpeech;
+  throw new Error(`Unsupported TTS provider: ${provider}`);
 };
 
 export const uploadAudio = async (supabase, fileName, buffer, contentType = CONTENT_TYPES.mp3) => {

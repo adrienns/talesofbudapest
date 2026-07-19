@@ -7,24 +7,41 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { CURATED_TOURS, validateCuratedTours } from '../content/curated/index.js';
+import { seedCuratedTour } from '../lib/curatedTourSeeder.js';
 import { pcmToMp3, synthesizeSpeech, uploadAudio } from '../lib/ttsClient.js';
+import { hasFlag, option } from './_shared/args.js';
 
 dotenv.config();
 
-const skipAudio = process.argv.includes('--skip-audio');
-const localAudio = process.argv.includes('--local-audio');
+const args = process.argv.slice(2);
+const skipAudio = hasFlag(args, '--skip-audio');
+const localAudio = hasFlag(args, '--local-audio');
+const freshAudio = hasFlag(args, '--fresh-audio');
+const selectedSlug = option(args, '--slug');
+const selectedLocale = option(args, '--locale');
+const explicitAudioProvider = option(args, '--audio-provider');
+const audioProvider = explicitAudioProvider ?? 'openrouter';
 const supabaseUrl = process.env.SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const runFile = promisify(execFile);
 
 if (!supabaseUrl || !serviceKey) throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
 if (skipAudio && localAudio) throw new Error('Use either --skip-audio or --local-audio, not both');
-if (!skipAudio && !localAudio && !process.env.OPENROUTER_API_KEY) {
-  throw new Error('OPENROUTER_API_KEY is required unless --skip-audio or --local-audio is used');
+if (localAudio && explicitAudioProvider) throw new Error('--local-audio cannot be combined with --audio-provider');
+if (selectedLocale && !['en', 'hu'].includes(selectedLocale)) throw new Error('--locale must be en or hu');
+if (!['openrouter', 'gemini'].includes(audioProvider)) throw new Error('--audio-provider must be openrouter or gemini');
+if (!skipAudio && !localAudio && audioProvider === 'openrouter' && !process.env.OPENROUTER_API_KEY) {
+  throw new Error('OPENROUTER_API_KEY is required for OpenRouter audio');
+}
+if (!skipAudio && !localAudio && audioProvider === 'gemini' && !process.env.GEMINI_API_KEY) {
+  throw new Error('GEMINI_API_KEY is required for direct Gemini audio');
 }
 
 validateCuratedTours();
 const supabase = createClient(supabaseUrl, serviceKey);
+const selectedTours = CURATED_TOURS.filter((tour) =>
+  (!selectedSlug || tour.slug === selectedSlug) && (!selectedLocale || tour.locale === selectedLocale));
+if (!selectedTours.length) throw new Error('No curated tours matched --slug and --locale');
 
 const extractWavePcm = (wave) => {
   if (wave.toString('ascii', 0, 4) !== 'RIFF' || wave.toString('ascii', 8, 12) !== 'WAVE') {
@@ -69,73 +86,25 @@ const synthesizeLocalSpeech = async (script, locale) => {
   }
 };
 
-const seedTour = async (tour) => {
-  const { data: existing, error: lookupError } = await supabase
-    .from('narratives').select('*')
-    .eq('curated_slug', tour.slug).eq('content_version', tour.version).eq('locale', tour.locale)
-    .maybeSingle();
-  if (lookupError) throw new Error(lookupError.message);
-
-  const narrativeValues = {
-    title: tour.title,
-    user_prompt: `curated:${tour.slug}:v${tour.version}:${tour.locale}`,
-    context: {
-      locale: tour.locale,
-      curated: true,
-      observationMinutes: tour.stops.reduce((total, item) => total + item.observationMinutes, 0),
-    },
-    curated_slug: tour.slug,
-    content_version: tour.version,
-    locale: tour.locale,
-    walking_geometry: tour.walkingRoute.geometry,
-    walking_distance_meters: tour.walkingRoute.distanceMeters,
-    walking_duration_seconds: tour.walkingRoute.durationSeconds,
-  };
-
-  const write = existing
-    ? supabase.from('narratives').update(narrativeValues).eq('id', existing.id)
-    : supabase.from('narratives').insert(narrativeValues);
-  const { data: narrative, error: narrativeError } = await write.select().single();
-  if (narrativeError) throw new Error(narrativeError.message);
-
-  const { data: existingChapters, error: chapterLookupError } = await supabase
-    .from('narrative_chapters').select('*').eq('narrative_id', narrative.id);
-  if (chapterLookupError) throw new Error(chapterLookupError.message);
-  const byIndex = new Map((existingChapters ?? []).map((item) => [item.chapter_index, item]));
-
-  for (let index = 0; index < tour.stops.length; index += 1) {
-    const item = tour.stops[index];
-    const prior = byIndex.get(index);
-    const reusableAudio = !localAudio || prior?.audio_url?.endsWith('.mp3');
-    let audioUrl = prior?.script === item.script && reusableAudio ? prior.audio_url : null;
-    if (!audioUrl && !skipAudio) {
-      const audio = localAudio
-        ? await synthesizeLocalSpeech(item.script, tour.locale)
-        : { ...await synthesizeSpeech(item.script, tour.locale), extension: 'mp3' };
-      const { buffer, contentType, extension } = audio;
-      const fileName = `curated/${tour.slug}/v${tour.version}/${tour.locale}/${String(index + 1).padStart(2, '0')}.${extension}`;
-      audioUrl = await uploadAudio(supabase, fileName, buffer, contentType);
-    }
-
-    const { error } = await supabase.from('narrative_chapters').upsert({
-      narrative_id: narrative.id,
-      chapter_index: index,
-      title: item.title,
-      lat: item.lat,
-      lng: item.lng,
-      script: item.script,
-      audio_url: audioUrl,
-      landmark_id: null,
-      image_url: item.imageUrl ?? null,
-    }, { onConflict: 'narrative_id,chapter_index' });
-    if (error) throw new Error(error.message);
-  }
-
-  const { error: cleanupError } = await supabase.from('narrative_chapters')
-    .delete().eq('narrative_id', narrative.id).gte('chapter_index', tour.stops.length);
-  if (cleanupError) throw new Error(cleanupError.message);
-  const audioStatus = skipAudio ? 'scripts only' : localAudio ? 'local audio ready' : 'audio ready';
-  console.log(`Seeded ${tour.locale}: ${tour.title} (${tour.stops.length} stops, ${audioStatus})`);
-};
-
-for (const tour of CURATED_TOURS) await seedTour(tour);
+for (const tour of selectedTours) {
+  const result = await seedCuratedTour({
+    supabase,
+    tour,
+    skipAudio,
+    freshAudio,
+    requireMp3: localAudio,
+    synthesizeAudio: localAudio
+      ? synthesizeLocalSpeech
+      : async (script, locale) => ({
+        ...await synthesizeSpeech(script, locale, { provider: audioProvider }),
+        extension: 'mp3',
+      }),
+    uploadAudio: (fileName, buffer, contentType) =>
+      uploadAudio(supabase, fileName, buffer, contentType),
+  });
+  const { current, previous, generated, missing } = result.counts;
+  console.log(
+    `Seeded ${tour.locale}: ${tour.title} (${tour.stops.length} stops; `
+    + `${generated} generated, ${current} resumed, ${previous} inherited, ${missing} without audio)`,
+  );
+}
