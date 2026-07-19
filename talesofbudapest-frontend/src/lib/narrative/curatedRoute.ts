@@ -19,6 +19,7 @@ export const prepareCuratedRoute = (route: CuratedRoutePayload): NarrativeRoute 
     chapters: route.chapters.map((chapter) => ({
       ...chapter,
       imageUrl: chapter.imageUrl ?? detail?.chapters[chapter.chapterIndex]?.imageUrl ?? null,
+      imageAttribution: detail?.chapters[chapter.chapterIndex]?.imageAttribution ?? null,
       audioUrl: chapter.audioUrl
         ? `/api/narratives/${encodeURIComponent(route.id)}/chapters/${chapter.chapterIndex}/audio`
         : null,

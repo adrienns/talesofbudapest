@@ -93,10 +93,6 @@ export const CURATED_TOUR_REQUESTS = {
     styleId: 'storyteller', topicIds: ['duel'],
     prompt: 'Create a vivid, story-driven audio walking tour of the Buda Castle District — Buda Castle, Matthias Church, and Fisherman’s Bastion — full of royal history, sieges, and the legends that still haunt the hill. [v2]',
   },
-  'jewish-quarter-ruin-bars': {
-    styleId: 'storyteller', topicIds: ['shadows', 'liquid'],
-    prompt: "Create a vivid, story-driven audio walking tour of District VII's Jewish Quarter — the Dohány Street Synagogue, Kazinczy Street, and the Gozsdu Passage — tracing its history and how its ruined WWII-era spaces became the world's first ruin bars. [v2]",
-  },
   'hidden-pest': {
     styleId: 'deep-dive', topicIds: ['coffeehouse'],
     prompt: 'Create a richly detailed, historian-grade audio walking tour of downtown Pest that skips the famous landmarks in favor of lesser-known residential buildings, hidden courtyards, and golden-age coffeehouses with real, specific local history. [v2]',

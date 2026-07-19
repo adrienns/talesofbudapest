@@ -1,5 +1,5 @@
 import type { CuratedStarter } from '@/constants/questionnaire'
-import type { NarrativeChapter, WalkingRoute } from '@/types/narrative'
+import type { ImageAttribution, NarrativeChapter, WalkingRoute } from '@/types/narrative'
 
 export type CuratedTourDetail = {
   duration: string
@@ -11,6 +11,7 @@ export type CuratedTourDetail = {
 
 type Stop = Pick<NarrativeChapter, 'title' | 'lat' | 'lng'> & {
   imageUrl?: string
+  imageAttribution?: ImageAttribution
 }
 
 const makeChapters = (slug: string, stops: Stop[], imageUrl: string): NarrativeChapter[] =>
@@ -54,14 +55,56 @@ const tours: Record<string, CuratedTourDetail> = {
       { title: "Fisherman's Bastion", lat: 47.5023, lng: 19.0341 },
     ], '/quick-start/castle-royal.webp'),
   },
-  'jewish-quarter-ruin-bars': {
-    duration: '2 hr', distance: '1.8 km',
-    summary: 'A thoughtful, lively walk where the Jewish Quarter’s memories meet its after-dark energy. Trace the stories behind the courtyards, synagogues, and ruin bars that changed the city.',
-    chapters: makeChapters('jewish-quarter-ruin-bars', [
-      { title: 'Dohány Street Synagogue', lat: 47.4959, lng: 19.0605 },
-      { title: 'Kazinczy Street', lat: 47.4971, lng: 19.0633 },
-      { title: 'Gozsdu Courtyard', lat: 47.5001, lng: 19.0618 },
-    ], '/quick-start/jewish-quarter-ruin-bars.webp'),
+  'jewish-quarter-and-ruin-bars': {
+    duration: '1 hr 45 min', distance: '3.0 km',
+    summary: 'A clear-eyed walk through Jewish Pest, the 1944 ghetto, living religious traditions, and the courtyards that became Budapest’s ruin-bar district.',
+    chapters: makeChapters('jewish-quarter-and-ruin-bars', [
+      {
+        title: 'The Jewish Quarter Before It Had a Name', lat: 47.4983, lng: 19.0557,
+        imageUrl: '/curated/jewish-quarter-and-ruin-bars/orczy-house.webp',
+        imageAttribution: { author: 'Fortepan / Budapest Főváros Levéltára', license: 'CC BY-SA 3.0', licenseUrl: 'https://creativecommons.org/licenses/by-sa/3.0/', sourceUrl: 'https://commons.wikimedia.org/wiki/File:Hungary_Fortepan_82507.jpg' },
+      },
+      {
+        title: 'Rumbach and the Middle Path', lat: 47.4988, lng: 19.0593,
+        imageUrl: '/curated/jewish-quarter-and-ruin-bars/rumbach-synagogue.webp',
+        imageAttribution: { author: 'Jérôme Chavel', license: 'Public domain', sourceUrl: 'https://commons.wikimedia.org/wiki/File:Rumbach_zsinagoga.jpg' },
+      },
+      {
+        title: 'A Synagogue Built for a Metropolis', lat: 47.4959, lng: 19.0607,
+        imageUrl: '/curated/jewish-quarter-and-ruin-bars/dohany-synagogue.webp',
+        imageAttribution: { author: 'Justin Schüler', license: 'CC0 1.0', licenseUrl: 'https://creativecommons.org/publicdomain/zero/1.0/', sourceUrl: 'https://commons.wikimedia.org/wiki/File:Doh%C3%A1ny_Street_Synagogue,_Budapest,_Hungary_(Unsplash).jpg' },
+      },
+      {
+        title: 'Carl Lutz and the Paper Shield', lat: 47.4975, lng: 19.0594,
+        imageUrl: '/curated/jewish-quarter-and-ruin-bars/carl-lutz-memorial.webp',
+        imageAttribution: { author: 'Globetrotter19', license: 'CC BY-SA 4.0', licenseUrl: 'https://creativecommons.org/licenses/by-sa/4.0/', sourceUrl: 'https://commons.wikimedia.org/wiki/File:Gedenkstelle_Carl_Lutz,_2024_Erzs%C3%A9betv%C3%A1ros.jpg' },
+      },
+      {
+        title: 'Klauzál Square Inside the Ghetto', lat: 47.5005, lng: 19.0633,
+        imageUrl: '/curated/jewish-quarter-and-ruin-bars/klauzal-square.webp',
+        imageAttribution: { author: 'Lajos Tihanyi / Hungarian National Gallery', license: 'Public Domain Mark 1.0', licenseUrl: 'https://creativecommons.org/publicdomain/mark/1.0/', sourceUrl: 'https://commons.wikimedia.org/wiki/File:Tihanyi_Klauz%C3%A1l_Square.jpg' },
+      },
+      {
+        title: 'Kazinczy Street and Living Orthodoxy', lat: 47.499, lng: 19.0635,
+        imageUrl: '/curated/jewish-quarter-and-ruin-bars/kazinczy-synagogue.webp',
+        imageAttribution: { author: 'xorge', license: 'CC BY-SA 2.0', licenseUrl: 'https://creativecommons.org/licenses/by-sa/2.0/', sourceUrl: 'https://commons.wikimedia.org/wiki/File:Kazinczy_Street_Synagogue,_Budapest_(105)_(13229362653).jpg' },
+      },
+      {
+        title: 'Szimpla and the Invention of the Ruin Bar', lat: 47.4967, lng: 19.0631,
+        imageUrl: '/curated/jewish-quarter-and-ruin-bars/szimpla-kert.webp',
+        imageAttribution: { author: 'Yelkrokoyade', license: 'CC BY-SA 3.0', licenseUrl: 'https://creativecommons.org/licenses/by-sa/3.0/', sourceUrl: 'https://commons.wikimedia.org/wiki/File:Szimpla_Kert_Budapest_1.jpg' },
+      },
+      {
+        title: 'Gozsdu: Seven Courtyards, Many Lives', lat: 47.4985, lng: 19.0591,
+        imageUrl: '/curated/jewish-quarter-and-ruin-bars/gozsdu-courtyard.webp',
+        imageAttribution: { author: 'Christo', license: 'CC BY-SA 4.0', licenseUrl: 'https://creativecommons.org/licenses/by-sa/4.0/', sourceUrl: 'https://commons.wikimedia.org/wiki/File:Budapest,_Gozsdu_Udvar.jpg' },
+      },
+      {
+        title: 'Who Owns the Night?', lat: 47.4987, lng: 19.0574,
+        imageUrl: '/curated/jewish-quarter-and-ruin-bars/kiraly-street.webp',
+        imageAttribution: { author: 'Fred Romero', license: 'CC BY 2.0', licenseUrl: 'https://creativecommons.org/licenses/by/2.0/', sourceUrl: 'https://commons.wikimedia.org/wiki/File:Budapest_-_Király_utca_(1).jpg' },
+      },
+    ], '/curated/jewish-quarter-and-ruin-bars/orczy-house.webp'),
   },
   'hidden-pest': {
     duration: '2 hr 30 min', distance: '2.6 km',

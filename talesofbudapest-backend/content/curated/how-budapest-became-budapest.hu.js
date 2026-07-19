@@ -1,12 +1,14 @@
 import {
   CURATED_TOUR_SLUG,
   CURATED_TOUR_VERSION,
+  LOCATION_SLUGS,
   STOP_COORDINATES,
   WALKING_ROUTE,
 } from './how-budapest-became-budapest.common.js';
 
 const stop = (key, title, script, sourceIds, extra = {}) => ({
   key,
+  locationSlug: LOCATION_SLUGS[key],
   title,
   ...STOP_COORDINATES[key],
   script: script.trim(),
@@ -20,30 +22,30 @@ export const TOUR_HU = {
   version: CURATED_TOUR_VERSION,
   locale: 'hu',
   title: 'Hogyan lett Budapestből Budapest?',
-  tagline: 'Kb. 2¼ óra · kilenc fordulópont a Duna mentén',
-  description: 'Első napi séta a döntéseken, álmokon és töréseken át, amelyek létrehozták a modern Budapestet.',
+  tagline: 'Kb. 2¼ óra · kilenc árulkodó hely, egy bonyolult főváros',
+  description: 'Adatokban gazdag első séta a találmányokon, alkukon, katasztrófákon és vitákon át, amelyek létrehozták a modern Budapestet.',
   walkingRoute: WALKING_ROUTE,
   stops: [
-    stop('deak-anker', '1. Egy város három születési hellyel', `
-Állj úgy, hogy lásd a Deák Ferenc tér forgalmas csomópontját és az Anker-palota világos, sokablakos tömbjét. Jó helyen kezdünk, mert Budapestet nem lehet egyetlen műemlékkel elmagyarázni. A város inkább egymásra rakódott rétegekből áll.
+    stop('deak-anker', '1. Három városból egy főváros', `
+Állj úgy, hogy lásd a Deák Ferenc tér forgalmas csomópontját és az Anker-palota világos, sokablakos tömbjét. Kezdjünk egy kényelmetlen ténnyel azoknak, akik szeretik a rendezett eredettörténeteket: Budapestet nem egyetlen városként alapították. Összerakták.
 
 Először tájékozódjunk. A Duna nyugat felé, néhány percnyi lejtős sétára folyik. A túlparton emelkednek a budai hegyek, fölöttük a Várnegyeddel. Most Pesten állsz, a főváros laposabb, mozgalmasabb felén. Északabbra található Óbuda. Sokáig három külön település élt egymás mellett: a királyi és igazgatási szerepű Buda, a kereskedő Pest és a régebbi Óbuda. 1873-ban egyesítették őket. Ez a dátum nem a semmiből teremtett várost, hanem közös nevet és közös közigazgatást adott egy gyorsan növekvő nagyvárosnak.
 
-A tér névadója Deák Ferenc, az 1867-es kiegyezés egyik meghatározó politikusa, akit gyakran „a haza bölcsének” neveznek. Kora hitt abban, hogy törvényekkel, intézményekkel, hidakkal és sugárutakkal át lehet alakítani az országot. A körülötted álló város ennek a hitnek az egyik eredménye.
+A tér névadója Deák Ferenc, az 1867-es kiegyezés egyik meghatározó politikusa, akit gyakran „a haza bölcsének” neveznek. Kora hitt abban, hogy törvényekkel, intézményekkel, hidakkal és sugárutakkal át lehet alakítani az országot. A körülötted álló város ennek a hitnek az egyik eredménye. Egy másik a lábad alatt fut: az 1896-ban megnyílt M1-es a kontinentális Európa első földalatti vasútja volt. A modernnek látszani akaró főváros a föld alá is építkezett.
 
 Nézd meg az Anker-palotát. A mai épületet Alpár Ignác tervezte az Anker biztosítótársaság számára, és a huszadik század elején készült el. Tornyai és mozgalmas homlokzata színpadszerű kaput alkot a történelmi belváros és a nagy utak között. Nem ősi Budapestet látsz, hanem egy várost, amely modern európai fővárosként mutatja be önmagát.
 
 A séta során újra és újra előkerül Buda és Pest neve. A magyarban mindig az első szótag hangsúlyos: BU-da-pest. A magyar az uráli nyelvcsaládhoz tartozik, eltérően a szomszédos népek többségének indoeurópai nyelveitől. A tizenkilencedik században a nyelv a nemzeti kultúra egyik legerősebb jelévé vált: az intézmények, az irodalom és a közélet egyre nagyobb része működött magyarul.
 
-Utunk kérdése egyszerű: hogyan lett három városból a mai Budapest? Reformerek, mérnökök, építészek és kávésok mellett háborúról, diktatúráról és az emlékezés nehéz munkájáról is szó lesz. Indulj a Szent István-bazilika kupolája felé. Figyeld meg, hogyan keretezik előbb a szűk utcák, majd hogyan tárul fel hirtelen az egész épület. Budapest szereti az ilyen meglepetéseket.
-    `, ['S01', 'S02', 'S03']),
+Ez a séta egy egyszerű kérdést tesz próbára: mi kellett ahhoz, hogy három város egyetlen fővárosként működjön? Reformerekkel, mérnökökkel, pénzemberekkel és kávésokkal találkozunk, de háborúval, diktatúrával és vitatott emlékezettel is. Indulj a Szent István-bazilika kupolája felé. A szűk utcák után szándékosan hirtelen tölti be a látómezőt az épület.
+    `, ['S01', 'S02', 'S03', 'S30']),
 
-    stop('st-stephens', '2. Korona, kupola és az új főváros', `
-Menj a tér közepe felé, és hagyd, hogy a Bazilika betöltse a látómeződet. Mérete tudatos választás volt. A tizenkilencedik századi Pest rendkívüli gyorsasággal nőtt, az új városrészeknek pedig olyan templom kellett, amely felér a város ambícióihoz.
+    stop('st-stephens', '2. A kupola, amely leomlott', `
+Menj a tér közepe felé, és hagyd, hogy a Bazilika betöltse a látómeződet. Mérete tudatos választás volt. A tizenkilencedik századi Pest rendkívüli gyorsasággal nőtt, az új városrészeknek pedig olyan templom kellett, amely a város világi ambícióival is versenyre kelhetett.
 
 Az építkezés 1851-ben indult Hild József tervei alapján. 1868-ban súlyos szerkezeti hibák miatt a félkész kupola beomlott. A templomban ekkor nem tartózkodott gyülekezet. A munkát Ybl Miklós vette át: újravizsgálta a szerkezetet, és jelentős részeket reneszánsz ihletésű formában tervezett át. Halála után Kauser József fejezte be a belső tereket. A templomot 1905-ben szentelték fel, több mint fél évszázaddal az alapozás után.
 
-Ez a hosszú építéstörténet kicsiben Budapest történetére emlékeztet: nagy remények, törés, újratervezés, majd egy még nagyobb léptékű befejezés. Nézd meg a két harangtornyot és a mély oszlopcsarnokot, azután emeld fel a tekinteted a kupolára. Mintegy kilencvenhat méteres magasságát hagyományosan az Országházéval azonosnak adják meg. A városképben a templom és a törvényhozás két fontos intézményként felel egymásnak.
+Az építés története többet mond egy nagyszabású jelszónál: megmutatja, hogyan működtek a nagy tizenkilencedik századi beruházások—lassan, hibákkal, politikai türelemmel és változó tervekkel. Nézd meg a két harangtornyot és a mély oszlopcsarnokot, azután emeld fel a tekinteted a kupolára. Mintegy kilencvenhat méteres magasságát hagyományosan az Országházéval azonosnak adják meg. A városképben a templom és a törvényhozás két fontos intézményként felel egymásnak.
 
 A Bazilika I. István nevét viseli. A nagyjából 1000-ben megkoronázott uralkodóra a keresztény Magyar Királyság első királyaként emlékezünk. Uralma a latin kereszténységhez és a középkori Európa politikai rendjéhez kapcsolta az új királyságot. A későbbi századokban István a magyar államiság központi alakjává vált. A templomban őrzik a Szent Jobbot, az Istvánnak tulajdonított mumifikálódott jobb kezet.
 
@@ -70,12 +72,12 @@ Itt nem kell kész ítéletet kapnod az idegenvezetőtől. Inkább figyeld meg a
 A közterület Budapest egyik történeti levéltára, ugyanakkor ma is használt politikai nyelv. Indulj tovább az Országház felé, és vidd magaddal ezt a bizonytalanságot. A következő teret nemzeti magabiztosság kifejezésére tervezték, mégis többször vált az állam és polgárai közötti összeütközés helyszínévé.
     `, ['S07', 'S08', 'S09', 'S10']),
 
-    stop('parliament-kossuth', '4. Az Országház: kőbe épített nemzet', `
+    stop('parliament-kossuth', '4. Az Országház: nemzetgyártó gépezet', `
 Menj beljebb a Kossuth térre, amíg egyszerre látod az Országház hosszú dunai homlokzatát és középső kupoláját. Ma megkerülhetetlennek tűnik, pedig egy különleges politikai korszak terméke.
 
 Az 1867-es kiegyezés után Magyarországnak saját országgyűlése és kormánya volt a dualista monarchián belül. Buda, Pest és Óbuda 1873-ban egyesült, az új főváros pedig rangjához méltó állandó törvényhozási épületet akart. Az 1880-as évek tervpályázatát Steindl Imre neogótikus terve nyerte. Az építkezés 1885-ben kezdődött, az épületet az 1896-os millenniumi ünnepségek idején felavatták, a munkák pedig 1904-ben fejeződtek be. Steindl 1902-ben meghalt, így a teljesen elkészült művet nem láthatta.
 
-A gótika történelmi európai parlamenteket idéz, de az épület nem egyszerűen Westminster másolata. Szimmetrikus alaprajza a korszak kétkamarás törvényhozását tükrözi; középen a kupola köti össze a két oldalt. Kőfaragók, üvegművesek, lakatosok, festők és szobrászok munkája a magyar ipar és kézművesség bemutatóterévé tette az építkezést. A hatalmas méret azt üzente, hogy Budapest többé nem tartja magát vidéki városnak.
+A gótika történelmi európai parlamenteket idéz, de az épület nem egyszerűen Westminster másolata. Szimmetrikus alaprajza a korszak kétkamarás törvényhozását tükrözi; középen a kupola köti össze a két oldalt. Kőfaragók, üvegművesek, lakatosok, festők és szobrászok munkája a magyar ipar és kézművesség bemutatóterévé tette az építkezést. Egyben csúcstechnológia is volt: gáz- és villanyvilágítást, központi fűtést és hűtést, tűzvédelmet, telefont és 112 központilag vezérelt elektromos órát kapott. A hatalmas méret azt üzente, hogy Budapest többé nem tartja magát vidéki városnak; a gépészete pedig azt, hogy nem is akar úgy működni.
 
 A kupolacsarnokban látható a Szent Korona. Hagyományosan Szent István koronájának nevezik, bár ma fennmaradt részei későbbi századokból származnak. A nemzeti jelkép és a tárgy szigorúan vett története itt sem fér bele ugyanabba az egyszerű mondatba.
 
@@ -84,7 +86,7 @@ A tér 1956. október 25-ének emlékét is őrzi. A kommunista uralom és a szo
 Tekints a térre színpadként. A politikai rendszerek újra és újra átrendezték: szobrokat állítottak, eltávolítottak és visszahoztak, emlékhelyeket mozgattak, végül magát a felszínt is átépítették. A képeslapokon az Országház változatlan, a körülötte lévő politikai táj azonban soha nem volt az.
 
 Mielőtt a folyóhoz indulsz, nézz még egyszer a kupolára. Szép, de a szépség itt állítás is: az alkotmányos kormányzásról, a nemzeti folytonosságról és Magyarország európai helyéről. Most indulj dél felé a rakparton egy olyan emlékműhöz, amelynek nincs kupolája, hősi alakja, és alig használ szavakat.
-    `, ['S11', 'S12', 'S13', 'S14']),
+    `, ['S11', 'S12', 'S13', 'S14', 'S31']),
 
     stop('shoes-danube', '5. Cipők a Duna-parton', `
 Kérlek, csendesen közelíts, és hagyj helyet a többi látogatónak. A hatvan pár vascipő ötlete Can Togay filmrendezőtől származik, az alkotást Pauer Gyula szobrásszal készítette. Az emlékművet 2005-ben avatták fel. Azokra emlékezik, akiket a magyar nyilas mozgalom tagjai 1944-ben és 1945-ben a budapesti Duna-parton gyilkoltak meg.
@@ -120,14 +122,14 @@ Nézz át a Várhegyre. Innen Buda szinte karnyújtásnyira van, pedig a folyó 
 Továbbindulva figyeld meg, hogyan vált a reform építészetté: akadémia a nyelvnek és tudománynak, híd a közlekedésnek és kereskedelemnek, tér mindezek bemutatására. A következő állomás, a Gresham-palota azt mutatja meg, mi lett az eredménye, amikor ezek a reformok egy nemzetközi kereskedőváros növekedését segítették.
     `, ['S18', 'S19', 'S20']),
 
-    stop('gresham-palace', '7. Gresham-palota és az aranykor városa', `
+    stop('gresham-palace', '7. Gresham-palota: amikor a biztosítás látványosság lett', `
 Fordulj a Gresham-palota ívelt homlokzata felé, és keress pávákat, virágmintákat, mozaikokat és kovácsoltvas részleteket. Ez a huszadik század eleji Budapest: gazdag, technikailag magabiztos, és kész arra, hogy a kereskedelmet művészetté alakítsa.
 
 A telken korábban a Nákó-ház állt, az üzleti és társasági élet egyik helyszíne. A mai épületet a brit Gresham Life Assurance biztosítótársaság emeltette irodák és fényűző lakások számára. Quittner Zsigmond tervezte a Vágó fivérekkel, és 1906-ban készült el. Nevét Sir Thomas Greshamről, a londoni Királyi Tőzsdéhez kötődő tizenhatodik századi angol pénzemberről kapta.
 
 Az épület a szecesszió magyarországi változatához tartozik. Tervezői nem leválasztható díszként kezelték az ornamentikát, hanem összehangolták az építészetet, a vasat, az üveget, a kerámiát és a bútorokat. A központi átjárón egykor hintók hajthattak be, miközben üzletek, irodák és lakások hozták egy fedél alá a nagyvárosi élet különböző részeit.
 
-Ezt az eleganciát az előző fejezetben megismert hálózatok tartották fenn: hidak, vasutak, bankok, biztosítók, egy növekvő középosztály és a modernizálni akaró városvezetés. Budapest lakossága az egyesítés körüli évtizedekben sokszorosára nőtt. A reprezentatív épületek nemcsak műalkotások, hanem egy fellendülő fővárosban versengő intézmények reklámjai is voltak.
+Ezt az eleganciát az előző fejezetben megismert hálózatok tartották fenn: hidak, vasutak, bankok, biztosítók, egy növekvő középosztály és a modernizálni akaró városvezetés. Budapest lakossága az egyesítés körüli évtizedekben sokszorosára nőtt. A reprezentatív épületek nemcsak műalkotások, hanem reklámok is voltak. Egy biztosítótársaságnak nem elég irodára volt szüksége: azt akarta, hogy az ügyfél a megbízhatóságot kőbe faragva, vasba hajlítva és mozaikban csillogva érezze.
 
 A huszadik század kevésbé bánt kíméletesen a házzal. A Gresham megsérült Budapest ostromában. A szocialista állami tulajdon idején lakásokra és irodákra osztották, állapota romlott. A huszonegyedik század elején nagyszabású felújítással szállodává alakították. Sok eredeti részletet helyreállítottak vagy rekonstruáltak, miközben az épület használata és társadalmi hozzáférhetősége is megváltozott.
 
@@ -138,12 +140,12 @@ Lépj közelebb, és az egész homlokzat helyett vizsgálj meg egyetlen részlet
 Innen menj a Vörösmarty tér felé. A következő állomás a biztosítás és befektetés világából a modern Budapest egy másik intézményébe vezet: a kávéházba, ahol üzlet, irodalom, pletyka és nagyvárosi szerepjáték ült egymás mellett.
     `, ['S21', 'S22', 'S23']),
 
-    stop('vorosmarty-gerbeaud', '8. A kávéház mint városi nappali', `
+    stop('vorosmarty-gerbeaud', '8. Kávéházak: az eredeti közösségi iroda', `
 A Vörösmarty tér kevésbé ünnepélyes, mint az előző állomások, mégis ugyanahhoz a történethez tartozik. Egy modern fővároshoz nem elég a kormányzati épület. Olyan helyek is kellenek, ahol az emberek találkoznak, vitatkoznak, olvasnak, megmutatják magukat és megtanulják a városi élet íratlan szabályait.
 
 A tér Vörösmarty Mihály költő és drámaíró nevét viseli. Az 1836-ban írt Szózat a magyar hazafias költészet egyik legfontosabb műve lett. Nyitánya közvetlenül szólítja meg a magyart, és az egyéni hűséget a hazához köti. A magyarul nem beszélő látogató is megértheti, miért volt ilyen fontos az irodalom egy olyan kultúrában, ahol a nyelv politikai jelentést hordozott.
 
-A téren áll a Gerbeaud. Elődjét Kugler Henrik alapította 1858-ban, majd 1870-ben költöztette ide. A svájci születésű Gerbeaud Emil az 1880-as években csatlakozott az üzlethez, és nagymértékben bővítette termelését és hírnevét. A finom sütemények, csokoládék és gazdag belső terek célponttá tették a kávéházat, ezek a helyek azonban nemcsak luxusfogyasztásra szolgáltak.
+A téren áll a Gerbeaud. Elődjét Kugler Henrik alapította 1858-ban, majd 1870-ben költöztette ide. A svájci születésű Gerbeaud Emil az 1880-as években csatlakozott az üzlethez, és nagymértékben bővítette termelését és hírnevét. Neki tulajdonítják a konyakmeggy és a macskanyelv hazai bevezetését. A finom sütemények, csokoládék és gazdag belső terek célponttá tették a kávéházat, ezek a helyek azonban nemcsak luxusfogyasztásra szolgáltak.
 
 Budapest kávéházai olvasóteremként, irodaként, klubként és informális hírcsereként működtek. Újságokat tartottak, az írók órákig dolgozhattak egy asztalnál, szerkesztők, színészek, ügyvédek és kereskedők szakmai kapcsolatokat építettek. Egyes helyek különböző közösségek otthonai lettek. A leghíresebb irodalmi történetek más pesti kávéházakhoz kötődnek, a Gerbeaud viszont ugyanennek a kultúrának elegáns, kozmopolita oldalát mutatja.
 
@@ -156,7 +158,7 @@ Ez gyakorlati pihenő is. Magyarul a „köszönöm” az egyik leghasznosabb sz
 Az utolsó megállóhoz indulj a Duna és a Vigadó felé. Nem újabb dátumlistával zárunk, hanem megpróbáljuk elolvasni a látképet, és egyetlen panorámában összeilleszteni a kilenc fejezetet.
     `, ['S24', 'S25', 'S26']),
 
-    stop('vigado-promenade', '9. Budapest olvasása a folyó felől', `
+    stop('vigado-promenade', '9. A folyó a térkép', `
 Állj a korzón úgy, hogy a Vigadó mögötted vagy melletted, a budai part pedig előtted legyen. A mai Vigadót Feszl Frigyes tervezte, és 1865-ben nyitották meg. Építészete nem illik egyetlen importált stílusba: mór, román és sajátosan magyar formakeresés keveredik a homlokzaton. Egy korábbi, az 1848–49-es szabadságharcban megsérült hangversenyépület helyét vette át.
 
 A Vigadó koncerteknek, báloknak, ünnepségeknek és kiállításoknak adott otthont. Az Akadémiához, a hídhoz és a kávéházakhoz hasonlóan egy születő főváros kulturális infrastruktúrájához tartozott. A második világháborúban súlyosan megsérült, majd később újjáépítették. Az előtted álló ház egyszerre tizenkilencedik századi alkotás és huszadik századi javításokkal formált túlélő.
@@ -167,11 +169,11 @@ Budapest 1873-ban lett egyetlen önkormányzat, de a séta városa nem egy év a
 
 Az utolsó előtti ige—vitatkoztak—különösen fontos. A Szabadság tér megmutatja, hogy az emlékezet nem befejezett emlékmű. A Kossuth tér bizonyítja, hogy a nemzeti tér a politikával együtt változik. A Cipők a hiány erejével kérdőjelezi meg a hivatalos monumentalitást. A Gresham-palota felteszi a kérdést, ki részesül a megőrzött örökségből. Budapest akkor a legérdekesebb, amikor szépsége és ellentmondásai egyszerre láthatók.
 
-Válassz egy részletet, amelyet a séta előtt nem vettél volna észre: a híd vámjában megjelenő közteherviselést, egy palota változó használatát, két emlékmű vitáját vagy a kupolák tudatos helyét a városképben. A tájékozott utazás nem minden dátum felmondását jelenti, hanem azt, hogy több összefüggést látsz abban, ami már eddig is előtted volt.
+Válassz egy részletet, amelyet a séta előtt nem vettél volna észre: a híd vámjában megjelenő közteherviselést, egy bérházból lett luxusszállodát vagy két emlékmű vitáját ugyanarról a múltról. Ez lehet az út hasznos emléke: nem dátumlista, hanem működő térkép arról, milyen erők hozták létre ezt a látképet.
 
 Innen könnyen eléred a Duna-parti villamost, a Lánchidat, a belvárosi metrókat és Pest éttermeit. A budai Vár külön, nyugodt sétát érdemel, nem egy sietős függeléket ehhez az úthoz.
 
-Három egykori város történetével indultál, és egy főváros két partját nézve fejezed be. Így lett Budapestből Budapest: nem egyetlen alapító vagy legenda által, hanem újra és újra megépített, lerombolt és helyreállított kapcsolatokon keresztül.
+Három egykori város történetével indultál, és egy főváros két partját nézve fejezed be. Budapest újra és újra megépített, lerombolt és helyreállított kapcsolatokból készült—és a város ma is vitatkozik arról, mit jelentenek ezek a kapcsolatok.
     `, ['S27', 'S28', 'S01', 'S29']),
   ],
 };

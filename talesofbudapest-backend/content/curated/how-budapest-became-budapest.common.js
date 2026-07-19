@@ -1,5 +1,5 @@
 export const CURATED_TOUR_SLUG = 'how-budapest-became-budapest';
-export const CURATED_TOUR_VERSION = 1;
+export const CURATED_TOUR_VERSION = 2;
 
 export const WALKING_ROUTE = {
   // Pedestrian geometry from OpenRouteService, in Leaflet [latitude, longitude] order.
@@ -20,3 +20,14 @@ export const STOP_COORDINATES = {
   'vigado-promenade': { lat: 47.49624, lng: 19.04853 },
 };
 
+export const LOCATION_SLUGS = {
+  'deak-anker': 'deak-ferenc-square',
+  'st-stephens': 'st-stephens-basilica',
+  'liberty-square': 'liberty-square',
+  'parliament-kossuth': 'hungarian-parliament-building',
+  'shoes-danube': 'shoes-on-danube-bank',
+  'academy-chain-bridge': 'szechenyi-chain-bridge',
+  'gresham-palace': 'gresham-palace',
+  'vorosmarty-gerbeaud': 'vorosmarty-square',
+  'vigado-promenade': 'vigado-promenade',
+};

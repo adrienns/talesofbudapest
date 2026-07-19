@@ -20,5 +20,7 @@ test('curated requests stay server-only and are selected by opaque slug', () => 
   const request = curatedNarrativeRequest('castle-royal');
   assert.equal(request?.styleId, 'storyteller');
   assert.match(request?.prompt ?? '', /Buda Castle District/);
+  assert.equal(curatedNarrativeRequest('jewish-quarter-ruin-bars'), null);
+  assert.equal(curatedNarrativeRequest('jewish-quarter-and-ruin-bars'), null);
   assert.equal(curatedNarrativeRequest('not-a-tour'), null);
 });

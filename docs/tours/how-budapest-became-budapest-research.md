@@ -47,19 +47,21 @@ Research snapshot: **2026-07-13**. This is an internal fact and rights record, n
 | S27 | [Pesti Vigadó timeline](https://vir.vigado.hu/web/en/timeline-of-pesti-vigado) — Redoute, Feszl, 1865 and wartime history | Official venue history |
 | S28 | [Pesti Vigadó visitable rooms](https://vigado.hu/en/latogathato-termek) — 1849 destruction and reopening | Official venue corroboration |
 | S29 | [UNESCO Budapest listing](https://whc.unesco.org/en/list/400/) — Danube banks, Buda Castle and Andrássy Avenue as urban ensemble | UNESCO primary listing |
+| S30 | [BKK: Millennium Underground Railway](https://bkk.hu/en/visiting-budapest/special-transport-services/) — 1896 opening and first underground railway in continental Europe | Budapest public-transport authority |
+| S31 | [Hungarian Parliament: Central Clockwork](https://www.parlament.hu/en/web/orszaggyulesi-muzeum/kozponti-oramu) — original building services and 112 electrically controlled clocks | Parliament museum publication |
 
 ## Claim ledger and editorial classifications
 
 | Stops | Claims checked | Sources | Classification / treatment |
 |---|---|---|---|
-| 1 | Three towns united in 1873; Pest/Buda geography; language as a reform-era institution | S01, S02, S18 | Established fact. Anker description is visual interpretation; no legend used. |
+| 1 | Three towns united in 1873; Pest/Buda geography; language as a reform-era institution; 1896 M1 | S01, S02, S18, S30 | Established fact. Anker description is visual interpretation; no legend used. |
 | 2 | 1851 start, 1868 dome collapse, architects and 1905 consecration; Stephen/state symbolism | S04, S05, S06 | Construction is established. Relic identity is explicitly presented as religious tradition, not scientific certainty. |
 | 3 | Neugebäude/Batthyány; German occupation; Hungarian administrative collaboration; Soviet liberation and ensuing domination | S07, S08, S09, S13 | Established events plus labelled interpretation. “Liberation/occupation” is presented as a necessary dual perspective. Monument criticism is attributed, not stated as unanimous fact. |
-| 4 | Steindl competition and dates; political symbolism; 25 October 1956 shooting | S11, S12, S13, S14 | Building facts established. Exact 1956 perpetrators/sequence/toll remain disputed; script intentionally gives no precise toll. |
+| 4 | Steindl competition and dates; political symbolism; original technical systems; 25 October 1956 shooting | S11, S12, S13, S14, S31 | Building facts established. Exact 1956 perpetrators/sequence/toll remain disputed; script intentionally gives no precise toll. |
 | 5 | Artists, 2005 inauguration, 60 pairs, Arrow Cross riverbank murders | S07, S08, S15, S16, S17 | Established and multiply corroborated. No composite victim, invented quotation, sound effect or emotional instruction beyond optional silence. |
 | 6 | 1825 Academy pledge; 1865 palace; bridge construction/opening; equal toll; 1945 destruction/1949 reopening | S18, S19, S20 | Established. The bridge “made union imaginable” is clearly interpretive synthesis. |
 | 7 | Gresham commission, designers, 1906 completion, Secession style, later restoration | S21, S22, S23 | Core facts corroborated. Social-access discussion is interpretation, not a factual claim about visitor policy. |
-| 8 | Kugler 1858/1870, Gerbeaud from the 1880s, café culture | S24, S25, S26 | Business dates established. General café function is contextual synthesis; no claim that all literary events happened at Gerbeaud. |
+| 8 | Kugler 1858/1870, Gerbeaud from the 1880s, cognac cherry and cat’s-tongue chocolate, café culture | S24, S25, S26 | Business dates established. General café function is contextual synthesis; no claim that all literary events happened at Gerbeaud. |
 | 9 | Redoute destruction, Feszl design, 1865 opening, cultural uses and reconstruction | S02, S27, S28, S29 | Established. Skyline reading and final thesis are original interpretation. |
 
 ## Copyright and publication record
@@ -73,4 +75,3 @@ Research snapshot: **2026-07-13**. This is an internal fact and rights record, n
 ## Bilingual editorial notes
 
 The Hungarian text is an independent adaptation with the same claims, stop order and source IDs. It uses Hungarian institutional names and natural sentence rhythm rather than mirroring English syntax. Hungarian’s agglutinative structure generally produces fewer whitespace-delimited words for equivalent spoken content. Both versions reserve roughly five minutes per stop for looking, photographs, a short rest or silence; combined with ~46 minutes of walking and the narration, the designed experience is approximately 110–140 minutes.
-
