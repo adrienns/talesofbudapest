@@ -36,7 +36,7 @@ export const QuestionnaireChoiceCard = ({
       onClick={onSelect}
       style={optionStyle(colorIndex)}
       aria-pressed={selected}
-      className={`relative overflow-hidden rounded-2xl text-center text-white shadow-sm transition active:scale-95 ${
+      className={`relative overflow-hidden rounded-2xl shadow-md shadow-black/30 text-center  text-white transition active:scale-95 ${
         isStyle
           ? `aspect-square min-w-0 px-2 py-3 ${selected ? 'ring-2 ring-on-surface ring-offset-2' : ''}`
           : `flex min-h-28 flex-col items-center justify-center gap-2 px-3 py-3 ${selected ? 'ring-2 ring-on-surface ring-offset-2' : 'opacity-90'}`

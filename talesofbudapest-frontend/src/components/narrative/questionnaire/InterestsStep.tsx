@@ -41,7 +41,7 @@ export const InterestsStep = ({
           <h2 className="text-2xl font-bold text-on-surface">{t('topicsQuestion')}</h2>
           <p className="mt-1 text-sm text-on-surface/55">{t('topicsHelper', { max: MAX_TOPICS })}</p>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2">
           {TOUR_TOPICS.map((topic, index) => (
             <QuestionnaireChoiceCard
               key={topic.id}

@@ -40,7 +40,7 @@ export const SetupStep = ({
 
   return (
     <div className="-mx-5 -my-6 flex min-h-full flex-col">
-      <section className="bg-[#cad9db] px-5 pb-7 pt-6">
+      <section className="bg-[#cad9db] px-5 pb-6 pt-6">
         <div className="mx-auto max-w-md">
           <h2 className="mb-4 text-xl font-extrabold text-slate-800">{t('readyMadeTours')}</h2>
           <QuickStartTourCarousel
@@ -56,7 +56,7 @@ export const SetupStep = ({
             <h2 className="text-xl font-extrabold text-on-surface">{t('styleQuestion')}</h2>
             <p className="mt-1 text-sm text-on-surface/55">{t('styleHelper')}</p>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 gap-2">
             {TOUR_STYLES.map((style, index) => (
               <QuestionnaireChoiceCard
                 key={style.id}

@@ -33,7 +33,7 @@ export const ClassicTourCard = ({
     </>
   )
 
-  const sharedClassName = `relative flex aspect-square w-full overflow-hidden rounded-2xl shadow-[0_5px_0_rgba(30,41,59,0.1),0_14px_24px_rgba(30,41,59,0.24)] transition active:scale-[0.98] ${className}`
+  const sharedClassName = `relative flex aspect-square w-full overflow-hidden rounded-3xl  shadow-lg  shadow-black/40  transition active:scale-[0.98] ${className}`
 
   if (onClick) {
     return (

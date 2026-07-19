@@ -29,7 +29,7 @@ export const QuickStartTourCarousel = ({
       </div>
     )}
     <div
-      className="-mx-1 flex snap-x snap-mandatory gap-2.5 overflow-x-auto pb-4 pl-1 pr-5 scrollbar-hide"
+      className="-mx-1 -mb-12 -mt-6 flex snap-x snap-mandatory gap-2.5 overflow-x-auto pb-12 pl-1 pr-5 pt-6 scrollbar-hide"
       role="list"
       aria-label={label ?? 'Tours'}
     >
