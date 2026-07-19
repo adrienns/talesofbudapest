@@ -15,6 +15,7 @@ export const TourSheetExpanded = ({
   chapterLabel,
   imageUrl,
   imageAlt,
+  imageAttribution,
   script,
   isPlaying,
   currentTime,
@@ -83,6 +84,16 @@ export const TourSheetExpanded = ({
           </div>
         )}
       </motion.div>
+
+      {imageAttribution && (
+        <p className="-mt-3 text-center text-[0.625rem] leading-snug text-on-surface/50">
+          Photo: <a href={imageAttribution.sourceUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2">{imageAttribution.author}</a>
+          {' · '}
+          {imageAttribution.licenseUrl ? (
+            <a href={imageAttribution.licenseUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2">{imageAttribution.license}</a>
+          ) : imageAttribution.license}
+        </p>
+      )}
 
       <div className="min-w-0 text-center">
         <h1 className="text-balance font-serif text-2xl font-bold leading-tight text-on-surface">

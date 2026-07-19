@@ -1,6 +1,6 @@
 export type ImportanceTier = 'featured' | 'standard' | 'archive' | 'skip'
 
-export type LandmarkSource = 'budapest100' | 'muemlekem' | 'wikipedia' | 'iconic'
+export type LandmarkSource = 'budapest100' | 'muemlekem' | 'wikipedia' | 'iconic' | 'curated'
 
 export type MapTheme = 'history' | 'architecture'
 
@@ -17,6 +17,12 @@ export type MapPin = {
   lng: number
   audio_url: string | null
   image_url: string | null
+  image_attribution?: {
+    author: string
+    license: string
+    licenseUrl?: string
+    sourceUrl: string
+  }
   locale?: 'en' | 'hu'
   source?: LandmarkSource
   landmark_type?: string

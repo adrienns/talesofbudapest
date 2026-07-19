@@ -13,8 +13,10 @@ const mapChapter = (row) => ({
   lng: row.lng,
   script: row.script ?? null,
   audioUrl: row.audio_url,
-  imageUrl: row.image_url,
-  landmarkId: row.landmark_id,
+  imageUrl: row.image_attribution ? row.image_url : null,
+  imageAttribution: row.image_attribution ?? null,
+  locationId: row.location_id ?? row.landmark_id,
+  landmarkId: row.location_id ?? row.landmark_id,
 });
 
 export const findNarrativeByPrompt = async (supabase, userPrompt, ownerId) => {

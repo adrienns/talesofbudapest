@@ -28,6 +28,19 @@ export type PoolRow = {
   importance_tier?: string | null
   importance_score?: number | null
   history_depth?: string | null
+  publication_status?: string | null
+  tour_eligible?: boolean | null
+  location_tour_facets?: Array<{
+    category_id: string
+    relevance_score: number
+    reviewed: boolean
+  }> | null
+  location_media?: Array<{
+    url: string
+    review_status: string
+    commercial_use_allowed: boolean
+    sort_order?: number | null
+  }> | null
 }
 
 type GeoCluster = 'buda-castle' | 'pest-core' | 'district7' | 'citywide'
@@ -220,6 +233,13 @@ const topicMatchScore = (row: PoolRow, topicIds: string[]): number => {
     return 0
   }
 
+  const reviewedFacetScores = (row.location_tour_facets ?? [])
+    .filter((facet) => facet.reviewed && topicIds.includes(facet.category_id))
+    .map((facet) => facet.relevance_score / 100)
+  if (reviewedFacetScores.length) {
+    return Math.max(...reviewedFacetScores)
+  }
+
   const haystack = normalize(`${row.name} ${row.story_prompt ?? ''}`)
   let best = 0
 
@@ -305,7 +325,11 @@ export const selectNarrativePool = <T extends PoolRow>(
   ctx: PoolContext,
   limit = 40,
 ): T[] => {
-  const candidates = rows.filter((row) => (row.importance_tier ?? 'archive') !== 'skip')
+  const candidates = rows.filter((row) =>
+    (row.importance_tier ?? 'archive') !== 'skip'
+    && row.publication_status !== 'draft'
+    && row.publication_status !== 'archived'
+    && row.tour_eligible !== false)
 
   const scored = candidates
     .map((row) => ({ row, score: scorePoolRow(row, ctx) }))

@@ -31,6 +31,10 @@ MIGRATION_FILES=(
   028_lock_down_source_material.sql
   029_revoke_public_source_table_privileges.sql
   030_walking_route_rate_limit.sql
+  031_ai_guide_rate_limit.sql
+  032_canonical_locations.sql
+  033_narrative_chapter_location_links.sql
+  034_location_map_points.sql
 )
 
 if ! docker ps --format '{{.Names}}' | grep -q '^supabase-db$'; then
@@ -40,7 +44,7 @@ fi
 
 for file in "${MIGRATION_FILES[@]}"; do
   echo "Running $file..."
-  docker exec -i supabase-db psql -U postgres -d postgres < "$MIGRATIONS_DIR/$file"
+  docker exec -i supabase-db psql -v ON_ERROR_STOP=1 -U postgres -d postgres < "$MIGRATIONS_DIR/$file"
 done
 
 echo "All migrations complete"

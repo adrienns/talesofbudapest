@@ -33,6 +33,17 @@ export const withRetry = async (attempt, attempts = 2) => {
   throw lastError;
 };
 
+const approvedPrimaryMedia = (landmark) => (landmark.location_media ?? [])
+  .filter((item) => item.review_status === 'approved' && item.commercial_use_allowed)
+  .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))[0] ?? null;
+
+const mediaAttribution = (media) => media ? {
+  author: media.author ?? 'Unknown author',
+  license: media.license ?? 'Licence not specified',
+  licenseUrl: media.license_url ?? null,
+  sourceUrl: media.source_url ?? '',
+} : null;
+
 export const parseRoutePlan = (raw, landmarks, expectedStopCount = null) => {
   let parsed;
   try {
@@ -62,6 +73,7 @@ export const parseRoutePlan = (raw, landmarks, expectedStopCount = null) => {
         throw new Error(`Unknown landmark_id: ${chapter.landmark_id}`);
       }
 
+      const primaryMedia = approvedPrimaryMedia(landmark);
       return {
         chapterIndex: index,
         title: chapter.title || `Chapter ${index + 1}: ${landmark.name}`,
@@ -69,8 +81,10 @@ export const parseRoutePlan = (raw, landmarks, expectedStopCount = null) => {
         lng: landmark.longitude ?? landmark.lng,
         script: chapter.script ?? null,
         hook: chapter.hook ?? chapter.script ?? '',
+        locationId: String(landmark.id),
         landmarkId: String(landmark.id),
-        imageUrl: landmark.image_url ?? null,
+        imageUrl: primaryMedia?.url ?? null,
+        imageAttribution: mediaAttribution(primaryMedia),
       };
     }
 
@@ -92,6 +106,7 @@ export const parseRoutePlan = (raw, landmarks, expectedStopCount = null) => {
         lat,
         lng,
         script,
+        locationId: null,
         landmarkId: null,
         imageUrl: null,
       };
@@ -133,6 +148,7 @@ export const parseReplacementChapter = (raw, landmarks, replaceIndex) => {
     throw new Error(`Unknown landmark_id: ${parsed.landmark_id}`);
   }
 
+  const primaryMedia = approvedPrimaryMedia(landmark);
   return {
     chapterIndex: replaceIndex,
     title: parsed.title || `Chapter ${replaceIndex + 1}: ${landmark.name}`,
@@ -140,7 +156,9 @@ export const parseReplacementChapter = (raw, landmarks, replaceIndex) => {
     lng: landmark.longitude ?? landmark.lng,
     script: parsed.script ?? null,
     hook: parsed.hook ?? parsed.script ?? '',
+    locationId: String(landmark.id),
     landmarkId: String(landmark.id),
-    imageUrl: landmark.image_url ?? null,
+    imageUrl: primaryMedia?.url ?? null,
+    imageAttribution: mediaAttribution(primaryMedia),
   };
 };

@@ -16,7 +16,9 @@ const MAP_PIN_SELECT = `
   map_theme,
   importance_tier,
   importance_score,
-  location_translations (locale, name, audio_url)
+  publication_status,
+  location_translations (locale, name, audio_url),
+  location_media (url, alt_text, author, source_url, license, license_url, sort_order, review_status, commercial_use_allowed)
 `
 
 export const GET = async (request: Request) => {
@@ -33,6 +35,7 @@ export const GET = async (request: Request) => {
     let query = supabase
       .from('locations')
       .select(MAP_PIN_SELECT)
+      .eq('publication_status', 'published')
       .order('importance_score', { ascending: false, nullsFirst: false })
 
     if (bbox) {

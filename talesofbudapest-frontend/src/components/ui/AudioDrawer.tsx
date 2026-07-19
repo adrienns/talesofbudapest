@@ -87,7 +87,7 @@ export const AudioDrawer = ({
   const [resolvedLandmarkImageUrl, setResolvedLandmarkImageUrl] = useState<string | null>(null)
 
   useEffect(() => {
-    const landmarkId = playbackItem?.landmarkId
+    const landmarkId = playbackItem?.locationId ?? playbackItem?.landmarkId
 
     if (playbackItem?.imageUrl || !landmarkId) {
       setResolvedLandmarkImageUrl(null)
@@ -112,7 +112,7 @@ export const AudioDrawer = ({
     return () => {
       cancelled = true
     }
-  }, [playbackItem?.id, playbackItem?.imageUrl, playbackItem?.landmarkId])
+  }, [playbackItem?.id, playbackItem?.imageUrl, playbackItem?.locationId, playbackItem?.landmarkId])
 
   const handleAudioReady = useCallback(
     (audioUrl: string) => {
@@ -324,6 +324,7 @@ export const AudioDrawer = ({
     chapterLabel,
     imageUrl: displayImageUrl,
     imageAlt,
+    imageAttribution: playbackItem?.imageAttribution,
     script,
     meta,
     onShare,

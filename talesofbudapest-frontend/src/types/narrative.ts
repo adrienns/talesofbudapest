@@ -1,3 +1,10 @@
+export type ImageAttribution = {
+  author: string
+  license: string
+  licenseUrl?: string
+  sourceUrl: string
+}
+
 export type NarrativeChapter = {
   id: string
   chapterIndex: number
@@ -6,6 +13,9 @@ export type NarrativeChapter = {
   lng: number
   audioUrl: string | null
   imageUrl: string | null
+  imageAttribution?: ImageAttribution | null
+  locationId?: string | null
+  /** @deprecated Use locationId. Retained while older clients migrate. */
   landmarkId?: string | null
   script?: string | null
 }
@@ -67,6 +77,8 @@ export type DraftChapter = {
   lng: number
   hook?: string | null
   script?: string | null
+  locationId?: string | null
+  /** @deprecated Use locationId. */
   landmarkId: string | null
   imageUrl: string | null
 }
@@ -96,7 +108,10 @@ export type PlaybackItem = {
   chapterLabel?: string
   audioUrl: string | null
   imageUrl: string | null
+  imageAttribution?: ImageAttribution | null
   imageAlt?: string
+  locationId?: string | null
+  /** @deprecated Use locationId. */
   landmarkId?: string | null
   script?: string | null
   lat: number

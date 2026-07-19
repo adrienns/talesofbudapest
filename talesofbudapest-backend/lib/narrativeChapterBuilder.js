@@ -3,6 +3,7 @@ import { DEFAULT_LOCALE } from './locale.js';
 import { resolveLandmarkScript, resolveLandmarkAudio } from './landmarkAudioResolver.js';
 import { generateCustomStopScript } from './landmarkScriptWriter.js';
 import { planNarrativeRoute } from './narrativeRoutePlanner.js';
+import { resolveConfirmedCustomStop } from './locationCandidateResolver.js';
 
 const LOCATION_SELECT_FOR_AUDIO =
   'id, name, story_prompt, source_material, history_depth, audio_url';
@@ -28,7 +29,7 @@ export const finalizeChapterScripts = async ({
 
   return Promise.all(
     chapters.map(async (chapter) => {
-      if (!chapter.landmarkId) {
+      if (!(chapter.locationId ?? chapter.landmarkId)) {
         if (!chapter.script?.trim()) {
           return chapter;
         }
@@ -47,7 +48,8 @@ export const finalizeChapterScripts = async ({
         }
       }
 
-      const landmark = landmarksById.get(String(chapter.landmarkId));
+      const landmarkId = chapter.locationId ?? chapter.landmarkId;
+      const landmark = landmarksById.get(String(landmarkId));
       if (!landmark) {
         return { ...chapter, script: chapter.script ?? chapter.hook ?? '' };
       }
@@ -113,12 +115,20 @@ export const synthesizeNarrative = async ({
   for (const chapter of chapters) {
     let audioUrl = chapter.audioUrl ?? null;
     let script = chapter.script?.trim() ?? '';
+    let locationId = chapter.locationId ?? chapter.landmarkId ?? null;
+    let locationCandidateId = null;
 
-    if (!audioUrl && chapter.landmarkId) {
+    if (!locationId) {
+      const resolution = await resolveConfirmedCustomStop({ supabase, narrativeId, chapter });
+      locationId = resolution.locationId;
+      locationCandidateId = resolution.candidateId;
+    }
+
+    if (!audioUrl && locationId) {
       const { data: location, error: locationError } = await supabase
         .from('locations')
         .select(LOCATION_SELECT_FOR_AUDIO)
-        .eq('id', chapter.landmarkId)
+        .eq('id', locationId)
         .maybeSingle();
 
       if (locationError) {
@@ -158,10 +168,13 @@ export const synthesizeNarrative = async ({
         title: chapter.title,
         lat: chapter.lat,
         lng: chapter.lng,
-        script: chapter.script,
+        script,
         audio_url: audioUrl,
-        landmark_id: chapter.landmarkId,
+        location_id: locationId,
+        landmark_id: locationId,
+        location_candidate_id: locationCandidateId,
         image_url: chapter.imageUrl,
+        image_attribution: chapter.imageAttribution ?? null,
       })
       .select()
       .single();
@@ -187,8 +200,10 @@ export const synthesizeNarrative = async ({
         lat: row.lat,
         lng: row.lng,
         audioUrl: row.audio_url,
-        imageUrl: row.image_url,
-        landmarkId: row.landmark_id,
+        imageUrl: row.image_attribution ? row.image_url : null,
+        imageAttribution: row.image_attribution ?? null,
+        locationId: row.location_id ?? row.landmark_id,
+        landmarkId: row.location_id ?? row.landmark_id,
       })),
   };
 };

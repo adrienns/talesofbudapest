@@ -6,7 +6,9 @@ import { DEFAULT_LOCALE, isAppLocale } from '@/types/locale'
 const DETAIL_SELECT = `
   id, name, latitude, longitude, audio_url, image_url, images,
   source, landmark_type, map_theme, importance_tier, importance_score,
-  location_translations (locale, name, audio_url)
+  publication_status,
+  location_translations (locale, name, audio_url),
+  location_media (url, alt_text, author, source_url, license, license_url, sort_order, review_status, commercial_use_allowed)
 `
 
 export const GET = async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
@@ -15,7 +17,8 @@ export const GET = async (request: Request, { params }: { params: Promise<{ id: 
     const localeParam = new URL(request.url).searchParams.get('locale') ?? ''
     const locale = isAppLocale(localeParam) ? localeParam : DEFAULT_LOCALE
     const supabase = getSupabaseRead()
-    const { data, error } = await supabase.from('locations').select(DETAIL_SELECT).eq('id', id).maybeSingle()
+    const { data, error } = await supabase.from('locations').select(DETAIL_SELECT)
+      .eq('publication_status', 'published').eq('id', id).maybeSingle()
     if (error) throw new Error(error.message)
     if (!data) return NextResponse.json({ error: 'Landmark not found' }, { status: 404 })
     return NextResponse.json({ landmark: { ...mapLocationToLandmark(data as LocationRow, locale), story_prompt: '' } })

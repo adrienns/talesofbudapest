@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { PlaybackTransportProps } from '@/types/audio'
+import type { ImageAttribution } from '@/types/narrative'
 
 export type SheetSnap = 'collapsed' | 'expanded'
 
@@ -26,6 +27,7 @@ export type TourSheetMediaProps = {
   chapterLabel?: string
   imageUrl?: string | null
   imageAlt?: string
+  imageAttribution?: ImageAttribution | null
   script?: string | null
   meta?: TourSheetMeta
   onShare?: () => void

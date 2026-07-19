@@ -64,8 +64,36 @@ test('parseRoutePlan maps landmark and custom chapters', () => {
   assert.equal(plan.title, 'Danube Stories');
   assert.equal(plan.chapters.length, 3);
   assert.equal(plan.chapters[0].landmarkId, '1');
+  assert.equal(plan.chapters[0].locationId, '1');
+  assert.equal(plan.chapters[0].imageUrl, null, 'legacy images without commercial approval are not selected');
   assert.equal(plan.chapters[2].landmarkId, null);
   assert.equal(plan.chapters[2].script, 'A short riverside pause.');
+});
+
+test('parseRoutePlan selects approved commercial media with attribution', () => {
+  const approved = [{
+    ...landmarks[0],
+    location_media: [{
+      url: 'https://example.com/licensed.jpg',
+      author: 'Example Author',
+      license: 'CC BY 4.0',
+      license_url: 'https://creativecommons.org/licenses/by/4.0/',
+      source_url: 'https://example.com/source',
+      sort_order: 0,
+      review_status: 'approved',
+      commercial_use_allowed: true,
+    }],
+  }, landmarks[1], landmarks[2]];
+  const plan = parseRoutePlan(JSON.stringify({
+    title: 'Licensed media',
+    chapters: [
+      { landmark_id: '1', title: 'One' },
+      { landmark_id: '2', title: 'Two' },
+      { landmark_id: '3', title: 'Three' },
+    ],
+  }), approved);
+  assert.equal(plan.chapters[0].imageUrl, 'https://example.com/licensed.jpg');
+  assert.equal(plan.chapters[0].imageAttribution.author, 'Example Author');
 });
 
 test('parseRoutePlan rejects routes with fewer than two landmark stops', () => {

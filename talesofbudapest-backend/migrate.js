@@ -41,6 +41,10 @@ const migrationFiles = [
   '028_lock_down_source_material.sql',
   '029_revoke_public_source_table_privileges.sql',
   '030_walking_route_rate_limit.sql',
+  '031_ai_guide_rate_limit.sql',
+  '032_canonical_locations.sql',
+  '033_narrative_chapter_location_links.sql',
+  '034_location_map_points.sql',
 ];
 
 const runMigration = async () => {

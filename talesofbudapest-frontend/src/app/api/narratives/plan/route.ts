@@ -26,6 +26,8 @@ export const POST = async (request: Request) => {
     const { data: landmarks, error: landmarksError } = await supabase
       .from('locations')
       .select(NARRATIVE_LANDMARK_SELECT)
+      .eq('publication_status', 'published')
+      .eq('tour_eligible', true)
 
     if (landmarksError) {
       throw new Error(landmarksError.message)

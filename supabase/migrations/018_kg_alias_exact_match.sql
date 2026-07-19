@@ -52,21 +52,31 @@ stable
 security invoker
 set search_path = public
 as $$
+  with matches as (
+    select
+      e.id as entity_id,
+      e.entity_kind,
+      e.canonical_name_en,
+      e.public_location_id,
+      a.alias as matched_alias,
+      a.alias_kind
+    from public.kg_entity_aliases a
+    join public.kg_entities e on e.id = a.entity_id
+    where a.normalized_alias = query_normalized
+      and a.review_status = 'approved'
+      and e.review_status <> 'rejected'
+      and (query_kind is null or e.entity_kind = query_kind)
+  )
   select
-    e.id as entity_id,
-    e.entity_kind,
-    e.canonical_name_en,
-    e.public_location_id,
-    a.alias as matched_alias,
-    a.alias_kind,
-    (count(distinct e.id) over ()) > 1 as ambiguous
-  from public.kg_entity_aliases a
-  join public.kg_entities e on e.id = a.entity_id
-  where a.normalized_alias = query_normalized
-    and a.review_status = 'approved'
-    and e.review_status <> 'rejected'
-    and (query_kind is null or e.entity_kind = query_kind)
-  order by e.id, a.alias_kind, a.alias;
+    matches.entity_id,
+    matches.entity_kind,
+    matches.canonical_name_en,
+    matches.public_location_id,
+    matches.matched_alias,
+    matches.alias_kind,
+    (select count(distinct candidate.entity_id) from matches candidate) > 1 as ambiguous
+  from matches
+  order by matches.entity_id, matches.alias_kind, matches.matched_alias;
 $$;
 
 -- Candidate generation for the private resolver. Exact matching lives in

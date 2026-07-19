@@ -1,4 +1,4 @@
-import type { Landmark, LandmarkImage, MapPin } from '@/types'
+import type { Landmark, MapPin } from '@/types'
 import type { AppLocale } from '@/types/locale'
 import type { ImportanceTier, LandmarkSource, MapTheme } from '@/types/landmark'
 import { audioTourFileSuffix, DEFAULT_LOCALE } from '@/types/locale'
@@ -6,8 +6,20 @@ import { audioTourFileSuffix, DEFAULT_LOCALE } from '@/types/locale'
 export type LocationTranslationRow = {
   locale: string
   name: string
-  story_prompt: string
+  story_prompt?: string
   audio_url?: string | null
+}
+
+export type LocationMediaRow = {
+  url: string
+  alt_text?: string | null
+  author?: string | null
+  source_url?: string | null
+  license?: string | null
+  license_url?: string | null
+  sort_order?: number | null
+  review_status: string
+  commercial_use_allowed: boolean
 }
 
 export type LocationRow = {
@@ -15,7 +27,7 @@ export type LocationRow = {
   name: string
   latitude: number
   longitude: number
-  story_prompt: string
+  story_prompt?: string
   audio_url?: string | null
   image_url?: string | null
   images?: unknown
@@ -25,26 +37,7 @@ export type LocationRow = {
   importance_tier?: string | null
   importance_score?: number | null
   location_translations?: LocationTranslationRow[] | null
-}
-
-const parseImages = (value: unknown): LandmarkImage[] => {
-  if (!Array.isArray(value)) {
-    return []
-  }
-
-  return value.flatMap((item) => {
-    if (typeof item !== 'object' || item === null || !('url' in item)) {
-      return []
-    }
-
-    const url = String(item.url)
-    if (!url) {
-      return []
-    }
-
-    const alt = 'alt' in item && item.alt != null ? String(item.alt) : undefined
-    return [{ url, alt }]
-  })
+  location_media?: LocationMediaRow[] | null
 }
 
 const normalizeAudioUrl = (audioUrl: string | null | undefined, locale: AppLocale): string | null => {
@@ -90,12 +83,19 @@ export type MapPinRow = {
   importance_tier?: string | null
   importance_score?: number | null
   location_translations?: Pick<LocationTranslationRow, 'locale' | 'name' | 'audio_url'>[] | null
+  location_media?: LocationMediaRow[] | null
 }
+
+const primaryApprovedMedia = (row: { location_media?: LocationMediaRow[] | null }) =>
+  (row.location_media ?? [])
+    .filter((item) => item.review_status === 'approved' && item.commercial_use_allowed)
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))[0] ?? null
 
 export const mapLocationToMapPin = (row: MapPinRow, locale: AppLocale = DEFAULT_LOCALE): MapPin => {
   const translation = pickTranslation(row.location_translations, locale)
   const name = translation?.name ?? row.name
   const audioUrl = normalizeAudioUrl(translation?.audio_url ?? row.audio_url, locale)
+  const media = primaryApprovedMedia(row)
 
   return {
     id: String(row.id),
@@ -103,7 +103,13 @@ export const mapLocationToMapPin = (row: MapPinRow, locale: AppLocale = DEFAULT_
     lat: row.latitude,
     lng: row.longitude,
     audio_url: audioUrl,
-    image_url: row.image_url ?? null,
+    image_url: media?.url ?? null,
+    image_attribution: media ? {
+      author: media.author ?? 'Unknown author',
+      license: media.license ?? 'Licence not specified',
+      licenseUrl: media.license_url ?? undefined,
+      sourceUrl: media.source_url ?? '',
+    } : undefined,
     locale,
     source: (row.source as LandmarkSource | null) ?? undefined,
     landmark_type: row.landmark_type ?? undefined,
@@ -115,14 +121,14 @@ export const mapLocationToMapPin = (row: MapPinRow, locale: AppLocale = DEFAULT_
 
 export const mapLocationToLandmark = (row: LocationRow, locale: AppLocale = DEFAULT_LOCALE): Landmark => {
   const pin = mapLocationToMapPin(row, locale)
-  const images = parseImages(row.images)
+  const media = primaryApprovedMedia(row)
   const translation = pickTranslation(row.location_translations, locale)
-  const storyPrompt = translation?.story_prompt ?? row.story_prompt
+  const storyPrompt = translation?.story_prompt ?? row.story_prompt ?? ''
 
   return {
     ...pin,
     story_prompt: storyPrompt,
-    image_url: pin.image_url ?? images[0]?.url ?? null,
-    images,
+    image_url: media?.url ?? null,
+    images: media ? [{ url: media.url, alt: media.alt_text ?? undefined }] : [],
   }
 }

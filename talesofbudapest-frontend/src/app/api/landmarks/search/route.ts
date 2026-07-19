@@ -15,7 +15,9 @@ const SEARCH_SELECT = `
   map_theme,
   importance_tier,
   importance_score,
-  location_translations (locale, name, audio_url)
+  publication_status,
+  location_translations (locale, name, audio_url),
+  location_media (url, alt_text, author, source_url, license, license_url, sort_order, review_status, commercial_use_allowed)
 `
 
 const DEFAULT_LOCATION_NAMES = [
@@ -58,6 +60,7 @@ export const GET = async (request: Request) => {
       const featuredResult = await supabase
         .from('locations')
         .select(SEARCH_SELECT)
+        .eq('publication_status', 'published')
         .in('name', [...DEFAULT_LOCATION_NAMES])
 
       if (featuredResult.error) throw new Error(featuredResult.error.message)
@@ -71,17 +74,22 @@ export const GET = async (request: Request) => {
       return NextResponse.json({ pins })
     }
 
-    const [canonicalResult, translationResult] = await Promise.all([
-      supabase.from('locations').select(SEARCH_SELECT).ilike('name', `%${searchTerm}%`).limit(24),
+    const [canonicalResult, translationResult, aliasResult] = await Promise.all([
+      supabase.from('locations').select(SEARCH_SELECT).eq('publication_status', 'published').ilike('name', `%${searchTerm}%`).limit(24),
       supabase.from('location_translations').select('location_id').ilike('name', `%${searchTerm}%`).limit(24),
+      supabase.from('location_aliases').select('location_id').ilike('alias', `%${searchTerm}%`).limit(24),
     ])
 
     if (canonicalResult.error) throw new Error(canonicalResult.error.message)
     if (translationResult.error) throw new Error(translationResult.error.message)
+    if (aliasResult.error) throw new Error(aliasResult.error.message)
 
-    const translatedIds = [...new Set((translationResult.data ?? []).map((row) => row.location_id))]
+    const translatedIds = [...new Set([
+      ...(translationResult.data ?? []).map((row) => row.location_id),
+      ...(aliasResult.data ?? []).map((row) => row.location_id),
+    ])]
     const translatedResult = translatedIds.length
-      ? await supabase.from('locations').select(SEARCH_SELECT).in('id', translatedIds)
+      ? await supabase.from('locations').select(SEARCH_SELECT).eq('publication_status', 'published').in('id', translatedIds)
       : { data: [], error: null }
 
     if (translatedResult.error) throw new Error(translatedResult.error.message)

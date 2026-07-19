@@ -33,13 +33,16 @@ export const POST = async (request: Request) => {
     }
     const usedLandmarkIds = new Set(
       chapters
-        .map((chapter: { landmarkId?: string | null }) => chapter.landmarkId)
+        .map((chapter: { locationId?: string | null; landmarkId?: string | null }) =>
+          chapter.locationId ?? chapter.landmarkId)
         .filter((id: string | null | undefined): id is string => Boolean(id)),
     )
     await consumeExpensiveRequest({ supabase, request, visitorId, action: 'tour_replace' })
     const { data: landmarks, error: landmarksError } = await supabase
       .from('locations')
       .select(NARRATIVE_LANDMARK_SELECT)
+      .eq('publication_status', 'published')
+      .eq('tour_eligible', true)
 
     if (landmarksError) {
       throw new Error(landmarksError.message)
