@@ -166,7 +166,10 @@
     "quickStarts": {
       "flagshipTitle": "How Budapest Became Budapest",
       "flagshipTagline": "About 2¼ h · nine turning points",
-      "flagshipImageAlt": "Hungarian Parliament and the Danube on the flagship Budapest history walk"
+      "flagshipImageAlt": "Hungarian Parliament and the Danube on the flagship Budapest history walk",
+      "jewishQuarterTitle": "Jewish Quarter & Ruin Bars",
+      "jewishQuarterTagline": "About 1¾ h · faith, survival and nightlife",
+      "jewishQuarterImageAlt": "Dohány Street Synagogue in Budapest"
     },
     "styleQuestion": "How do you like your history?",
     "styleHelper": "This sets the pace and depth of your tour.",

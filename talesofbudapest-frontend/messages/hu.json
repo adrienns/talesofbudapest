@@ -166,7 +166,10 @@
     "quickStarts": {
       "flagshipTitle": "Hogyan lett Budapestből Budapest?",
       "flagshipTagline": "Kb. 2¼ óra · kilenc fordulópont",
-      "flagshipImageAlt": "Az Országház és a Duna a kiemelt budapesti történelmi sétán"
+      "flagshipImageAlt": "Az Országház és a Duna a kiemelt budapesti történelmi sétán",
+      "jewishQuarterTitle": "Zsidó negyed és romkocsmák",
+      "jewishQuarterTagline": "Kb. 1¾ óra · hit, túlélés és éjszakai élet",
+      "jewishQuarterImageAlt": "A Dohány utcai zsinagóga Budapesten"
     },
     "styleQuestion": "Hogyan szereted a történelmet?",
     "styleHelper": "Ez határozza meg a túra tempóját és mélységét.",
