@@ -164,8 +164,11 @@ the schedule assume uncapped free throughput.
 
 V3 is the pipeline used for the restricted `jewish-budapest` monograph. Design
 lives in [HISTORICAL_EXTRACTION_V3_HANDOFF.md](HISTORICAL_EXTRACTION_V3_HANDOFF.md);
-current state, measured costs, and known defects live in
-[HISTORICAL_EXTRACTION_V3_HANDOFF_2026-07-17.md](HISTORICAL_EXTRACTION_V3_HANDOFF_2026-07-17.md).
+frozen models / address / OCR in
+[HISTORICAL_EXTRACTION_V3_HANDOFF_2026-07-17.md](HISTORICAL_EXTRACTION_V3_HANDOFF_2026-07-17.md);
+**current quality, eval, gold, and rescore** in
+[HISTORICAL_EXTRACTION_V3_QUALITY_2026-07-20.md](HISTORICAL_EXTRACTION_V3_QUALITY_2026-07-20.md).
+
 Entry point: `npm run extract:historical:v3` (add `--preflight-only` for a free
 local dry run that makes no paid calls).
 
@@ -173,27 +176,32 @@ Stages, in order. Everything before stage 6 is deterministic, local, and free:
 
 | # | Stage | What it does |
 |---|---|---|
-| 1 | Layout mask (`lib/historicalPdfLayout.js`) | Poppler `-bbox-layout` coordinates mask header/footer furniture **while preserving text length**, so raw offsets stay immutable. Fails closed if Poppler fails. |
+| 1 | Layout mask (`lib/historicalPdfLayout.js`) | Poppler `-bbox-layout` coordinates mask header/footer furniture **while preserving text length**, so raw offsets stay immutable. Fails closed if Poppler fails. Titles/captions use body median font size (larger = title, smaller + cues = caption). |
 | 2 | Reading view (`nlp/gliner2_mentions.py`) | Joins line-broken words (`syna-\ngogue`), repairs letter-adjacent Hungarian umlaut damage (`temet6` → `temető`), and keeps a reversible per-character map back to raw offsets. |
 | 3 | Local NLP | GLiNER2 entity mentions + a spaCy noun-phrase ledger (`nlp/noun_phrases.py`, `--noun-ledger`) for the ordinary heads GLiNER misses (tomb, school, gravestone). |
 | 4 | Addresses (`lib/historicalAddresses.js`) | Gazetteer-matched street/address references with exact offsets; ambiguous multi-district streets placed from page context only; building mentions anchored to a following address. |
-| 5 | Identity + clauses | Source-local entity index (aliases merged only when unambiguous; buildings keyed by head + street + house number; OCR variants folded via `lib/historicalOcrLexicon.js`), then the clause ledger: every clause gets an ID, exact offsets, mentions, and risk flags. |
+| 5 | Identity + clauses | Source-local entity index (aliases merged only when unambiguous; buildings keyed by head + street + house number; OCR variants folded via `lib/historicalOcrLexicon.js`), then the clause ledger: every clause gets an ID, exact offsets, mentions, and risk flags. Quote spans are not split mid-quote. |
 | 6 | Subject memory (`lib/historicalSubjectMemory.js`) | Typed focus stack resolves pronouns, possessives, and definite descriptions **before any paid call**. Owner and owned stay distinct (`his tomb`). Ambiguity is recorded, never guessed. State persists across strictly ascending pages. |
 | 7 | Primary extraction | One cheap call per page. Model returns compact TSV referencing supplied clause/mention IDs only — it never writes quotations, so evidence cannot be misquoted by construction. |
 | 8 | Independent audit | A second model reads the same pages without seeing the first model's answers. Agreement ⇒ `supported`. |
 | 9 | Quality adjudication | Disagreements and risky items escalate to the judge, which must rule per candidate with a written reason. Funded from a reserve that the whole batch must afford up front, or the run stops `incomplete_budget` — quality is never downgraded to fit a budget. |
-| 10 | Artifacts | Items, coverage, subject transitions, addresses, layout, the subject-memory state file, a report, and the self-contained facts browser. |
+| 10 | Structural item gate (`lib/historicalItemQuality.js`) | Local post-pass: ground resolved `He`/`His` into the statement; demote meta claims, unresolved pronoun leads, caption furniture in evidence, and bare vague agents. Free re-apply via `npm run rescore:historical:v3`. |
+| 11 | Artifacts | Items, coverage, subject transitions, addresses, layout, the subject-memory state file, a report, and the self-contained facts browser. Optional `canonical_events` via `cli/transform-v3-to-kg.js`. |
 
 Non-negotiables specific to V3:
 
 - **Evidence is attached from local clause offsets, never from model output.**
 - **Supported ≠ true.** It means two independent models agreed *and* every
-  reference in the item resolved. Two cheap models have agreed on caption junk.
+  reference in the item resolved (subject to the structural gate). Two cheap
+  models have agreed on caption junk before — negatives and the furniture gate
+  catch that class of failure.
 - **Nothing fails silently.** `unresolved_references_log`, `ocr_damage_log`,
   ambiguity records, and per-item verdict reasons exist so every defect can be
-  found, classified, and fixed. See the confession loop in the handoff.
+  found, classified, and fixed.
 - **No promotion claim without human-adjudicated held-out gold.** The eval
   harness (`npm run eval:historical:v3`) fails closed and stamps `gold_source`.
+  Development scoring: `npm run eval:historical:v3:dev` (see the quality handoff
+  for strict vs sibling-adjusted metrics).
 
 ### 3.1 Next monograph runbook
 

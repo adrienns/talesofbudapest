@@ -32,6 +32,7 @@
     "extract:restricted:deep": "npm run extract:restricted:deep --workspace=talesofbudapest-backend --",
     "load:mek:kg": "npm run load:mek:kg --workspace=talesofbudapest-backend",
     "load:restricted:kg": "npm run load:restricted:kg --workspace=talesofbudapest-backend --",
+    "load:kg:plan": "npm run load:kg:plan --workspace=talesofbudapest-backend --",
     "embed:kg": "npm run embed:kg --workspace=talesofbudapest-backend --",
     "promote:kg-location": "npm run promote:kg-location --workspace=talesofbudapest-backend --",
     "poll:open-wikidata": "npm run poll:open-wikidata -w ingest --",

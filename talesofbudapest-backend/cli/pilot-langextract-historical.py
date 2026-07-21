@@ -8,12 +8,16 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import difflib
 import hashlib
 import json
 import os
 import re
+import subprocess
+import sys
 import threading
 import time
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +38,15 @@ ROW_SEPARATOR = "|"
 VALID_KINDS = {"E", "A"}
 VALID_POLARITIES = {"+", "N", "?"}
 VALID_MODALITIES = {"asserted", "reported", "believed", "planned", "hypothetical", "uncertain"}
-REFERENCE_PREFIX = re.compile(r"^(he|his|him|she|her|hers|they|their|them|it|its)\b", re.IGNORECASE)
+PRONOUN_PREFIX = re.compile(r"^(he|his|him|she|her|hers|they|their|them|it|its)\b", re.IGNORECASE)
+DEMONSTRATIVE_PREFIX = re.compile(r"^(this|that|these|those)\b", re.IGNORECASE)
+DEFINITE_PREFIX = re.compile(r"^the\s+[A-Za-z]", re.IGNORECASE)
+# Kept as a compatibility alias for older guard code. New code should use
+# is_referential_subject(), which also covers repeated descriptions such as
+# "this institute" and "the synagogue".
+REFERENCE_PREFIX = PRONOUN_PREFIX
+INTERNAL_MODEL_ID = re.compile(r"^[a-z]\d{2,}$", re.IGNORECASE)
+STRUCTURE_HEADS = r"synagogue|temple|building|institute|hospital|clinic|school|house|prayer-house|sanctuary|cemetery|home|palace|hall"
 CACHE_VERSION = "historical-langextract-v1"
 REQUEST_TIMEOUT_SECONDS = 180.0
 
@@ -155,6 +167,11 @@ class MeteredOpenAIModel(OpenAILanguageModel):
             try:
                 retry_prompt = prompt if attempt == 0 else f"{prompt}\n\nRETRY: Return complete, shorter JSON. Close every string, array, and object."
                 request = self._build_chat_completions_params(retry_prompt, config)
+                extra_body = dict(request.get("extra_body") or {})
+                extra_body["provider"] = {"sort": "price"}
+                if str(request.get("model") or "").startswith("google/gemini-"):
+                    extra_body["reasoning"] = {"effort": "none"}
+                request["extra_body"] = extra_body
                 cached = self.cache.get("primary", request)
                 if cached:
                     try:
@@ -228,13 +245,24 @@ def english_words() -> set[str]:
     return {word.strip().lower() for word in dictionary.read_text("utf-8", errors="ignore").splitlines() if word.strip().isalpha()}
 
 
+def trailing_footer_start(source: str) -> int | None:
+    matches = list(re.finditer(r"(?m)^([^\n]+)\s*$", source.rstrip()))
+    if not matches:
+        return None
+    match = matches[-1]
+    line = match.group(1).strip()
+    if not (re.match(r"^\d{1,4}\s+", line) or re.search(r"\s\d{1,4}$", line)):
+        return None
+    letters = [char for char in line if char.isalpha()]
+    uppercase_ratio = sum(char.isupper() for char in letters) / len(letters) if letters else 0
+    return match.start(1) if len(letters) >= 8 and uppercase_ratio >= 0.55 else None
+
+
 def boundary_repair(previous_page: int, previous: str, next_page: int, following: str, words: set[str]) -> dict[str, Any] | None:
     suffix_match = re.match(r"\s*([a-z]{3,})", following)
     if not suffix_match:
         return None
     suffix = suffix_match.group(1)
-    tail_start = max(0, len(previous) - 1800)
-    candidates = []
     def recognized(word: str) -> bool:
         stems = {word}
         if word.endswith("ed"):
@@ -244,15 +272,20 @@ def boundary_repair(previous_page: int, previous: str, next_page: int, following
         if word.endswith("s"):
             stems.add(word[:-1])
         return not words or any(stem in words for stem in stems)
-    for match in re.finditer(r"\b([A-Za-z]{2,})-[ \t]*\n", previous[tail_start:]):
-        prefix = match.group(1)
-        joined = (prefix + suffix).lower()
-        if recognized(joined):
-            raw_hyphen = tail_start + match.start(0) + len(prefix)
-            candidates.append((raw_hyphen, prefix, joined))
-    if not candidates:
+    # A cross-page join is legal only when the hyphenated fragment is the
+    # literal final token of the previous page. The older search over the last
+    # 1,800 characters could grab an unrelated "re-" inside a caption and
+    # truncate everything after it (page 519 + "own" became "reown").
+    footer_start = trailing_footer_start(previous)
+    content = previous[:footer_start].rstrip() if footer_start is not None else previous.rstrip()
+    match = re.search(r"\b([A-Za-z]{2,})-[ \t]*$", content)
+    if not match:
         return None
-    raw_hyphen, prefix, joined = candidates[-1]
+    prefix = match.group(1)
+    joined = (prefix + suffix).lower()
+    if not recognized(joined):
+        return None
+    raw_hyphen = match.start(0) + len(prefix)
     return {
         "normalized_text": joined,
         "previous_page": previous_page,
@@ -315,13 +348,14 @@ def build_normalized_document(pages: dict[int, str], from_page: int, page_count:
         for page in selected[:-1]
         if (repair := boundary_repair(page, pages[page], page + 1, pages[page + 1], words))
     }
+    footer_starts = {page: start for page in selected if (start := trailing_footer_start(pages[page])) is not None}
     chars: list[str] = []
     coordinates: list[Coordinate | None] = []
     repair_rows: list[dict[str, Any]] = []
     for index, page in enumerate(selected):
         source = pages[page]
         start = max(0, len(source) - context_chars) if page == from_page - 1 else 0
-        end = repairs.get(page, {}).get("previous_end", len(source))
+        end = repairs.get(page, {}).get("previous_end", footer_starts.get(page, len(source)))
         normalized, mapped = normalize_slice(page, source, start, end)
         chars.extend(normalized)
         coordinates.extend(mapped)
@@ -329,8 +363,14 @@ def build_normalized_document(pages: dict[int, str], from_page: int, page_count:
         if repair:
             repair_rows.append(repair)
         elif index < len(selected) - 1:
-            chars.extend(["\n", "\n"])
-            coordinates.extend([None, None])
+            following = pages[selected[index + 1]]
+            content = source[:end].rstrip()
+            continuous = bool(content and following.lstrip() and content[-1] not in ".!?;:" and following.lstrip()[0].islower())
+            separator = [" "] if continuous else ["\n", "\n"]
+            if continuous and chars and chars[-1] == " ":
+                separator = []
+            chars.extend(separator)
+            coordinates.extend([None] * len(separator))
     return "".join(chars), coordinates, repair_rows
 
 
@@ -422,6 +462,462 @@ Rules:
 """
 
 
+def is_referential_subject(value: str | None) -> bool:
+    """Return true for discourse references, not merely personal pronouns.
+
+    Definite noun phrases are deliberately included. They may introduce a new
+    entity, so the resolver is allowed to return ``?``; excluding them entirely
+    made page-initial phrases such as "the synagogue" impossible to link.
+    """
+    value = (value or "").strip()
+    if not value or len(value) > 180:
+        return False
+    return bool(PRONOUN_PREFIX.match(value) or DEMONSTRATIVE_PREFIX.match(value) or DEFINITE_PREFIX.match(value))
+
+
+def is_standalone_pronoun(value: str | None) -> bool:
+    return bool(re.fullmatch(r"he|his|him|she|her|hers|they|their|them|it|its", value or "", re.IGNORECASE))
+
+
+def safe_memory_subject(value: str | None) -> str | None:
+    value = re.sub(r"\s+", " ", (value or "")).strip(" \t\r\n.,;:()[]{}\"'")
+    if not value or len(value) > 140 or INTERNAL_MODEL_ID.fullmatch(value):
+        return None
+    if is_standalone_pronoun(value):
+        return None
+    return value
+
+
+def classify_source_zone(statement: str) -> tuple[str, str, list[str]]:
+    """Separate historical claims from citations without deleting either."""
+    compact = re.sub(r"\s+", " ", statement).strip()
+    reference_only = bool(
+        re.match(r"^(?:From:|Repr\.?[:;]|Photo:|Drawing from\b|Inv\. no\.|See pp?\.|For the text see\b)", compact, re.IGNORECASE)
+        or re.match(r"^[A-Z][A-Za-z .'-]+,\s+[A-Z][^()]{3,}\(\d{4}\),\s+no\.\s*\d+", compact)
+    )
+    quoted_source = compact.startswith(("“", '"')) and len(compact) > 180
+    caption = bool(re.match(r"^(?:\d+[.:]\d*\.?\s+|Portrait of\b|The .{0,60}synagogue,\s+ca\.)", compact, re.IGNORECASE))
+    if reference_only or quoted_source:
+        return "reference", "reference_only", ["source_zone_reference_only"]
+    if caption:
+        return "caption", "covered", ["source_zone_caption"]
+    return "body", "covered", []
+
+
+def clause_ledger_for_page(pages: dict[int, str], page: int) -> list[dict[str, Any]]:
+    """Sentence-complete audit units, including a previous-page bridge."""
+    if page - 1 in pages:
+        text, mapping, _ = build_normalized_document(pages, page, 1, 2600)
+    else:
+        chars, raw_mapping = normalize_slice(page, pages[page], 0, len(pages[page]))
+        text, mapping = "".join(chars), raw_mapping
+    if not text:
+        return []
+    starts = [0]
+    starts.extend(match.end() for match in re.finditer(r"(?<=[.!?])\s+(?=[\"“'‘(\[]*[A-Z0-9])", text))
+    starts = sorted(set(starts))
+    clauses = []
+    for index, start in enumerate(starts):
+        end = starts[index + 1] if index + 1 < len(starts) else len(text)
+        while start < end and text[start].isspace():
+            start += 1
+        while end > start and text[end - 1].isspace():
+            end -= 1
+        if end - start < 12:
+            continue
+        evidence = evidence_for_span(start, end, mapping, pages)
+        target_evidence = [row for row in evidence if row["page_ref"] == page]
+        if not target_evidence:
+            continue
+        anchor = target_evidence[0]
+        clauses.append({
+            "clause_id": f"p{page}c{len(clauses) + 1:03d}",
+            "page_ref": page,
+            "start_offset": anchor["start_offset"],
+            "end_offset": anchor["end_offset"],
+            "text": text[start:end],
+            "evidence": evidence,
+        })
+    return clauses
+
+
+def statements_for_clause(items: list[dict[str, Any]], clause: dict[str, Any]) -> list[str]:
+    rows = []
+    for item in items:
+        for evidence in item.get("evidence") or []:
+            if any(
+                evidence.get("page_ref") == target.get("page_ref")
+                and int(evidence.get("start_offset", 0)) < int(target.get("end_offset", 0))
+                and int(evidence.get("end_offset", 0)) > int(target.get("start_offset", 0))
+                for target in clause.get("evidence") or []
+            ):
+                rows.append(item.get("statement_en") or "")
+                break
+    return [row for row in rows if row]
+
+
+def fact_similarity(left: str, right: str) -> float:
+    left_words = set(re.findall(r"[a-z0-9]+", left.lower()))
+    right_words = set(re.findall(r"[a-z0-9]+", right.lower()))
+    if not left_words or not right_words:
+        return 0.0
+    return len(left_words & right_words) / len(left_words | right_words)
+
+
+def same_subject_duplicate(candidate: dict[str, Any], existing: dict[str, Any]) -> bool:
+    candidate_subject = safe_memory_subject(candidate.get("resolved_subject") or candidate.get("literal_subject"))
+    existing_subject = safe_memory_subject(existing.get("resolved_subject") or existing.get("literal_subject"))
+    if not candidate_subject or not existing_subject:
+        return False
+    folded_candidate = ocr_identity(candidate_subject)
+    folded_existing = ocr_identity(existing_subject)
+    if folded_candidate != folded_existing and difflib.SequenceMatcher(None, folded_candidate, folded_existing).ratio() < 0.90:
+        return False
+    left = set(re.findall(r"[a-z0-9]+", candidate.get("statement_en", "").lower()))
+    right = set(re.findall(r"[a-z0-9]+", existing.get("statement_en", "").lower()))
+    return bool(left and right and (left <= right or fact_similarity(candidate.get("statement_en", ""), existing.get("statement_en", "")) >= 0.55))
+
+
+def ocr_identity(value: str) -> str:
+    folded = unicodedata.normalize("NFKD", value.lower()).encode("ascii", "ignore").decode("ascii")
+    folded = re.sub(r"(?<=[a-z])6(?=[a-z])", "o", folded)
+    return re.sub(r"[^a-z0-9]+", "", folded)
+
+
+def deterministic_audit_rejection(candidate: dict[str, Any]) -> str | None:
+    statement = candidate.get("statement_en") or ""
+    evidence = ((candidate.get("evidence") or [{}])[0].get("quote") or "").strip()
+    if re.search(r"\b[A-Z]{3,}(?:\s+(?:OF|THE|AND|[A-Z]{3,})){3,}\s+\d{1,4}\b", statement):
+        return "page footer promoted as a claim"
+    if re.match(r"^(?:Drawing|Design|Ground-plan|Photo|Repr\.)\s+by\b", evidence, re.IGNORECASE):
+        return "caption credit interleaved with body prose"
+    return None
+
+
+def deterministic_direct_entailment(candidate: dict[str, Any]) -> bool:
+    """Accept a long predicate copied verbatim after harmless subject expansion."""
+    statement = candidate.get("statement_en") or ""
+    literal = candidate.get("literal_subject") or ""
+    evidence = " ".join(row.get("quote") or "" for row in candidate.get("evidence") or [])
+    predicate = statement
+    if literal and statement.lower().startswith(literal.lower()):
+        predicate = statement[len(literal):]
+    normalized_predicate = " ".join(re.findall(r"[a-z0-9]+", predicate.lower()))
+    normalized_evidence = " ".join(re.findall(r"[a-z0-9]+", evidence.lower()))
+    return len(normalized_predicate.split()) >= 5 and normalized_predicate in normalized_evidence
+
+
+def boundary_requires_escalation(clause: dict[str, Any], target_page: int) -> bool:
+    """Escalate real continuations, not adjacent captions/page numbers."""
+    evidence = clause.get("evidence") or []
+    if len({row.get("page_ref") for row in evidence}) < 2:
+        return False
+    target_quote = next((row.get("quote") or "" for row in evidence if row.get("page_ref") == target_page), "").lstrip()
+    previous_quote = " ".join(row.get("quote") or "" for row in evidence if row.get("page_ref") != target_page).rstrip()
+    if not target_quote:
+        return False
+    starts_word_continuation = bool(re.match(r"^[a-záéíóöőúüű]", target_quote))
+    explicit_hyphen = previous_quote.endswith(("-", "‐", "‑", "–"))
+    return starts_word_continuation or explicit_hyphen
+
+
+def reject_post_resolution_duplicates(items: list[dict[str, Any]]) -> int:
+    accepted: list[dict[str, Any]] = []
+    rejected = 0
+    for item in items:
+        if item.get("verification", {}).get("verdict") == "unsupported":
+            continue
+        is_audit = "coverage_audit_only" in (item.get("risk_flags") or [])
+        duplicate = is_audit and any(
+            re.sub(r"\W+", "", item.get("statement_en", "").lower())
+            == re.sub(r"\W+", "", previous.get("statement_en", "").lower())
+            or same_subject_duplicate(item, previous)
+            for previous in accepted
+        )
+        if duplicate:
+            item["verification"] = {"verdict": "unsupported", "reason": "duplicate of an already grounded primary item"}
+            item["disposition"] = "reference_only"
+            item["risk_flags"] = sorted(set([*(item.get("risk_flags") or []), "post_resolution_duplicate"]))
+            rejected += 1
+        else:
+            accepted.append(item)
+    return rejected
+
+
+def audit_missing_atomic_items(
+    items: list[dict[str, Any]],
+    memory_items: list[dict[str, Any]],
+    pages: dict[int, str],
+    target_pages: list[int],
+    source_id: str,
+    api_key: str,
+    model_id: str,
+    quality_model_id: str,
+    max_cost_usd: float,
+    cache: JsonlResponseCache,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Independent, clause-complete omission audit; one compact call/page."""
+    client = OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1", timeout=REQUEST_TIMEOUT_SECONDS, max_retries=0)
+    added: list[dict[str, Any]] = []
+    usage_total = {"calls": 0, "cache_hits": 0, "cache_misses": 0, "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost": 0.0, "saved_cost": 0.0}
+    page_rows = []
+    instruction = """You are the independent omission auditor for a historical-book extraction.
+Every CLAUSE must be checked against its EXISTING atomic facts. Return only explicit historical events or assertions that EXISTING missed. Split roles, relationships, dates, actions, states, and secondary events into separate atomic rows. Preserve negation, uncertainty, plans, and attribution. Do not output bibliography, page furniture, photo credits, inventory/source citations, or a long quoted passage. Resolve a referring subject from MEMORY/TEXT when clear; otherwise use ?. Never invent outside knowledge.
+
+Important completeness examples:
+- TEXT='Dana, an architect and council member, was buried here.' EXISTING='Dana was buried here.' Missing rows: Dana was an architect; Dana was a council member.
+- TEXT='The account was told by a nurse who survived; she climbed out of the pit.' EXISTING='The account was told by a nurse.' Missing rows: The nurse survived; The nurse climbed out of the pit.
+- TEXT='The melodies, rooted in Polish tradition, reflected a newer style.' EXISTING='The melodies reflected a newer style.' Missing row: The melodies were rooted in Polish tradition.
+- TEXT='Alex, supported by Bea, established a school.' EXISTING='The school was established.' Missing rows: Alex established the school; Bea supported the establishment of the school.
+- TEXT='Kai held the position only briefly; Kai was forced to resign.' EXISTING='Kai was forced to resign.' Missing row: Kai held the position only briefly.
+
+For each named person or organization in every clause, explicitly check appositive roles, who performed the action, passive 'by' agents, support/co-agent relations, duration, purpose, and subordinate or relative-clause events. A broad existing sentence does not replace searchable atomic facts with the correct subject.
+
+Output zero or more lines, exactly:
+clause_id|E_or_A|open_type|+_N_?|modality|literal_subject|resolved_subject|atomic_statement
+The labels above describe slots; NEVER copy words such as E_or_A, open_type, +_N_?, or modality literally. Use actual allowed values.
+
+Valid example output:
+p1c001|A|occupation|+|asserted|Dana|Dana|Dana was an architect.
+p1c001|A|membership|+|asserted|Dana|Dana|Dana was a council member.
+p1c002|E|survival|+|asserted|a nurse|a nurse|A nurse survived the shooting.
+p1c002|E|escape|+|asserted|she|a nurse|A nurse climbed out of the pit.
+
+No JSON, markdown, explanation, or pipes inside fields. Output NONE if nothing is missing.
+"""
+    for page in target_pages:
+        clauses = clause_ledger_for_page(pages, page)
+        if not clauses:
+            continue
+        memory_key = (page, 0, 0, "audit")
+        memory = discourse_subject_memory([*memory_items, *items, *added], memory_key)
+        clause_rows = []
+        for clause in clauses:
+            existing = statements_for_clause([*items, *added], clause)
+            existing_text = " || ".join(value.replace("|", "/") for value in existing) if existing else "-"
+            clause_rows.append(f"{clause['clause_id']}|TEXT={clause['text'].replace('|', '/')}|EXISTING={existing_text}")
+        prompt = instruction + "\nMEMORY:\n" + (" ; ".join(memory) if memory else "-") + "\n\nCLAUSES:\n" + "\n".join(clause_rows)
+        request = {
+            "model": model_id,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0,
+            "max_tokens": min(1800, 250 + len(clauses) * 22),
+            "extra_body": {"provider": {"sort": "price"}, **({"reasoning": {"effort": "none"}} if model_id.startswith("google/gemini-") else {})},
+        }
+        cached = cache.get("coverage-audit", request)
+        raw_output = cached["output"] if cached else ""
+        usage = (cached or {}).get("usage") or {}
+        paid = 0.0
+        if cached:
+            usage_total["cache_hits"] += 1
+            usage_total["saved_cost"] += float(usage.get("cost") or 0)
+        else:
+            response = client.chat.completions.create(**request)
+            dumped = response.model_dump()
+            usage = dumped.get("usage") or {}
+            raw_output = response.choices[0].message.content or ""
+            paid = float(usage.get("cost") or usage.get("cost_details", {}).get("upstream_inference_cost") or 0.0)
+            usage_total["calls"] += 1
+            usage_total["cache_misses"] += 1
+            usage_total["prompt_tokens"] += int(usage.get("prompt_tokens") or 0)
+            usage_total["completion_tokens"] += int(usage.get("completion_tokens") or 0)
+            usage_total["total_tokens"] += int(usage.get("total_tokens") or 0)
+            usage_total["cost"] += paid
+            if usage_total["cost"] > max_cost_usd:
+                raise BudgetExceeded(f"coverage audit cost ${usage_total['cost']:.6f} exceeded ${max_cost_usd:.6f} cap")
+        by_id = {clause["clause_id"]: clause for clause in clauses}
+        audit_outputs = [(raw_output, model_id, "coverage_audit")]
+        boundary_request = None
+        boundary_cached = None
+        boundary_usage: dict[str, Any] = {}
+        boundary_paid = 0.0
+        boundary_clauses = [clause for clause in clauses if boundary_requires_escalation(clause, page)]
+        if boundary_clauses:
+            boundary_rows = []
+            for clause in boundary_clauses:
+                existing = statements_for_clause([*items, *added], clause)
+                existing_text = " || ".join(value.replace("|", "/") for value in existing) if existing else "-"
+                boundary_rows.append(f"{clause['clause_id']}|TEXT={clause['text'].replace('|', '/')}|EXISTING={existing_text}")
+            boundary_prompt = instruction + "\nThis is a page-boundary escalation. Pay special attention to every named agent, supporting person, role, duration, and action on both sides of the page break.\n\nCLAUSES:\n" + "\n".join(boundary_rows)
+            boundary_request = {
+                "model": quality_model_id,
+                "messages": [{"role": "user", "content": boundary_prompt}],
+                "temperature": 0,
+                "max_tokens": min(900, 250 + len(boundary_clauses) * 180),
+                "extra_body": {"provider": {"sort": "price"}, **({"reasoning": {"effort": "none"}} if quality_model_id.startswith("google/gemini-") else {})},
+            }
+            boundary_cached = cache.get("coverage-boundary-audit", boundary_request)
+            boundary_output = boundary_cached["output"] if boundary_cached else ""
+            boundary_usage = (boundary_cached or {}).get("usage") or {}
+            if boundary_cached:
+                usage_total["cache_hits"] += 1
+                usage_total["saved_cost"] += float(boundary_usage.get("cost") or 0)
+            else:
+                boundary_response = client.chat.completions.create(**boundary_request)
+                boundary_dumped = boundary_response.model_dump()
+                boundary_usage = boundary_dumped.get("usage") or {}
+                boundary_output = boundary_response.choices[0].message.content or ""
+                boundary_paid = float(boundary_usage.get("cost") or boundary_usage.get("cost_details", {}).get("upstream_inference_cost") or 0.0)
+                usage_total["calls"] += 1
+                usage_total["cache_misses"] += 1
+                usage_total["prompt_tokens"] += int(boundary_usage.get("prompt_tokens") or 0)
+                usage_total["completion_tokens"] += int(boundary_usage.get("completion_tokens") or 0)
+                usage_total["total_tokens"] += int(boundary_usage.get("total_tokens") or 0)
+                usage_total["cost"] += boundary_paid
+                if usage_total["cost"] > max_cost_usd:
+                    raise BudgetExceeded(f"boundary audit cost ${usage_total['cost']:.6f} exceeded ${max_cost_usd:.6f} cap")
+            audit_outputs.append((boundary_output, quality_model_id, "coverage_boundary_audit"))
+        parsed_count = 0
+        parsed_by_source: dict[str, int] = {}
+        page_candidates: list[dict[str, Any]] = []
+        for candidate_output, discovery_model, discovery_source in audit_outputs:
+            for line in candidate_output.replace("```", "").splitlines():
+                columns = [column.strip() for column in line.split(ROW_SEPARATOR)]
+                if len(columns) != 8 or columns[0] not in by_id:
+                    continue
+                parsed = parse_item_row(ROW_SEPARATOR.join(columns[1:]))
+                if not parsed:
+                    continue
+                clause = by_id[columns[0]]
+                existing_items = [*items, *added, *page_candidates]
+                if any(same_subject_duplicate(parsed, existing) for existing in existing_items):
+                    continue
+                source_zone, disposition, zone_flags = classify_source_zone(parsed["statement_en"])
+                parsed["risk_flags"] = sorted(set([*(parsed.get("risk_flags") or []), *zone_flags, "coverage_audit_only"]))
+                identity = json.dumps([source_id, clause["page_ref"], clause["start_offset"], clause["end_offset"], parsed], sort_keys=True, ensure_ascii=False)
+                page_candidates.append({
+                    "item_id": f"lxa_{hashlib.sha256(identity.encode()).hexdigest()[:20]}",
+                    **parsed,
+                    "evidence": clause["evidence"],
+                    "grounding_status": "clause_id_grounded",
+                    "source_zone": source_zone,
+                    "disposition": disposition,
+                    "discovery_sources": [discovery_model, discovery_source],
+                    "verification": {"verdict": "pending", "reason": "quality adjudication required for auditor-only discovery"},
+                    "_audit_clause_id": clause["clause_id"],
+                    "publication_status": "private",
+                })
+                parsed_count += 1
+                parsed_by_source[discovery_source] = parsed_by_source.get(discovery_source, 0) + 1
+        if (
+            not cached
+            and raw_output.strip()
+            and (parsed_by_source.get("coverage_audit", 0) or raw_output.strip().upper() == "NONE")
+        ):
+            cache.put("coverage-audit", request, raw_output, {
+                "prompt_tokens": int(usage.get("prompt_tokens") or 0),
+                "completion_tokens": int(usage.get("completion_tokens") or 0),
+                "total_tokens": int(usage.get("total_tokens") or 0),
+                "cost": paid,
+            })
+        if (
+            boundary_request
+            and not boundary_cached
+            and boundary_output.strip()
+            and (parsed_by_source.get("coverage_boundary_audit", 0) or boundary_output.strip().upper() == "NONE")
+        ):
+            cache.put("coverage-boundary-audit", boundary_request, boundary_output, {
+                "prompt_tokens": int(boundary_usage.get("prompt_tokens") or 0),
+                "completion_tokens": int(boundary_usage.get("completion_tokens") or 0),
+                "total_tokens": int(boundary_usage.get("total_tokens") or 0),
+                "cost": boundary_paid,
+            })
+        quality_paid = 0.0
+        supported_count = 0
+        if page_candidates:
+            quality_rows = []
+            quality_ids: dict[str, dict[str, Any]] = {}
+            for candidate in page_candidates:
+                clause = by_id[candidate.pop("_audit_clause_id")]
+                deterministic_rejection = deterministic_audit_rejection(candidate)
+                if deterministic_rejection:
+                    candidate["verification"] = {"verdict": "unsupported", "reason": deterministic_rejection}
+                    candidate["disposition"] = "reference_only"
+                    candidate["risk_flags"] = sorted(set([*(candidate.get("risk_flags") or []), "coverage_quality_rejected"]))
+                    continue
+                if deterministic_direct_entailment(candidate):
+                    candidate["verification"] = {"verdict": "supported", "reason": "predicate copied directly from grounded evidence"}
+                    supported_count += 1
+                    continue
+                quality_id = f"q{len(quality_ids) + 1:03d}"
+                quality_ids[quality_id] = candidate
+                quality_rows.append(
+                    f"{quality_id}|SOURCE={clause['text'].replace('|', '/')}|CLAIM={candidate['statement_en'].replace('|', '/')}"
+                )
+            if quality_ids:
+                quality_prompt = """Adjudicate auditor-only historical claims against their local source.
+Return Y only when the CLAIM is directly and explicitly stated in one coherent body-text sentence. Return N for inference, duplicate page furniture, bibliography/photo credit, a caption mixed with distant prose, or a claim combining words from unrelated layout regions. Do not use outside knowledge.
+Output every ID exactly once as qNNN|Y or qNNN|N. No explanation.
+
+CANDIDATES:
+""" + "\n".join(quality_rows)
+                quality_request = {
+                    "model": quality_model_id,
+                    "messages": [{"role": "user", "content": quality_prompt}],
+                    "temperature": 0,
+                    "max_tokens": min(500, 40 + len(quality_ids) * 10),
+                    "extra_body": {"provider": {"sort": "price"}, **({"reasoning": {"effort": "none"}} if quality_model_id.startswith("google/gemini-") else {})},
+                }
+                quality_cached = cache.get("coverage-quality", quality_request)
+                quality_output = quality_cached["output"] if quality_cached else ""
+                quality_usage = (quality_cached or {}).get("usage") or {}
+                if quality_cached:
+                    usage_total["cache_hits"] += 1
+                    usage_total["saved_cost"] += float(quality_usage.get("cost") or 0)
+                else:
+                    quality_response = client.chat.completions.create(**quality_request)
+                    quality_dumped = quality_response.model_dump()
+                    quality_usage = quality_dumped.get("usage") or {}
+                    quality_output = quality_response.choices[0].message.content or ""
+                    quality_paid = float(quality_usage.get("cost") or quality_usage.get("cost_details", {}).get("upstream_inference_cost") or 0.0)
+                    usage_total["calls"] += 1
+                    usage_total["cache_misses"] += 1
+                    usage_total["prompt_tokens"] += int(quality_usage.get("prompt_tokens") or 0)
+                    usage_total["completion_tokens"] += int(quality_usage.get("completion_tokens") or 0)
+                    usage_total["total_tokens"] += int(quality_usage.get("total_tokens") or 0)
+                    usage_total["cost"] += quality_paid
+                    if usage_total["cost"] > max_cost_usd:
+                        raise BudgetExceeded(f"coverage quality cost ${usage_total['cost']:.6f} exceeded ${max_cost_usd:.6f} cap")
+                quality_answers = {
+                    match.group(1).lower(): match.group(2).upper()
+                    for match in re.finditer(r"(?im)^\s*(q\d{3})\s*\|\s*([YN])\s*$", quality_output.replace("```", ""))
+                    if match.group(1).lower() in quality_ids
+                }
+                for quality_id, candidate in quality_ids.items():
+                    supported = quality_answers.get(quality_id) == "Y"
+                    candidate["verification"] = {
+                        "verdict": "supported" if supported else "unsupported",
+                        "reason": f"{quality_model_id} direct-local-entailment adjudication",
+                    }
+                    if not supported:
+                        candidate["disposition"] = "reference_only"
+                        candidate["risk_flags"] = sorted(set([*(candidate.get("risk_flags") or []), "coverage_quality_rejected"]))
+                    else:
+                        supported_count += 1
+                if not quality_cached and len(quality_answers) == len(quality_ids):
+                    cache.put("coverage-quality", quality_request, quality_output, {
+                        "prompt_tokens": int(quality_usage.get("prompt_tokens") or 0),
+                        "completion_tokens": int(quality_usage.get("completion_tokens") or 0),
+                        "total_tokens": int(quality_usage.get("total_tokens") or 0),
+                        "cost": quality_paid,
+                    })
+            added.extend(page_candidates)
+        page_rows.append({
+            "page": page, "clauses": len(clauses), "candidates": parsed_count,
+            "added": supported_count, "rejected": parsed_count - supported_count,
+            "cache_hit": bool(cached) and (not boundary_request or bool(boundary_cached)),
+            "paid_cost": paid + boundary_paid + quality_paid,
+            "unparsed_preview": raw_output[:1200] if parsed_count == 0 and raw_output.strip().upper() != "NONE" else None,
+        })
+    return added, {
+        "model": model_id, "quality_model": quality_model_id, "pages": page_rows,
+        "candidate_items": len(added),
+        "added_items": sum(1 for item in added if item.get("verification", {}).get("verdict") == "supported"),
+        "rejected_items": sum(1 for item in added if item.get("verification", {}).get("verdict") != "supported"),
+        "usage": usage_total,
+    }
+
+
 def parse_item_row(value: str) -> dict[str, Any] | None:
     columns = [column.strip() for column in value.split(ROW_SEPARATOR)]
     if len(columns) != 7:
@@ -431,16 +927,16 @@ def parse_item_row(value: str) -> dict[str, Any] | None:
         return None
     if not open_type or not statement or not literal_subject or not resolved_subject:
         return None
-    statement_reference = REFERENCE_PREFIX.match(statement)
-    literal_reference = REFERENCE_PREFIX.match(literal_subject)
+    statement_reference = PRONOUN_PREFIX.match(statement)
+    literal_reference = PRONOUN_PREFIX.match(literal_subject)
     if statement_reference and literal_reference and literal_subject.split()[0].lower() != statement_reference.group(1).lower():
         # One grounded clause can yield several rows. Do not let the clause's
         # first possessive phrase leak into a later row whose subject is "he".
         literal_subject = statement_reference.group(1)
         resolved_subject = "?"
     resolved_folded = resolved_subject.lower()
-    literal_reference = REFERENCE_PREFIX.match(literal_subject)
-    standalone_reference = bool(re.fullmatch(r"he|his|him|she|her|hers|they|their|them|it|its", literal_subject, re.IGNORECASE))
+    literal_reference = PRONOUN_PREFIX.match(literal_subject)
+    standalone_reference = is_standalone_pronoun(literal_subject)
     self_resolution = bool(literal_reference and re.sub(r"\W+", "", literal_subject.lower()) == re.sub(r"\W+", "", resolved_folded))
     ambiguous = resolved_subject == "?" or bool(re.fullmatch(r"he|his|him|she|her|hers|they|their|them|it|its", resolved_folded)) or self_resolution
     expletive = literal_subject.lower() == "it" and bool(
@@ -451,6 +947,13 @@ def parse_item_row(value: str) -> dict[str, Any] | None:
     risk_flags = []
     if polarity == "N" and not re.search(r"\b(not|no|never|cannot|neither|nor|without|failed|failure)\b", statement.lower()):
         risk_flags.append("polarity_label_without_negation")
+    discourse_reference = is_referential_subject(literal_subject)
+    # A model repeating "this institute" or "the synagogue" has not actually
+    # resolved it. Preserve the grammatical phrase, but send identity to the
+    # rolling discourse resolver.
+    descriptive_self_resolution = discourse_reference and re.sub(r"\W+", "", literal_subject.lower()) == re.sub(r"\W+", "", resolved_folded)
+    if descriptive_self_resolution and not literal_reference:
+        ambiguous = True
     return {
         "kind": "event" if kind == "E" else "assertion",
         "open_type": re.sub(r"[^a-z0-9]+", "_", open_type.lower()).strip("_")[:80],
@@ -458,9 +961,9 @@ def parse_item_row(value: str) -> dict[str, Any] | None:
         "modality": "uncertain" if polarity == "?" else modality,
         "literal_subject": None if literal_subject == "-" else literal_subject,
         "resolved_subject": None if resolved_subject in {"-", "?"} or (ambiguous and standalone_reference) else resolved_subject,
-        "reference_antecedent": resolved_subject if literal_reference and not ambiguous and not expletive else None,
+        "reference_antecedent": resolved_subject if discourse_reference and not ambiguous and not expletive else None,
         "reference_status": "not_applicable" if expletive else "ambiguous" if ambiguous else "model_subject" if resolved_subject != "-" else "not_applicable",
-        "reference_resolution_source": "primary_model" if literal_reference and not ambiguous and not expletive else None,
+        "reference_resolution_source": "primary_model" if discourse_reference and not ambiguous and not expletive else None,
         "statement_en": statement,
         "risk_flags": risk_flags,
     }
@@ -468,12 +971,105 @@ def parse_item_row(value: str) -> dict[str, Any] | None:
 
 def reference_group_key(item: dict[str, Any]) -> tuple[int, int, int, str] | None:
     literal = item.get("literal_subject") or ""
-    if not REFERENCE_PREFIX.match(literal):
+    if not is_referential_subject(literal):
         return None
     evidence = (item.get("evidence") or [None])[0]
     if not evidence:
         return None
     return (int(evidence["page_ref"]), int(evidence["start_offset"]), int(evidence["end_offset"]), literal.lower())
+
+
+def item_position(item: dict[str, Any]) -> tuple[int, int, int] | None:
+    evidence = (item.get("evidence") or [None])[0]
+    if not evidence:
+        return None
+    return int(evidence["page_ref"]), int(evidence["start_offset"]), int(evidence["end_offset"])
+
+
+def discourse_subject_memory(
+    items: list[dict[str, Any]],
+    key: tuple[int, int, int, str],
+    max_pages: int = 3,
+    limit: int = 16,
+) -> list[str]:
+    """Recent resolved subjects carried across page boundaries.
+
+    Memory is derived only from earlier grounded items. It is compact, ordered,
+    and book-local; no entity name is hardcoded. The raw context remains the
+    authority and the model may still return ``?``.
+    """
+    page, start, _, _ = key
+    rows: list[tuple[int, int, str]] = []
+    for item in items:
+        position = item_position(item)
+        if not position:
+            continue
+        item_page, item_start, _ = position
+        if item_page < page - max_pages or (item_page, item_start) >= (page, start):
+            continue
+        candidates = [
+            item.get("reference_antecedent"),
+            item.get("resolved_subject"),
+            item.get("literal_subject") if not is_referential_subject(item.get("literal_subject")) else None,
+        ]
+        for candidate in candidates:
+            if safe := safe_memory_subject(candidate):
+                rows.append((item_page, item_start, safe))
+                break
+    seen: set[str] = set()
+    memory: list[str] = []
+    for _, _, subject in reversed(rows):
+        folded = re.sub(r"\W+", "", subject.lower())
+        if folded in seen:
+            continue
+        seen.add(folded)
+        memory.append(subject)
+        if len(memory) >= limit:
+            break
+    return list(reversed(memory))
+
+
+def load_persisted_discourse_memory(path: Path, expected_previous_page: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    if not path.exists():
+        return [], {"loaded": False, "reason": "no memory file", "path": str(path)}
+    try:
+        payload = json.loads(path.read_text("utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return [], {"loaded": False, "reason": "invalid memory file", "path": str(path)}
+    if int(payload.get("last_page", -1)) != expected_previous_page:
+        return [], {
+            "loaded": False,
+            "reason": f"memory ends at page {payload.get('last_page')}, expected {expected_previous_page}",
+            "path": str(path),
+        }
+    rows = payload.get("items") if isinstance(payload.get("items"), list) else []
+    return rows, {"loaded": True, "items": len(rows), "last_page": expected_previous_page, "path": str(path)}
+
+
+def save_persisted_discourse_memory(path: Path, source_id: str, last_page: int, items: list[dict[str, Any]], max_pages: int = 3) -> None:
+    rows = []
+    for item in items:
+        position = item_position(item)
+        if not position or position[0] < last_page - max_pages + 1:
+            continue
+        if item.get("verification", {}).get("verdict") == "unsupported" or item.get("disposition") == "reference_only":
+            continue
+        subject = safe_memory_subject(item.get("reference_antecedent") or item.get("resolved_subject") or item.get("literal_subject"))
+        if not subject:
+            continue
+        rows.append({
+            "literal_subject": item.get("literal_subject"),
+            "resolved_subject": subject,
+            "reference_antecedent": item.get("reference_antecedent"),
+            "reference_status": item.get("reference_status"),
+            "evidence": [item["evidence"][0]],
+        })
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({
+        "version": 1, "source_id": source_id, "last_page": last_page,
+        "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "items": rows[-120:],
+    }, ensure_ascii=False, indent=2) + "\n", "utf-8")
 
 
 def reference_context(pages: dict[int, str], key: tuple[int, int, int, str]) -> str:
@@ -488,6 +1084,20 @@ def reference_context(pages: dict[int, str], key: tuple[int, int, int, str]) -> 
     return re.sub(r"\s+", " ", f"{prefix} [[{target}]] {suffix}").strip()
 
 
+def nearest_structural_antecedent(literal: str, context: str) -> str | None:
+    if not DEMONSTRATIVE_PREFIX.match(literal) or not re.search(rf"\b(?:{STRUCTURE_HEADS})\b", literal, re.IGNORECASE):
+        return None
+    prefix = context.split("[[", 1)[0]
+    matches = list(re.finditer(
+        rf"(?=(\b(?:the|a|an|this|that)\s+(?:[A-Za-zÀ-ž'’-]+\s+){{0,7}}(?:{STRUCTURE_HEADS})(?:\s+of\s+(?:the\s+)?[A-Za-zÀ-ž'’-]+)?))",
+        prefix,
+        re.IGNORECASE,
+    ))
+    if not matches:
+        return None
+    return re.sub(r"\s+", " ", matches[-1].group(1)).strip()
+
+
 def apply_reference_guards(items: list[dict[str, Any]], pages: dict[int, str]) -> dict[str, int]:
     guarded = {
         "subject_leakage_repaired": 0,
@@ -496,12 +1106,27 @@ def apply_reference_guards(items: list[dict[str, Any]], pages: dict[int, str]) -
         "ordinals_completed": 0,
         "kinship_escalated": 0,
         "local_discourse_resolved": 0,
+        "internal_ids_rejected": 0,
+        "structural_descriptions_resolved": 0,
+        "cleft_pronouns_repaired": 0,
     }
     for item in items:
         literal = item.get("literal_subject") or ""
-        statement_match = REFERENCE_PREFIX.match(item.get("statement_en") or "")
-        literal_match = REFERENCE_PREFIX.match(literal)
-        if statement_match and literal_match and literal.split()[0].lower() != statement_match.group(1).lower():
+        statement_match = PRONOUN_PREFIX.match(item.get("statement_en") or "")
+        literal_match = PRONOUN_PREFIX.match(literal)
+        cleft = re.match(r"^It was\s+(him|her|them)\s+who\b", item.get("statement_en") or "", re.IGNORECASE)
+        cleft_repaired = bool(cleft and literal.lower() == "it")
+        if cleft_repaired:
+            primary_antecedent = safe_memory_subject(item.get("resolved_subject"))
+            item["literal_subject"] = cleft.group(1)
+            item["resolved_subject"] = primary_antecedent
+            item["reference_antecedent"] = primary_antecedent
+            item["reference_status"] = "model_subject" if primary_antecedent else "ambiguous"
+            item["reference_resolution_source"] = "primary_model" if primary_antecedent else None
+            literal = item["literal_subject"]
+            literal_match = PRONOUN_PREFIX.match(literal)
+            guarded["cleft_pronouns_repaired"] += 1
+        if not cleft_repaired and statement_match and literal_match and literal.split()[0].lower() != statement_match.group(1).lower():
             item["literal_subject"] = statement_match.group(1)
             item["resolved_subject"] = None
             item["reference_antecedent"] = None
@@ -511,9 +1136,15 @@ def apply_reference_guards(items: list[dict[str, Any]], pages: dict[int, str]) -
             guarded["subject_leakage_repaired"] += 1
         if "kinship_coreference" in (item.get("risk_flags") or []):
             item["risk_flags"] = [flag for flag in item["risk_flags"] if flag != "kinship_coreference"]
-        if not REFERENCE_PREFIX.match(literal):
+        if not is_referential_subject(literal):
             continue
         antecedent = item.get("reference_antecedent") or ""
+        if INTERNAL_MODEL_ID.fullmatch(antecedent):
+            item["reference_antecedent"] = None
+            item["reference_status"] = "ambiguous"
+            item["reference_resolution_source"] = None
+            guarded["internal_ids_rejected"] += 1
+            antecedent = ""
         if re.sub(r"\W+", "", antecedent.lower()) == re.sub(r"\W+", "", literal.lower()) or re.fullmatch(
             r"he|his|him|she|her|hers|they|their|them|it|its", antecedent, re.IGNORECASE
         ):
@@ -530,6 +1161,15 @@ def apply_reference_guards(items: list[dict[str, Any]], pages: dict[int, str]) -
             continue
         key = reference_group_key(item)
         context = reference_context(pages, key) if key else ""
+        if item.get("reference_status") == "ambiguous":
+            structural = nearest_structural_antecedent(literal, context)
+            if structural:
+                item["reference_antecedent"] = structural
+                item["resolved_subject"] = structural
+                item["reference_status"] = "resolved_reference"
+                item["reference_resolution_source"] = "local_structural_carry_forward"
+                guarded["structural_descriptions_resolved"] += 1
+                continue
         ordinal = re.fullmatch(r"(?:the\s+)?(first|second|third|fourth|fifth)", antecedent, re.IGNORECASE)
         if ordinal:
             completion = re.search(rf"\bthe\s+{re.escape(ordinal.group(1))}\s+([A-Za-z][A-Za-z-]+)", context, re.IGNORECASE)
@@ -574,40 +1214,290 @@ def apply_reference_guards(items: list[dict[str, Any]], pages: dict[int, str]) -
             spans.setdefault(
                 (int(evidence["page_ref"]), int(evidence["start_offset"]), int(evidence["end_offset"])), []
             ).append(item)
-    last_person: dict[int, tuple[int, str]] = {}
+    last_person: tuple[int, int, str] | None = None
+    last_nonperson: tuple[int, int, str] | None = None
     person_prefix = re.compile(r"^(?:R\.|Rabbi\b|Dr\.|Mr\.|Mrs\.|Saint\b|St\.)", re.IGNORECASE)
     for (page, start, end), span_items in sorted(spans.items()):
-        previous = last_person.get(page)
-        if previous and start - previous[0] <= 320:
-            antecedent = previous[1]
-            for item in span_items:
-                literal = item.get("literal_subject") or ""
-                flags = item.get("risk_flags") or []
-                if (
-                    item.get("reference_status") == "ambiguous"
-                    and REFERENCE_PREFIX.match(literal)
-                    and "kinship_coreference" not in flags
-                ):
-                    item["reference_antecedent"] = antecedent
-                    item["reference_status"] = "resolved_reference"
-                    item["reference_resolution_source"] = "local_discourse_carry_forward"
-                    if re.fullmatch(r"he|his|him|she|her|hers|they|their|them|it|its", literal, re.IGNORECASE):
-                        item["resolved_subject"] = antecedent
-                    guarded["local_discourse_resolved"] += 1
-
-        candidates = []
         for item in span_items:
-            candidate = item.get("reference_antecedent") or item.get("resolved_subject") or ""
             literal = item.get("literal_subject") or ""
-            if candidate and (
-                person_prefix.match(candidate)
-                or (re.fullmatch(r"he|his|him|she|her|hers|they|their|them", literal, re.IGNORECASE)
-                    and item.get("reference_status") != "ambiguous")
+            flags = item.get("risk_flags") or []
+            pronoun_match = PRONOUN_PREFIX.match(literal)
+            pronoun = pronoun_match.group(1).lower() if pronoun_match else None
+            previous = last_nonperson if pronoun in {"it", "its"} else last_person
+            close = bool(previous and (
+                (previous[0] == page and start - previous[1] <= 320)
+                or (previous[0] == page - 1 and start <= 450)
+            ))
+            if (
+                previous
+                and close
+                and item.get("reference_status") == "ambiguous"
+                and PRONOUN_PREFIX.match(literal)
+                and "kinship_coreference" not in flags
             ):
-                candidates.append(candidate)
-        if candidates:
-            last_person[page] = (end, candidates[-1])
+                antecedent = previous[2]
+                item["reference_antecedent"] = antecedent
+                item["reference_status"] = "resolved_reference"
+                item["reference_resolution_source"] = "local_discourse_carry_forward"
+                if is_standalone_pronoun(literal):
+                    item["resolved_subject"] = antecedent
+                guarded["local_discourse_resolved"] += 1
+            # Update rolling state immediately. Several atomic rows can share
+            # one evidence span, so a separate second loop made "Its rooms"
+            # miss "This institute" from the preceding row in that same span.
+            candidate = item.get("reference_antecedent") or item.get("resolved_subject") or ""
+            candidate = safe_memory_subject(candidate)
+            if not candidate or item.get("reference_status") == "ambiguous":
+                continue
+            if person_prefix.match(candidate) or re.fullmatch(r"he|his|him|she|her|hers", literal, re.IGNORECASE):
+                last_person = (page, end, candidate)
+            elif not is_standalone_pronoun(literal):
+                last_nonperson = (page, end, candidate)
     return guarded
+
+
+def apply_constrained_coref_results(items: list[dict[str, Any]], payloads: list[dict[str, Any]]) -> dict[str, int]:
+    links = []
+    for payload in payloads:
+        for row in (payload.get("results") or {}).values():
+            reference = row.get("reference") or {}
+            antecedent = row.get("antecedent") or {}
+            links.append({
+                "page_ref": reference.get("page"),
+                "start_offset": reference.get("start"),
+                "end_offset": reference.get("end"),
+                "text": reference.get("text"),
+                "reference_kind": reference.get("reference_kind"),
+                "antecedent": antecedent.get("text"),
+                "antecedent_page_ref": antecedent.get("page"),
+                "antecedent_start_offset": antecedent.get("start"),
+                "antecedent_end_offset": antecedent.get("end"),
+                "antecedent_mention_id": antecedent.get("id"),
+                "resolved_entity_id": row.get("chosen") if row.get("chosen") != "?" else None,
+                "verdict": row.get("verdict"),
+            })
+    linked_items = resolved_links = ambiguous_links = 0
+    for item in items:
+        if item.get("verification", {}).get("verdict") == "unsupported" or item.get("disposition") == "reference_only":
+            continue
+        literal = item.get("literal_subject") or ""
+        literal_first = (literal.split() or [""])[0].lower()
+        item_links = []
+        for link in links:
+            if link["page_ref"] is None or link["start_offset"] is None or link["end_offset"] is None:
+                continue
+            link_first = (((link.get("text") or "").split() or [""])[0].lower())
+            subject_match = link_first == literal_first and any(
+                evidence.get("page_ref") == link["page_ref"]
+                and int(evidence.get("start_offset", 0)) <= int(link["start_offset"])
+                and int(evidence.get("end_offset", 0)) >= int(link["end_offset"])
+                and (
+                    not evidence.get("quote")
+                    or _link_overlaps_literal_subject(evidence, literal, link)
+                )
+                for evidence in item.get("evidence") or []
+            )
+            if subject_match:
+                item_links.append(link)
+        if not item_links:
+            continue
+        item["reference_links"] = item_links
+        linked_items += 1
+        leading = next((
+            link for link in item_links
+            if (((link.get("text") or "").split() or [""])[0].lower() == literal_first)
+        ), None)
+        if not leading:
+            continue
+        antecedent = safe_memory_subject(leading.get("antecedent"))
+        antecedent = canonical_subject_alias(antecedent, leading, items) or antecedent
+        if antecedent and leading.get("verdict") != "ambiguous":
+            item["reference_antecedent"] = antecedent
+            item["reference_status"] = "resolved_reference"
+            item["reference_resolution_source"] = "constrained_two_vote_coref"
+            if is_standalone_pronoun(literal) or DEMONSTRATIVE_PREFIX.match(literal) or DEFINITE_PREFIX.match(literal):
+                item["resolved_subject"] = antecedent
+            resolved_links += 1
+        else:
+            item["reference_antecedent"] = None
+            item["reference_status"] = "ambiguous"
+            item["reference_resolution_source"] = "constrained_two_vote_coref"
+            ambiguous_links += 1
+    return {"links": len(links), "linked_items": linked_items, "resolved_leading_links": resolved_links, "ambiguous_leading_links": ambiguous_links}
+
+
+def _link_overlaps_literal_subject(evidence: dict[str, Any], literal: str, link: dict[str, Any]) -> bool:
+    """Do not attach another atomic row's reference merely because evidence is shared."""
+    quote = evidence.get("quote") or ""
+    index = quote.lower().find(literal.lower())
+    if index < 0:
+        first = (literal.split() or [""])[0]
+        index = quote.lower().find(first.lower()) if first else -1
+    if index < 0:
+        return False
+    expected_start = int(evidence.get("start_offset", 0)) + index
+    expected_end = expected_start + max(1, len(literal))
+    link_start = int(link.get("start_offset", -1))
+    link_end = int(link.get("end_offset", -1))
+    return link_start < expected_end and link_end > expected_start
+
+
+def canonical_subject_alias(
+    antecedent: str | None,
+    link: dict[str, Any],
+    items: list[dict[str, Any]],
+) -> str | None:
+    """Map a role/description mention to a grounded named subject when known."""
+    if not antecedent:
+        return None
+    folded = re.sub(r"\W+", "", antecedent.lower())
+    for candidate in items:
+        literal = safe_memory_subject(candidate.get("literal_subject"))
+        resolved = safe_memory_subject(candidate.get("resolved_subject"))
+        if not literal or not resolved or re.sub(r"\W+", "", literal.lower()) != folded:
+            continue
+        if re.sub(r"\W+", "", resolved.lower()) == folded:
+            continue
+        # Canonical aliases must look like explicit names, not another generic
+        # description guessed by a model.
+        if len(re.findall(r"\b[A-ZÁÉÍÓÖŐÚÜŰ][\wÁÉÍÓÖŐÚÜŰáéíóöőúüű.-]*", resolved)) < 2:
+            continue
+        if any(
+            evidence.get("page_ref") == link.get("antecedent_page_ref")
+            and int(evidence.get("start_offset", 0)) <= int(link.get("antecedent_start_offset") or -1)
+            and int(evidence.get("end_offset", 0)) >= int(link.get("antecedent_end_offset") or -1)
+            for evidence in candidate.get("evidence") or []
+        ):
+            return resolved
+    return antecedent
+
+
+def run_constrained_coref_stage(
+    source_id: str,
+    target_pages: list[int],
+    available_pages: set[int],
+    items: list[dict[str, Any]],
+    max_cost_usd: float,
+    no_cache: bool,
+    memory_pages: int = 3,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    payloads = []
+    paid_cost = 0.0
+    uncached_equivalent_cost = 0.0
+    command_rows = []
+    script = Path(__file__).with_name("pilot-constrained-coref.py")
+    for page in target_pages:
+        window = [candidate for candidate in range(max(1, page - memory_pages), page + 1) if candidate in available_pages]
+        remaining = max_cost_usd - paid_cost
+        if remaining <= 0:
+            raise BudgetExceeded("no budget remains for constrained coreference")
+        command = [
+            sys.executable, str(script), "--source", source_id,
+            "--pages", ",".join(map(str, window)), "--resolve-pages", str(page),
+            "--max-references", "120", "--max-cost-usd", f"{remaining:.8f}",
+        ]
+        spans = []
+        for item in items:
+            literal = item.get("literal_subject") or ""
+            if (
+                not needs_constrained_reference(item, items, memory_pages)
+                or item.get("verification", {}).get("verdict") == "unsupported"
+                or item.get("disposition") == "reference_only"
+            ):
+                continue
+            for evidence in item.get("evidence") or []:
+                if evidence.get("page_ref") != page:
+                    continue
+                quote = evidence.get("quote") or ""
+                index = quote.lower().find(literal.lower())
+                if index < 0:
+                    first = (literal.split() or [""])[0]
+                    index = quote.lower().find(first.lower()) if first else -1
+                raw_start = int(evidence["start_offset"]) + max(0, index)
+                raw_end = min(int(evidence["end_offset"]), raw_start + max(12, len(literal) + 8))
+                spans.append({"page": page, "start": raw_start, "end": raw_end})
+        spans = [
+            {"page": span_page, "start": start, "end": end}
+            for span_page, start, end in sorted({(row["page"], row["start"], row["end"]) for row in spans})
+        ]
+        if not spans:
+            payloads.append({"results": {}, "paid_cost_usd": 0.0})
+            command_rows.append({"page": page, "window": window, "references": 0, "paid_cost": 0.0})
+            continue
+        command.extend(["--target-spans-json", json.dumps(spans, separators=(",", ":"))])
+        if no_cache:
+            command.append("--no-cache")
+        completed = subprocess.run(command, cwd=WORKSPACE, text=True, capture_output=True, check=False)
+        if completed.returncode != 0:
+            raise RuntimeError(f"constrained coreference failed on page {page}: {(completed.stderr or completed.stdout)[-1200:]}")
+        output_path = EXTRACTIONS / "coref-pilot" / source_id / f"pages-{'-'.join(map(str, window))}-resolve-{page}.json"
+        payload = json.loads(output_path.read_text("utf-8"))
+        page_cost = float(payload.get("paid_cost_usd") or 0)
+        page_uncached_cost = float(payload.get("uncached_equivalent_cost_usd") or page_cost)
+        paid_cost += page_cost
+        uncached_equivalent_cost += page_uncached_cost
+        if paid_cost > max_cost_usd:
+            raise BudgetExceeded(f"constrained coreference cost ${paid_cost:.6f} exceeded ${max_cost_usd:.6f}")
+        payloads.append(payload)
+        command_rows.append({
+            "page": page, "window": window, "references": len(payload.get("results") or {}),
+            "paid_cost": page_cost, "uncached_equivalent_cost": page_uncached_cost,
+        })
+    return payloads, {
+        "pages": command_rows,
+        "paid_cost_usd": paid_cost,
+        "uncached_equivalent_cost_usd": uncached_equivalent_cost,
+        "saved_cost_usd": max(0.0, uncached_equivalent_cost - paid_cost),
+    }
+
+
+def needs_constrained_reference(
+    item: dict[str, Any],
+    items: list[dict[str, Any]],
+    memory_pages: int = 3,
+) -> bool:
+    """Route pronouns always; route definite descriptions only if repeated."""
+    literal = item.get("literal_subject") or ""
+    if PRONOUN_PREFIX.match(literal) or DEMONSTRATIVE_PREFIX.match(literal):
+        return True
+    if not DEFINITE_PREFIX.match(literal):
+        return False
+    position = item_position(item)
+    if not position:
+        return False
+    page, start, _ = position
+    words = re.findall(r"[a-z0-9]+", literal.lower())
+    if len(words) < 2:
+        return False
+    head = words[-1]
+    for previous in items:
+        previous_position = item_position(previous)
+        if not previous_position:
+            continue
+        previous_page, previous_start, _ = previous_position
+        if previous_page < page - memory_pages or (previous_page, previous_start) >= (page, start):
+            continue
+        searchable = f"{previous.get('literal_subject') or ''} {previous.get('resolved_subject') or ''} {previous.get('statement_en') or ''}".lower()
+        if re.search(rf"\b{re.escape(head)}s?\b", searchable):
+            return True
+    return False
+
+
+def finalize_new_definite_subjects(items: list[dict[str, Any]], memory_pages: int = 3) -> int:
+    """A newly introduced `the X` is a subject, not an unresolved reference."""
+    finalized = 0
+    for item in items:
+        literal = item.get("literal_subject") or ""
+        if not DEFINITE_PREFIX.match(literal) or PRONOUN_PREFIX.match(literal) or DEMONSTRATIVE_PREFIX.match(literal):
+            continue
+        if needs_constrained_reference(item, items, memory_pages):
+            continue
+        item["reference_status"] = "not_applicable"
+        item["reference_antecedent"] = None
+        item["reference_resolution_source"] = None
+        item["resolved_subject"] = item.get("resolved_subject") or literal
+        finalized += 1
+    return finalized
 
 
 def resolve_reference_antecedents(
@@ -618,19 +1508,21 @@ def resolve_reference_antecedents(
     max_cost_usd: float,
     cache: JsonlResponseCache,
     batch_size: int = 12,
+    memory_items: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    memory_items = memory_items or []
     pre_guards = apply_reference_guards(items, pages)
     groups: dict[tuple[int, int, int, str], list[dict[str, Any]]] = {}
     for item in items:
         key = reference_group_key(item)
         literal = item.get("literal_subject") or ""
-        standalone = bool(re.fullmatch(r"he|his|him|she|her|hers|they|their|them|it|its", literal, re.IGNORECASE))
-        primary_possessive = (
+        standalone = is_standalone_pronoun(literal)
+        primary_reference = (
             not standalone
             and item.get("reference_resolution_source") == "primary_model"
             and item.get("reference_antecedent")
         )
-        needs_remote = item.get("reference_status") == "ambiguous" or primary_possessive
+        needs_remote = item.get("reference_status") == "ambiguous" or primary_reference
         if key is not None and needs_remote:
             groups.setdefault(key, []).append(item)
     if not groups:
@@ -645,10 +1537,10 @@ def resolve_reference_antecedents(
             "guards": pre_guards,
         }
 
-    instruction = """Resolve only the antecedent of the leading pronoun or possessive in each literal subject.
-The context target is inside [[double brackets]]. A possessive phrase has a grammatical subject and a different reference antecedent: in 'His tomb', return the person denoted by His, not the tomb. For standalone He/They, return the entity denoted by the pronoun. Never repeat the literal pronoun or possessive phrase as the answer. Return - for an expletive with no referent and ? if genuinely ambiguous. Use only explicitly visible context.
+    instruction = """Resolve the leading discourse reference in each literal subject.
+The context target is inside [[double brackets]]. References include pronouns, possessives, demonstratives such as 'this institute', and repeated definite descriptions such as 'the synagogue'. A possessive phrase has a grammatical subject and a different reference antecedent: in 'His tomb', return the person denoted by His, not the tomb. For standalone He/They/It and for this/the descriptions, return the entity denoted by the expression. Never repeat an unresolved literal phrase as the answer. Return - only for an expletive or a genuinely new definite entity; a this/that/these/those phrase always refers, so use ? rather than - if its antecedent is unclear. Use only explicitly visible TEXT or the rolling MEMORY of earlier grounded subjects. Never output a context/request ID such as c001, r001, or x001.
 
-Examples: 'His tomb' after 'Efraim died' -> Efraim. 'his non-Jewish contemporaries' in a paragraph about Shabbetai Tzvi -> Shabbetai Tzvi. Standalone 'He' after 'R. Noah' -> R. Noah.
+Examples: 'His tomb' after 'Efraim died' -> Efraim. 'this institute' after 'The hospital opened' -> The hospital. 'the synagogue' at the top of a page after 'The Obuda synagogue' -> The Obuda synagogue. Standalone 'He' after 'R. Noah' -> R. Noah.
 
 Return every ID exactly once as ID|antecedent. No JSON, markdown, explanation, or extra pipes.
 """
@@ -675,6 +1567,7 @@ Return every ID exactly once as ID|antecedent. No JSON, markdown, explanation, o
     for batch_start in range(0, len(group_entries), max(1, batch_size)):
         batch = group_entries[batch_start:batch_start + max(1, batch_size)]
         id_to_key: dict[str, tuple[int, int, int, str]] = {}
+        visible_by_id: dict[str, str] = {}
         request_rows = []
         context_ids: dict[tuple[int, int, int], str] = {}
         context_rows = []
@@ -686,7 +1579,16 @@ Return every ID exactly once as ID|antecedent. No JSON, markdown, explanation, o
             if span_key not in context_ids:
                 context_id = f"c{len(context_ids) + 1:03d}"
                 context_ids[span_key] = context_id
-                context_rows.append(f"{context_id}|{reference_context(pages, key).replace('|', '/')}")
+                context = reference_context(pages, key)
+                memory = discourse_subject_memory([*memory_items, *items], key)
+                visible = context + " " + " ".join(memory)
+                visible_by_id[request_id] = visible
+                memory_text = " ; ".join(memory) if memory else "-"
+                context_rows.append(f"{context_id}|MEMORY={memory_text.replace('|', '/')}|TEXT={context.replace('|', '/')}")
+            else:
+                context = reference_context(pages, key)
+                memory = discourse_subject_memory([*memory_items, *items], key)
+                visible_by_id[request_id] = context + " " + " ".join(memory)
             request_rows.append(f"{request_id}|{context_ids[span_key]}|{literal.replace('|', '/')}")
         prompt = instruction + "\nCONTEXTS:\n" + "\n".join(context_rows) + "\n\nREQUESTS:\n" + "\n".join(request_rows)
         request = {
@@ -694,6 +1596,10 @@ Return every ID exactly once as ID|antecedent. No JSON, markdown, explanation, o
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0,
             "max_tokens": min(400, max(80, 40 + len(batch) * 24)),
+            "extra_body": {
+                "provider": {"sort": "price"},
+                **({"reasoning": {"effort": "none"}} if model_id.startswith("google/gemini-") else {}),
+            },
         }
         cached = cache.get("reference", request)
         raw_output = cached["output"] if cached else ""
@@ -751,7 +1657,9 @@ Return every ID exactly once as ID|antecedent. No JSON, markdown, explanation, o
             literal = id_to_key[request_id][3]
             answer_folded = re.sub(r"\W+", "", answer.lower())
             literal_folded = re.sub(r"\W+", "", literal.lower())
-            if answer_folded == literal_folded or re.fullmatch(r"he|his|him|she|her|hers|they|their|them|it|its", answer, re.IGNORECASE):
+            visible_folded = re.sub(r"\W+", "", visible_by_id.get(request_id, "").lower())
+            invented = bool(answer not in {"-", "?"} and (INTERNAL_MODEL_ID.fullmatch(answer) or answer_folded not in visible_folded))
+            if answer_folded == literal_folded or is_standalone_pronoun(answer) or invented:
                 answers[request_id] = "?"
 
         for request_id, key in id_to_key.items():
@@ -763,7 +1671,7 @@ Return every ID exactly once as ID|antecedent. No JSON, markdown, explanation, o
                 item["reference_status"] = status
                 item["reference_resolution_source"] = model_id
                 literal = item.get("literal_subject") or ""
-                if stored_antecedent and re.fullmatch(r"he|his|him|she|her|hers|they|their|them|it|its", literal, re.IGNORECASE):
+                if stored_antecedent and (is_standalone_pronoun(literal) or DEMONSTRATIVE_PREFIX.match(literal) or DEFINITE_PREFIX.match(literal)):
                     item["resolved_subject"] = stored_antecedent
 
     post_guards = apply_reference_guards(items, pages)
@@ -898,16 +1806,24 @@ def main() -> None:
     parser.add_argument("--max-output-tokens", type=int, default=7000)
     parser.add_argument("--context-window-chars", type=int, default=1600)
     parser.add_argument("--context-source-chars", type=int, default=2600)
-    parser.add_argument("--reference-model", default="google/gemini-2.5-flash")
+    parser.add_argument("--reference-model", default="google/gemini-2.5-flash-lite")
     parser.add_argument("--max-reference-cost-usd", type=float, default=0.004)
     parser.add_argument("--reference-batch-size", type=int, default=12)
+    parser.add_argument("--coverage-audit-model", default="qwen/qwen3-30b-a3b-instruct-2507")
+    parser.add_argument("--coverage-quality-model", default="google/gemini-2.5-flash")
+    parser.add_argument("--max-coverage-audit-cost-usd", type=float, default=0.004)
+    parser.add_argument("--skip-coverage-audit", action="store_true")
     parser.add_argument("--cache-file", default=str(EXTRACTIONS / "historical-langextract-model-cache.jsonl"))
+    parser.add_argument("--discourse-memory-file", default=None)
+    parser.add_argument("--no-discourse-memory", action="store_true")
     parser.add_argument("--no-cache", action="store_true")
     parser.add_argument("--skip-reference-fallback", action="store_true")
+    parser.add_argument("--skip-constrained-coref", action="store_true")
+    parser.add_argument("--coref-memory-pages", type=int, default=3)
     parser.add_argument("--repair-references-only", action="store_true")
     parser.add_argument("--validate-references-only", action="store_true")
     args = parser.parse_args()
-    if args.page_count < 1 or args.max_cost_usd <= 0 or args.max_reference_cost_usd <= 0 or args.reference_batch_size < 1:
+    if args.page_count < 1 or args.max_cost_usd <= 0 or args.max_reference_cost_usd <= 0 or args.max_coverage_audit_cost_usd <= 0 or args.reference_batch_size < 1 or args.coref_memory_pages < 1:
         raise SystemExit("invalid page count or cost cap")
 
     cache = JsonlResponseCache(Path(args.cache_file).expanduser().resolve(), enabled=not args.no_cache)
@@ -930,6 +1846,8 @@ def main() -> None:
         return
 
     pages = parse_pages((TEXT_DIR / f"{args.source}.pages.txt").read_text("utf-8"))
+    memory_path = Path(args.discourse_memory_file).expanduser().resolve() if args.discourse_memory_file else EXTRACTIONS / f"{args.source}.discourse-memory.json"
+    persisted_memory, memory_status = ([], {"loaded": False, "reason": "disabled", "path": str(memory_path)}) if args.no_discourse_memory else load_persisted_discourse_memory(memory_path, args.from_page - 1)
     normalized_text, coordinates, repairs = build_normalized_document(pages, args.from_page, args.page_count, args.context_source_chars)
     prompt_examples = examples()
     schema = OpenAISchema.from_examples(prompt_examples, strict=True)
@@ -963,6 +1881,7 @@ def main() -> None:
 
     target_pages = set(range(args.from_page, args.from_page + args.page_count))
     items: list[dict[str, Any]] = []
+    context_items: list[dict[str, Any]] = []
     invalid_rows: list[dict[str, Any]] = []
     grounded_extractions = 0
     extraction_count = len(result.extractions or [])
@@ -972,8 +1891,7 @@ def main() -> None:
             continue
         grounded_extractions += 1
         evidence = evidence_for_span(interval.start_pos, interval.end_pos, coordinates, pages)
-        if not any(row["page_ref"] in target_pages for row in evidence):
-            continue
+        touches_target = any(row["page_ref"] in target_pages for row in evidence)
         raw_items = (extraction.attributes or {}).get("items") or []
         if isinstance(raw_items, str):
             raw_items = [raw_items]
@@ -983,29 +1901,84 @@ def main() -> None:
                 invalid_rows.append({"extraction_text": extraction.extraction_text, "row": raw_item})
                 continue
             identity = json.dumps([args.source, interval.start_pos, interval.end_pos, parsed], sort_keys=True, ensure_ascii=False)
-            items.append({
+            source_zone, disposition, zone_flags = classify_source_zone(parsed["statement_en"])
+            parsed["risk_flags"] = sorted(set([*(parsed.get("risk_flags") or []), *zone_flags]))
+            record = {
                 "item_id": f"lx_{hashlib.sha256(identity.encode()).hexdigest()[:20]}",
                 **parsed,
                 "normalized_span": {"start_offset": interval.start_pos, "end_offset": interval.end_pos, "quote": normalized_text[interval.start_pos:interval.end_pos]},
                 "evidence": evidence,
                 "grounding_status": str(extraction.alignment_status.value if extraction.alignment_status else "grounded"),
+                "source_zone": source_zone,
+                "disposition": disposition,
                 "publication_status": "private",
-            })
+            }
+            if touches_target:
+                items.append(record)
+            else:
+                context_items.append(record)
 
-    reference_summary = {"model": args.reference_model, "groups": 0, "resolved": 0, "ambiguous": 0, "not_applicable": 0, "usage": {"calls": 0, "cost": 0.0, "saved_cost": 0.0}}
-    if not args.skip_reference_fallback:
+    coverage_summary = {"model": args.coverage_audit_model, "quality_model": args.coverage_quality_model, "pages": [], "added_items": 0, "usage": {"calls": 0, "cost": 0.0, "saved_cost": 0.0}}
+    if not args.skip_coverage_audit:
         remaining_budget = args.max_cost_usd - float(model.usage.get("cost") or 0)
         if remaining_budget <= 0:
-            raise BudgetExceeded("no budget remains for required reference fallback")
-        reference_summary = resolve_reference_antecedents(
-            items,
-            pages,
-            api_key,
-            args.reference_model,
-            min(args.max_reference_cost_usd, remaining_budget),
-            cache,
-            args.reference_batch_size,
+            raise BudgetExceeded("no budget remains for required coverage audit")
+        audit_items, coverage_summary = audit_missing_atomic_items(
+            items, [*persisted_memory, *context_items], pages, sorted(target_pages), args.source, api_key,
+            args.coverage_audit_model, args.coverage_quality_model,
+            min(args.max_coverage_audit_cost_usd, remaining_budget), cache,
         )
+        items.extend(audit_items)
+
+    finalized_new_definites = finalize_new_definite_subjects(items, args.coref_memory_pages)
+    reference_summary = {
+        "model": "constrained_two_vote_coref" if not args.skip_constrained_coref else args.reference_model,
+        "groups": 0, "resolved": 0, "ambiguous": 0, "not_applicable": finalized_new_definites,
+        "new_definite_subjects": finalized_new_definites,
+        "usage": {"calls": 0, "cost": 0.0, "saved_cost": 0.0},
+    }
+    if not args.skip_reference_fallback:
+        remaining_budget = args.max_cost_usd - float(model.usage.get("cost") or 0) - float(coverage_summary["usage"].get("cost") or 0)
+        if remaining_budget <= 0:
+            raise BudgetExceeded("no budget remains for required reference fallback")
+        supported_items = [item for item in items if item.get("verification", {}).get("verdict") != "unsupported"]
+        if not args.skip_constrained_coref:
+            payloads, constrained_usage = run_constrained_coref_stage(
+                args.source, sorted(target_pages), set(pages), supported_items,
+                min(args.max_reference_cost_usd, remaining_budget), args.no_cache,
+                memory_pages=args.coref_memory_pages,
+            )
+            link_summary = apply_constrained_coref_results(supported_items, payloads)
+            reference_summary = {
+                "model": "flash-lite+qwen+flash-on-disagreement",
+                "groups": link_summary["links"],
+                "resolved": link_summary["resolved_leading_links"],
+                "ambiguous": link_summary["ambiguous_leading_links"],
+                "not_applicable": finalized_new_definites,
+                "usage": {
+                    "calls": len(constrained_usage["pages"]),
+                    "cost": constrained_usage["paid_cost_usd"],
+                    "saved_cost": constrained_usage["saved_cost_usd"],
+                },
+                "constrained": constrained_usage,
+                "links": link_summary,
+                "new_definite_subjects": finalized_new_definites,
+            }
+        else:
+            reference_summary = resolve_reference_antecedents(
+                supported_items, pages, api_key, args.reference_model,
+                min(args.max_reference_cost_usd, remaining_budget), cache, args.reference_batch_size,
+                memory_items=[*persisted_memory, *context_items],
+            )
+
+    post_resolution_duplicates = reject_post_resolution_duplicates(items)
+    coverage_summary["post_resolution_duplicates_rejected"] = post_resolution_duplicates
+    coverage_summary["added_items_after_dedup"] = max(0, int(coverage_summary.get("added_items") or 0) - post_resolution_duplicates)
+
+    if not args.no_discourse_memory:
+        save_persisted_discourse_memory(memory_path, args.source, max(target_pages), [*persisted_memory, *context_items, *items])
+        memory_status["saved"] = True
+        memory_status["saved_through_page"] = max(target_pages)
 
     run_id = hashlib.sha256(f"{args.source}:{time.time_ns()}".encode()).hexdigest()[:20]
     item_output = EXTRACTIONS / f"{args.source}.langextract-pilot.jsonl"
@@ -1017,6 +1990,8 @@ def main() -> None:
             "record_type": "run", "run_id": run_id, "source_id": args.source,
             "pages": sorted(target_pages), "model": args.model, "usage": model.usage,
             "normalization_repairs": repairs, "publication_status": "private",
+            "coverage_audit": coverage_summary,
+            "discourse_memory": memory_status,
             "reference_fallback": reference_summary,
             "cache": {"enabled": cache.enabled, "path": str(cache.path)},
         }, ensure_ascii=False) + "\n")
@@ -1037,34 +2012,44 @@ def main() -> None:
             "grounded_clause_extractions": grounded_extractions,
             "grounded_rate": grounded_extractions / extraction_count if extraction_count else 0,
             "valid_items": len(items),
+            "supported_items": sum(1 for item in items if item.get("verification", {}).get("verdict") != "unsupported" and item.get("disposition") != "reference_only"),
+            "reference_only_or_rejected_items": sum(1 for item in items if item.get("verification", {}).get("verdict") == "unsupported" or item.get("disposition") == "reference_only"),
             "invalid_item_rows": len(invalid_rows),
             "schema_valid_rate": len(items) / (len(items) + len(invalid_rows)) if items or invalid_rows else 0,
-            "unresolved_references": sum(1 for item in items if item["reference_status"] == "ambiguous"),
+            "unresolved_references": sum(1 for item in items if item["reference_status"] == "ambiguous" and item.get("verification", {}).get("verdict") != "unsupported" and item.get("disposition") != "reference_only"),
             "risk_flagged_items": sum(1 for item in items if item.get("risk_flags")),
         },
         "regressions": regressions,
         "regressions_passed": sum(regressions.values()),
         "regressions_total": len(regressions),
         "reference_resolution": reference_summary,
+        "coverage_audit": coverage_summary,
+        "discourse_memory": memory_status,
         "cache": {"enabled": cache.enabled, "path": str(cache.path)},
         "usage": {
             **model.usage,
             "reference_cost": reference_summary["usage"]["cost"],
             "reference_saved_cost": reference_summary["usage"].get("saved_cost", 0.0),
-            "total_cost": model.usage["cost"] + reference_summary["usage"]["cost"],
-            "total_saved_cost": model.usage["saved_cost"] + reference_summary["usage"].get("saved_cost", 0.0),
+            "coverage_audit_cost": coverage_summary["usage"].get("cost", 0.0),
+            "coverage_audit_saved_cost": coverage_summary["usage"].get("saved_cost", 0.0),
+            "total_cost": model.usage["cost"] + coverage_summary["usage"].get("cost", 0.0) + reference_summary["usage"]["cost"],
+            "total_saved_cost": model.usage["saved_cost"] + coverage_summary["usage"].get("saved_cost", 0.0) + reference_summary["usage"].get("saved_cost", 0.0),
             "uncached_equivalent_cost": (
                 model.usage["cost"]
+                + coverage_summary["usage"].get("cost", 0.0)
                 + reference_summary["usage"]["cost"]
                 + model.usage["saved_cost"]
+                + coverage_summary["usage"].get("saved_cost", 0.0)
                 + reference_summary["usage"].get("saved_cost", 0.0)
             ),
             "average_cost_usd_per_page": model.usage["cost"] / args.page_count,
-            "average_total_cost_usd_per_page": (model.usage["cost"] + reference_summary["usage"]["cost"]) / args.page_count,
+            "average_total_cost_usd_per_page": (model.usage["cost"] + coverage_summary["usage"].get("cost", 0.0) + reference_summary["usage"]["cost"]) / args.page_count,
             "average_uncached_equivalent_cost_usd_per_page": (
                 model.usage["cost"]
+                + coverage_summary["usage"].get("cost", 0.0)
                 + reference_summary["usage"]["cost"]
                 + model.usage["saved_cost"]
+                + coverage_summary["usage"].get("saved_cost", 0.0)
                 + reference_summary["usage"].get("saved_cost", 0.0)
             ) / args.page_count,
         },

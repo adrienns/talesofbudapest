@@ -1,0 +1,25 @@
+---
+description: Sol reviews run via local Codex CLI, never Task/API subagents
+alwaysApply: true
+---
+
+# Sol = local Codex CLI
+
+When the user says **Sol**, **ask Sol**, **run Sol**, or **Sol review**:
+
+1. Use the **local** `codex` command (`codex exec` for non-interactive reviews).
+2. Working directory: repo root (`-C` / `cd` to the workspace).
+3. Do **not** use Cursor `Task` / cloud / API subagents as a stand-in for Sol.
+4. Default model/config comes from `~/.codex/config.toml` unless the user overrides.
+
+Example:
+
+```bash
+cd /Users/mitik/workspace/talesofbudapest
+codex exec -s read-only "$(cat <<'EOF'
+[Sol review prompt here]
+EOF
+)"
+```
+
+Prefer `read-only` sandbox for design/review. Use a writable sandbox only when Sol must edit files and the user asked for that.

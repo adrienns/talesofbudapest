@@ -1,12 +1,17 @@
 import crypto from 'node:crypto';
 import { canonicalizeDomainText, canonicalizeDomainToken } from './historicalOcrLexicon.js';
+import {
+  canonicalizeLocationText,
+  canonicalizeLocationToken,
+  isLocationLikeMention,
+} from './hungarianOcrGazetteer.js';
 
 const PERSON_TYPES = new Set(['person', 'family']);
 const NONPERSON_TYPES = new Set(['building', 'business', 'organisation', 'work', 'movement', 'place']);
-const TITLES = new Set(['r', 'rabbi', 'dr', 'mr', 'mrs', 'ms', 'professor', 'prof', 'saint', 'st']);
+const TITLES = new Set(['r', 'rav', 'rabbi', 'dr', 'mr', 'mrs', 'ms', 'professor', 'prof', 'saint', 'st']);
 const ROLE_WORDS = new Set(['rabbi', 'scholar', 'author', 'writer', 'architect', 'doctor', 'teacher', 'mayor', 'ruler', 'king', 'queen']);
 const BUILDING_WORDS = new Set(['synagogue', 'temple', 'school', 'building', 'house', 'hospital', 'cemetery', 'church', 'hall', 'museum', 'library', 'institute']);
-const GROUP_WORDS = new Set(['community', 'family', 'group', 'people', 'they', 'followers', 'students', 'workers']);
+const GROUP_WORDS = new Set(['community', 'family', 'group', 'people', 'they', 'followers', 'students', 'workers', 'burgher', 'burghers', 'population', 'inhabitants', 'residents']);
 // Ordinary narrative object heads that GLiNER misses but the subject memory
 // must track so possessives and definite descriptions stay resolvable.
 const TRACKABLE_HEADS = new Set([...BUILDING_WORDS, 'tomb', 'grave', 'tombstone', 'gravestone', 'stele', 'plaque', 'inscription', 'monument', 'statue', 'bath', 'bridge', 'mill', 'factory', 'shop', 'press', 'yeshiva', 'mikveh', 'quarter', 'district', 'street', 'tower', 'wall', 'gate', 'book']);
@@ -20,24 +25,162 @@ const hash = (value) => crypto.createHash('sha256').update(String(value)).digest
 const words = (value) => String(value ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').replace(/(?:['’]s)\b/giu, '')
   .toLowerCase().match(/[a-z0-9]+/gu) ?? [];
 const phrase = (value) => words(value).join(' ');
+// Module-level places index for location OCR unique-hit repair. Extract /
+// browser call setPlacesGazetteerIndex once; tests may inject a fixture.
+let placesGazetteerIndex = null;
+let placeRepairLog = [];
+
+/** Install the Budapest places index used for location identity folding. */
+export const setPlacesGazetteerIndex = (index) => {
+  placesGazetteerIndex = index ?? null;
+  placeRepairLog = [];
+};
+
+export const getPlaceRepairLog = () => placeRepairLog.slice();
+export const clearPlaceRepairLog = () => { placeRepairLog = []; };
+
 // OCR damage must not fork one building into two entities: `synagoque` and
 // `synagogue` are the same word, so identity keys and roles read the folded
-// form while the raw surface survives as an alias.
-const canonicalPhrase = (value) => words(value).map(canonicalizeDomainToken).join(' ');
+// form while the raw surface survives as an alias. Location-like labels also
+// fold unique-hit Hungarian gazetteer confusion (Dohdny → Dohány) without
+// rewriting immutable evidence.
+const canonicalPhrase = (value, { locationLike = false } = {}) => {
+  if (locationLike && placesGazetteerIndex) {
+    return canonicalizeLocationText(value, placesGazetteerIndex, { log: placeRepairLog }).identity_key;
+  }
+  return words(value).map(canonicalizeDomainToken).join(' ');
+};
+const displayPhrase = (value, { locationLike = false } = {}) => {
+  if (locationLike && placesGazetteerIndex) {
+    return canonicalizeLocationText(value, placesGazetteerIndex, { log: placeRepairLog }).text;
+  }
+  return canonicalizeDomainText(value);
+};
 const entityClass = (type) => PERSON_TYPES.has(type) ? 'person' : type === 'group' || type === 'organisation' || type === 'family' ? 'group' : 'thing';
 const entityId = (sourceId, type, key) => `se_${hash(`${sourceId}\u001f${type}\u001f${key}`)}`;
 
-const nameTokens = (value) => words(value).filter((word) => !TITLES.has(word));
+const nameTokens = (value) => words(String(value ?? '')
+  .replace(/\br\s*\(\s*av\s*\)/giu, 'rav')
+  .replace(/\bb\s*\(\s*en\s*\)/giu, 'ben'))
+  .filter((word) => !TITLES.has(word));
 const isNameLike = (mention) => PERSON_TYPES.has(mention.type) && nameTokens(mention.normalized_text ?? mention.text).length > 0;
 const mentionLabel = (mention) => String(mention.normalized_text ?? mention.text ?? '').replace(/\s+/gu, ' ').trim();
+const SHORT_ALIAS_BLOCKED = new Set([...TITLES, ...ROLE_WORDS, 'baron', 'count', 'emperor', 'pope', 'lady', 'magister', 'the', 'great', 'ben', 'ibn', 'of']);
+const standaloneNameToken = (token) => token && !SHORT_ALIAS_BLOCKED.has(token) && !/^[ivxlcdm]+$/u.test(token);
+
+/**
+ * Repair only exact, adjacent source-local type drift. A lone "Mendel" tagged
+ * as place one page after person "Mendel" is continuity evidence; fuzzy or
+ * distant names remain untouched and therefore reviewable.
+ */
+export const correctSourceLocalPersonMentionTypes = (mentions) => {
+  const rows = mentions.map((mention) => ({ ...mention }));
+  const peopleBySurface = new Map();
+  for (const mention of rows.filter((row) => PERSON_TYPES.has(row.type))) {
+    const key = phrase(mentionLabel(mention));
+    if (!key) continue;
+    const values = peopleBySurface.get(key) ?? []; values.push(mention); peopleBySurface.set(key, values);
+  }
+  const corrections = [];
+  for (const mention of rows) {
+    if (!NONPERSON_TYPES.has(mention.type)) continue;
+    const anchors = peopleBySurface.get(phrase(mentionLabel(mention))) ?? [];
+    const nearest = anchors.sort((left, right) => Math.abs(left.page - mention.page) - Math.abs(right.page - mention.page))[0];
+    if (!nearest || Math.abs(nearest.page - mention.page) > 1 || words(mentionLabel(mention)).length > 2) continue;
+    const oldType = mention.type;
+    mention.type = 'person';
+    if (nearest.subject_entity_id) mention.subject_entity_id = nearest.subject_entity_id;
+    corrections.push({
+      mention_id: mention.mention_id, page_ref: mention.page, start_offset: mention.start_offset,
+      surface: mentionLabel(mention), from_type: oldType, to_type: 'person',
+      anchor_mention_id: nearest.mention_id, reason: 'exact_adjacent_person_type_continuity',
+    });
+  }
+  return { mentions: rows, corrections };
+};
+
+/** Add a first/last-name alias only when it identifies one source-local person. */
+export const addSafePersonShortAliases = ({ entities, aliasIndex = null }) => {
+  const owners = new Map();
+  const existingSingleOwners = new Map();
+  for (const entity of entities.values()) {
+    if (entity.entity_class !== 'person') continue;
+    for (const alias of entity.aliases ?? []) {
+      const tokens = nameTokens(alias);
+      if (tokens.length !== 1) continue;
+      const ids = existingSingleOwners.get(tokens[0]) ?? new Set(); ids.add(entity.entity_id); existingSingleOwners.set(tokens[0], ids);
+    }
+  }
+  for (const entity of entities.values()) {
+    if (entity.entity_class !== 'person') continue;
+    const canonical = phrase(entity.label);
+    for (const alias of [...(entity.aliases ?? [])]) {
+      const tokens = nameTokens(alias);
+      if (tokens.length !== 1 || phrase(alias) === canonical) continue;
+      if (!standaloneNameToken(tokens[0]) || (existingSingleOwners.get(tokens[0])?.size ?? 0) > 1) entity.aliases.delete(alias);
+    }
+  }
+  const nonPersonAliases = new Set([...entities.values()]
+    .filter((entity) => entity.entity_class !== 'person')
+    .flatMap((entity) => [...(entity.aliases ?? []), entity.label])
+    .map((alias) => phrase(alias)));
+  for (const entity of entities.values()) {
+    if (entity.entity_class !== 'person') continue;
+    const full = [...(entity.aliases ?? [])].map(nameTokens).find((tokens) => tokens.length >= 2);
+    if (!full) continue;
+    for (const token of new Set([full[0], full.at(-1)].filter(standaloneNameToken))) {
+      if (nonPersonAliases.has(token)) continue;
+      const ids = owners.get(token) ?? new Set(); ids.add(entity.entity_id); owners.set(token, ids);
+    }
+  }
+  for (const [token, ids] of owners) {
+    if (ids.size !== 1) continue;
+    const id = [...ids][0];
+    entities.get(id)?.aliases.add(token);
+    if (aliasIndex) {
+      const indexed = aliasIndex.get(token) ?? new Set(); indexed.add(id); aliasIndex.set(token, indexed);
+    }
+  }
+};
+const GENERIC_COLLECTIVE_TERMS = new Set(['people', 'person', 'persons', 'men', 'women', 'children', 'residents', 'inhabitants', 'citizens', 'visitors', 'jew', 'jews']);
+const GENERIC_BUILDING_TERMS = new Set(['synagogue', 'synagogues', 'shul', 'building', 'buildings', 'cemetery', 'cemeteries', 'museum', 'museums', 'house', 'houses', 'prayer', 'prayerhouse', 'prayerhouses', 'temple', 'temples', 'school', 'schools', 'hospital', 'hospitals', 'church', 'churches', 'hall', 'halls', 'library', 'libraries']);
+const GENERIC_BUILDING_MODIFIERS = new Set(['a', 'an', 'the', 'this', 'that', 'these', 'those', 'its', 'their', 'new', 'old', 'small', 'large', 'former', 'other', 'no', 'jewish']);
+const genericCollectiveSurface = (value) => {
+  const tokenList = words(value);
+  const withoutDeterminer = ['a', 'an', 'some', 'the', 'these', 'those', 'many', 'most', 'all'].includes(tokenList[0]) ? tokenList.slice(1) : tokenList;
+  return withoutDeterminer.length === 1 && GENERIC_COLLECTIVE_TERMS.has(withoutDeterminer[0]);
+};
+const genericBuildingSurface = (value) => {
+  const tokenList = words(value);
+  return tokenList.length > 0 && tokenList.every((token) => GENERIC_BUILDING_TERMS.has(token) || GENERIC_BUILDING_MODIFIERS.has(token))
+    && tokenList.some((token) => GENERIC_BUILDING_TERMS.has(token));
+};
+
+// Mentions remain in the evidence ledger, but only source-local identities
+// may enter subject memory / the entity index. This is the ingestion boundary:
+// browser rendering must not be responsible for repairing noun/date spam.
+export const entityEligibilityReason = (mention) => {
+  if (['date', 'event', 'movement'].includes(mention.type)) return 'non_identity_mention_type';
+  if (genericCollectiveSurface(mention.normalized_text ?? mention.text)) return 'generic_collective_not_identity';
+  return null;
+};
 
 /**
  * Give every explicit mention a source-local entity ID. Person aliases are
  * merged only when a short form names exactly one longer form in this source.
  */
 export const buildSubjectEntityIndex = ({ sourceId, mentions }) => {
-  const rows = [...mentions].map((mention) => ({ ...mention }));
-  const people = rows.filter(isNameLike);
+  const typeCorrection = correctSourceLocalPersonMentionTypes(mentions);
+  const rows = typeCorrection.mentions;
+  const entityEligibilityLog = [];
+  for (const mention of rows) {
+    const reason = entityEligibilityReason(mention);
+    if (!reason) continue;
+    mention.subject_entity_id = null;
+    entityEligibilityLog.push({ mention_id: mention.mention_id, page_ref: mention.page, start_offset: mention.start_offset, surface: mentionLabel(mention), type: mention.type, reason });
+  }
+  const eligibleRows = rows.filter((mention) => !entityEligibilityReason(mention));
+  const people = eligibleRows.filter(isNameLike);
   const fullNames = new Map();
   for (const mention of people) {
     const tokenList = nameTokens(mentionLabel(mention));
@@ -64,7 +207,7 @@ export const buildSubjectEntityIndex = ({ sourceId, mentions }) => {
     const key = phrase(alias); if (!key) return;
     const values = aliasIndex.get(key) ?? new Set(); values.add(id); aliasIndex.set(key, values);
   };
-  for (const mention of rows) {
+  for (const mention of eligibleRows) {
     const label = mentionLabel(mention);
     const type = mention.type ?? 'thing';
     // An address anchor distinguishes same-named buildings: the "great"
@@ -72,15 +215,32 @@ export const buildSubjectEntityIndex = ({ sourceId, mentions }) => {
     // not one generic synagogue.
     const anchor = !isNameLike(mention) ? mention.address_anchor : null;
     // OCR variants fold into one identity: `synagoque` is not a second
-    // building. The damaged surface stays searchable as an alias.
-    const base = isNameLike(mention) ? canonicalForPerson(mention) : canonicalPhrase(label);
-    const displayLabel = isNameLike(mention) ? label : canonicalizeDomainText(label);
+    // building. The damaged surface stays searchable as an alias. Location
+    // confusion (Dohdny/Dohany) folds only on a unique gazetteer hit.
+    const locationLike = !isNameLike(mention) && isLocationLikeMention(mention);
+    let base;
+    let displayLabel;
+    if (isNameLike(mention)) {
+      base = canonicalForPerson(mention);
+      displayLabel = label;
+    } else if (locationLike && placesGazetteerIndex) {
+      const repaired = canonicalizeLocationText(label, placesGazetteerIndex, { log: placeRepairLog });
+      base = repaired.identity_key;
+      displayLabel = repaired.text;
+    } else {
+      base = canonicalPhrase(label);
+      displayLabel = displayPhrase(label);
+    }
     const canonical = anchor?.key ? `${base} @ ${anchor.key}` : base;
     const id = entityId(sourceId, entityClass(type), canonical || `${mention.page}:${mention.start_offset}`);
     mention.subject_entity_id = id;
     let entity = entities.get(id);
     if (!entity) {
-      entity = { entity_id: id, type, entity_class: entityClass(type), label: anchor ? `${displayLabel || base} (${anchor.display})` : (displayLabel || canonical), aliases: new Set(), roles: new Set(), mention_ids: [], last_mention_id: null, last_page: null, last_offset: null };
+      entity = {
+        entity_id: id, type, entity_class: entityClass(type), label: anchor ? `${displayLabel || base} (${anchor.display})` : (displayLabel || canonical),
+        aliases: new Set(), roles: new Set(), mention_ids: [], last_mention_id: null, last_page: null, last_offset: null,
+        presentation_eligible: !(type === 'building' && !anchor && genericBuildingSurface(label)),
+      };
       if (anchor) entity.address = { street: anchor.street, house_number: anchor.house_number, display: anchor.display, center: anchor.center };
       entities.set(id, entity);
     }
@@ -88,26 +248,20 @@ export const buildSubjectEntityIndex = ({ sourceId, mentions }) => {
     // identity device, not something a reader ever writes.
     entity.aliases.add(label); entity.aliases.add(base);
     if (anchor?.display) entity.aliases.add(anchor.display);
-    for (const token of words(label).map(canonicalizeDomainToken)) if (ROLE_WORDS.has(token)) entity.roles.add(token);
+    for (const token of words(label).map((token) => (
+      locationLike && placesGazetteerIndex ? canonicalizeLocationToken(token, placesGazetteerIndex) : canonicalizeDomainToken(token)
+    ))) if (ROLE_WORDS.has(token)) entity.roles.add(token);
     if (/^\s*r\.\s+/iu.test(label)) entity.roles.add('rabbi');
-    if (type === 'building' && /\bsynagog(?:ue|ues)\b/iu.test(canonicalizeDomainText(label))) entity.roles.add('synagogue');
+    if (type === 'building' && /\bsynagog(?:ue|ues)\b/iu.test(displayPhrase(label, { locationLike }))) entity.roles.add('synagogue');
     entity.mention_ids.push(mention.mention_id);
     for (const alias of entity.aliases) addAlias(alias, id);
   }
-  // Add safe single-name aliases for full names. If two people share it, leave ambiguous.
-  for (const entity of entities.values()) {
-    if (entity.entity_class !== 'person') continue;
-    const canonical = [...entity.aliases].map(nameTokens).find((tokens) => tokens.length >= 2);
-    if (!canonical) continue;
-    for (const token of new Set([canonical[0], canonical.at(-1)])) {
-      if ((owners.get(token)?.size ?? 0) === 1) addAlias(token, entity.entity_id);
-    }
-  }
-  return { mentions: rows, entities, aliasIndex };
+  addSafePersonShortAliases({ entities, aliasIndex });
+  return { mentions: rows, entities, aliasIndex, entityEligibilityLog, entityTypeCorrectionsLog: typeCorrection.corrections };
 };
 
 export const createSubjectState = ({ sourceId, entities, aliasIndex, persisted = null }) => {
-  const state = { version: 1, source_id: sourceId, entities: new Map(), aliasIndex: new Map(), focus: { active: null, person: null, thing: null, group: null }, last_page: null };
+  const state = { version: 1, source_id: sourceId, entities: new Map(), aliasIndex: new Map(), focus: { active: null, person: null, thing: null, group: null }, ordinal_pair: null, last_page: null };
   for (const [id, entity] of entities ?? []) state.entities.set(id, { ...entity, aliases: new Set(entity.aliases ?? []), roles: new Set(entity.roles ?? []) });
   for (const [alias, ids] of aliasIndex ?? []) state.aliasIndex.set(alias, new Set(ids));
   if (persisted?.source_id === sourceId && persisted.version === 1) {
@@ -118,6 +272,7 @@ export const createSubjectState = ({ sourceId, entities, aliasIndex, persisted =
       }
     }
     state.focus = { ...state.focus, ...(persisted.focus ?? {}) };
+    state.ordinal_pair = persisted.ordinal_pair ?? null;
     state.last_page = persisted.last_page ?? null;
   }
   return state;
@@ -150,7 +305,7 @@ const touch = (state, entity, mention, clause) => {
   state.focus.active = entity.entity_id;
 };
 
-const referenceExpressions = (text) => [...String(text ?? '').matchAll(/\b(he|him|his|she|her|hers|they|them|their|theirs|it|its|the\s+(?:rabbi|scholar|author|writer|architect|doctor|teacher|mayor|ruler|king|queen|synagogue|temple|school|building|house|hospital|cemetery|church|hall|museum|library|institute)|(?:this|that|these|those)\s+[a-z][a-z-]*)\b/giu)]
+const referenceExpressions = (text) => [...String(text ?? '').matchAll(/\b(he|him|his|she|her|hers|they|them|their|theirs|it|its|the\s+(?:former|latter|rabbi|scholar|author|writer|architect|doctor|teacher|mayor|ruler|king|queen|synagogue|temple|school|building|house|hospital|cemetery|church|hall|museum|library|institute)|(?:this|that|these|those)\s+[a-z][a-z-]*)\b/giu)]
   .map((match) => ({ surface: match[1], index: match.index }));
 
 const expectedFor = (surface) => {
@@ -216,9 +371,10 @@ const ensureTrackedEntity = (state, { key, type, head, ownerEntityId = null }) =
   let entity = state.entities.get(id);
   if (!entity) {
     entity = {
-      entity_id: id, type, entity_class: entityClass(type), label: head,
+      entity_id: id, type, entity_class: entityClass(type), label: ownerEntityId ? `${state.entities.get(ownerEntityId)?.label ?? 'owned'} ${head}` : head,
       aliases: new Set([head]), roles: new Set([head]), head, owner_entity_id: ownerEntityId,
-      mention_ids: [], last_mention_id: null, last_page: null, last_offset: null, origin: 'noun_ledger',
+      mention_ids: [], last_mention_id: null, last_page: null, last_offset: null,
+      origin: 'noun_ledger', presentation_eligible: Boolean(ownerEntityId && type === 'group'),
     };
     state.entities.set(id, entity);
   }
@@ -231,6 +387,9 @@ const registerLedgerEntity = ({ state, clause, phraseRow, head, ownerEntityId, l
   const type = trackedTypeFor(head);
   const key = ownerEntityId ? `${ownerEntityId}:owned:${head}` : `tracked:${head}`;
   const entity = ensureTrackedEntity(state, { key, type, head, ownerEntityId });
+  const contextualAlias = words(phraseRow.text).filter((token) => !PRONOUN_EXPECTED[token]).join(' ');
+  if (contextualAlias) entity.aliases.add(contextualAlias);
+  if (ownerEntityId && contextualAlias) entity.label = `${state.entities.get(ownerEntityId)?.label ?? 'owned'} ${contextualAlias}`;
   const mention = mintLedgerMention(state, phraseRow, type);
   mention.subject_entity_id = entity.entity_id;
   if (!entity.mention_ids.includes(mention.mention_id)) entity.mention_ids.push(mention.mention_id);
@@ -239,17 +398,32 @@ const registerLedgerEntity = ({ state, clause, phraseRow, head, ownerEntityId, l
   return entity;
 };
 
-const processLedgerPhrase = ({ state, clause, phraseRow, overlapsExplicit, references, ambiguities, ledgerMentions, unresolved }) => {
+const localTypedCandidate = ({ state, candidates, expected, phraseStart }) => {
+  const local = [...new Map(candidates
+    .filter(({ mention, entity }) => mention.start_offset < phraseStart && compatible(entity, expected))
+    .map((row) => [row.entity.entity_id, row])).values()];
+  if (!local.length) return null;
+  if (local.length === 1) return { status: 'resolved', entity: local[0].entity, mention: local[0].mention, local: true };
+  return { status: 'ambiguous', candidates: local.slice(0, 4).map((row) => row.entity), local: true };
+};
+
+const localBindingAllowed = (kind, first) => (
+  kind === 'pronoun' && ['he', 'she', 'they'].includes(first)
+  || kind === 'possessive' && ['his', 'hers', 'their', 'theirs'].includes(first)
+);
+
+const processLedgerPhrase = ({ state, clause, phraseRow, overlapsExplicit, references, ambiguities, ledgerMentions, unresolved, localCandidates }) => {
   const first = words(phraseRow.text)[0];
   const head = words(phraseRow.head ?? '')[0] ?? null;
   const kind = phraseRow.reference_kind;
-  const pushReference = (entity) => {
-    if (!entity.last_mention_id) return;
+  const pushReference = (entity, resolutionSource = 'deterministic_subject_memory', antecedentMentionId = null) => {
+    const mentionId = antecedentMentionId ?? entity.last_mention_id;
+    if (!mentionId) return;
     references.push({
-      clause_id: clause.clause_id, antecedent_mention_id: entity.last_mention_id,
+      clause_id: clause.clause_id, antecedent_mention_id: mentionId,
       resolved_entity_id: entity.entity_id, surface: phraseRow.text,
       start_offset: phraseRow.start_offset,
-      resolution_source: 'deterministic_subject_memory',
+      resolution_source: resolutionSource,
     });
   };
   const pushAmbiguity = (candidates, expected) => ambiguities.push({
@@ -263,10 +437,36 @@ const processLedgerPhrase = ({ state, clause, phraseRow, overlapsExplicit, refer
     expected, reference_kind: kind, start_offset: phraseRow.start_offset, why,
   });
 
+  if (kind === 'ordinal') {
+    const member = phraseRow.ordinal_member ?? words(phraseRow.text).find((word) => word === 'former' || word === 'latter');
+    const pair = state.ordinal_pair;
+    if (!member || !pair || pair.entities?.length !== 2) {
+      pushUnresolved('thing', 'ordinal_pair_not_safely_bound');
+      return;
+    }
+    const selected = pair.entities[member === 'former' ? 0 : 1];
+    const entity = state.entities.get(selected.entity_id);
+    if (!entity || !selected.mention_id) {
+      pushUnresolved('thing', 'ordinal_pair_candidate_missing');
+      return;
+    }
+    pushReference(entity, 'deterministic_ordinal_pair', selected.mention_id);
+    touch(state, entity, null, clause);
+    return;
+  }
+
   if (kind === 'pronoun') {
     const expected = PRONOUN_EXPECTED[first];
     if (!expected) return;
-    let result = resolveTyped(state, { expected, page: clause.page_ref });
+    // A name already stated in this clause is more immediate evidence than
+    // a focus carried from a previous sentence. This matters for "Seybold
+    // noted that he..." and appositions such as "Mendel ... his position".
+    // Object pronouns deliberately keep the prior discourse focus: in
+    // "Mendel greeted him", the local Mendel is not the object.
+    let result = localBindingAllowed(kind, first)
+      ? localTypedCandidate({ state, candidates: localCandidates, expected, phraseStart: phraseRow.start_offset })
+      : null;
+    if (!result) result = resolveTyped(state, { expected, page: clause.page_ref });
     // "They" also covers plural things (the gravestones ... They come from...);
     // fall back to the thing focus when no group candidate exists.
     // they/them/their are inherently plural regardless of the tagger's hint.
@@ -278,8 +478,11 @@ const processLedgerPhrase = ({ state, clause, phraseRow, overlapsExplicit, refer
       if (thingResult.status === 'resolved') result = thingResult;
     }
     if (result.status === 'resolved') {
-      if (!result.entity.last_mention_id) pushUnresolved(expected, 'candidate_without_mention');
-      pushReference(result.entity); touch(state, result.entity, null, clause);
+      // A same-clause binding carries its explicit local mention even when
+      // the entity has not yet been touched by an earlier clause. Do not
+      // emit a contradictory unresolved confession for that valid binding.
+      if (!(result.mention?.mention_id ?? result.entity.last_mention_id)) pushUnresolved(expected, 'candidate_without_mention');
+      pushReference(result.entity, result.local ? 'deterministic_local_clause' : undefined, result.mention?.mention_id); touch(state, result.entity, result.mention ?? null, clause);
     }
     else if (result.status === 'ambiguous') pushAmbiguity(result.candidates, expected);
     else pushUnresolved(expected, 'no_candidate');
@@ -288,11 +491,18 @@ const processLedgerPhrase = ({ state, clause, phraseRow, overlapsExplicit, refer
   if (kind === 'possessive') {
     const ownerExpected = PRONOUN_EXPECTED[first];
     if (!ownerExpected) return;
-    const owner = resolveTyped(state, { expected: ownerExpected, page: clause.page_ref });
+    const owner = localBindingAllowed(kind, first)
+      ? localTypedCandidate({ state, candidates: localCandidates, expected: ownerExpected, phraseStart: phraseRow.start_offset })
+        ?? resolveTyped(state, { expected: ownerExpected, page: clause.page_ref })
+      : resolveTyped(state, { expected: ownerExpected, page: clause.page_ref });
     if (owner.status === 'ambiguous') { pushAmbiguity(owner.candidates, ownerExpected); return; }
     if (owner.status !== 'resolved') { pushUnresolved(ownerExpected, 'no_candidate'); return; }
-    pushReference(owner.entity);
-    touch(state, owner.entity, null, clause);
+    if (!(owner.mention?.mention_id ?? owner.entity.last_mention_id)) {
+      pushUnresolved(ownerExpected, 'candidate_without_mention');
+      return;
+    }
+    pushReference(owner.entity, owner.local ? 'deterministic_local_clause' : undefined, owner.mention?.mention_id);
+    touch(state, owner.entity, owner.mention ?? null, clause);
     // The owned object is its own entity; "his tomb" never merges a tomb
     // into its owner.
     if (head && (TRACKABLE_HEADS.has(head) || GROUP_WORDS.has(head))) {
@@ -303,14 +513,23 @@ const processLedgerPhrase = ({ state, clause, phraseRow, overlapsExplicit, refer
   if (kind === 'definite') {
     // A trackable/building head overrides the tagger's type: a possessor name
     // inside the phrase ("the former Mendel Houses") must not make it a person.
-    const expected = head && (TRACKABLE_HEADS.has(head) || BUILDING_WORDS.has(head)) ? 'thing'
+    // GLiNER often labels "the king" / "the Queen" as things. A role title
+    // denotes a person (or plural group) before ordinary object-head rules.
+    const roleHead = head?.replace(/s$/u, '') ?? null;
+    const expected = roleHead && ROLE_WORDS.has(roleHead) ? (head.endsWith('s') ? 'group' : 'person')
+      : head && (TRACKABLE_HEADS.has(head) || BUILDING_WORDS.has(head)) ? 'thing'
       : phraseRow.type === 'person' ? 'person' : phraseRow.type === 'group' ? 'group' : 'thing';
     // A definite phrase naming a known alias ("the Orczy House") resolves by
     // exact alias before any head-based candidate search.
     const aliasKey = phrase(String(phraseRow.text).replace(/^(?:the|this|that|these|those)\s+/iu, ''));
-    const aliasMatches = [...(state.aliasIndex.get(aliasKey) ?? [])]
+    const exactAliasMatches = [...(state.aliasIndex.get(aliasKey) ?? [])]
       .map((id) => state.entities.get(id))
-      .filter((entity) => compatible(entity, expected));
+      .filter(Boolean);
+    // A unique exact source alias is stronger evidence than GLiNER's coarse
+    // entity class: "the Budapest Historical Museum" is an organisation,
+    // even if the phrase was tagged as a thing.
+    if (exactAliasMatches.length === 1) { pushReference(exactAliasMatches[0]); touch(state, exactAliasMatches[0], null, clause); return; }
+    const aliasMatches = exactAliasMatches.filter((entity) => compatible(entity, expected));
     if (aliasMatches.length === 1) { pushReference(aliasMatches[0]); touch(state, aliasMatches[0], null, clause); return; }
     if (aliasMatches.length > 1) { pushAmbiguity(aliasMatches.slice(0, 4), expected); return; }
     const discriminating = head && (ROLE_WORDS.has(head) || TRACKABLE_HEADS.has(head) || GROUP_WORDS.has(head));
@@ -349,15 +568,39 @@ export const resolveSubjectReferences = ({ state, clauses, mentionById, nounPhra
     const phrases = nounPhrases
       .filter((row) => row.page === clause.page_ref && row.start_offset >= clause.start_offset && row.start_offset < clauseEnd)
       .sort((a, b) => a.start_offset - b.start_offset);
+    const candidates = clause.mention_ids.map((id) => mentionById.get(id)).filter(Boolean)
+      .map((mention) => ({ mention, entity: state.entities.get(mention.subject_entity_id) }))
+      .filter((row) => row.entity && focusable(row.entity) && (row.entity.entity_class === 'person' || row.entity.entity_class === 'thing' || row.entity.entity_class === 'group'))
+      .sort((left, right) => left.mention.start_offset - right.mention.start_offset);
     if (phrases.length) {
       const explicitSpans = clause.mention_ids.map((id) => mentionById.get(id)).filter(Boolean)
         .map((mention) => [mention.start_offset, mention.end_offset]);
       for (const phraseRow of phrases) {
         const overlapsExplicit = explicitSpans.some(([start, end]) => phraseRow.start_offset < end && phraseRow.end_offset > start);
-        processLedgerPhrase({ state, clause, phraseRow, overlapsExplicit, references, ambiguities, ledgerMentions, unresolved });
+        processLedgerPhrase({ state, clause, phraseRow, overlapsExplicit, references, ambiguities, ledgerMentions, unresolved, localCandidates: candidates });
+      }
+      const coveredOrdinals = phrases.filter((row) => row.reference_kind === 'ordinal')
+        .map((row) => [row.start_offset, row.end_offset]);
+      for (const expression of referenceExpressions(clause.text).filter((row) => /\b(?:former|latter)\b/iu.test(row.surface))) {
+        const start = clause.start_offset + expression.index;
+        if (coveredOrdinals.some(([left, right]) => start >= left && start < right)) continue;
+        processLedgerPhrase({
+          state, clause,
+          phraseRow: { page: clause.page_ref, start_offset: start, end_offset: start + expression.surface.length, text: expression.surface, head: expression.surface, type: 'thing', reference_kind: 'ordinal', ordinal_member: words(expression.surface).at(-1) },
+          overlapsExplicit: false, references, ambiguities, ledgerMentions, unresolved, localCandidates: candidates,
+        });
       }
     } else {
       for (const expression of referenceExpressions(clause.text)) {
+        if (/\b(?:former|latter)\b/iu.test(expression.surface)) {
+          const start = clause.start_offset + expression.index;
+          processLedgerPhrase({
+            state, clause,
+            phraseRow: { page: clause.page_ref, start_offset: start, end_offset: start + expression.surface.length, text: expression.surface, head: expression.surface, type: 'thing', reference_kind: 'ordinal', ordinal_member: words(expression.surface).at(-1) },
+            overlapsExplicit: false, references, ambiguities, ledgerMentions, unresolved, localCandidates: candidates,
+          });
+          continue;
+        }
         const expected = expectedFor(expression.surface);
         let antecedent = pickFocus(state, expected, roleFor(expression.surface));
         // Plural "they" naturally covers plural things when no group exists.
@@ -366,15 +609,21 @@ export const resolveSubjectReferences = ({ state, clauses, mentionById, nounPhra
         references.push({ clause_id: clause.clause_id, antecedent_mention_id: antecedent.last_mention_id, resolved_entity_id: antecedent.entity_id, surface: expression.surface, start_offset: clause.start_offset + expression.index, resolution_source: 'deterministic_subject_memory' });
       }
     }
-    const candidates = clause.mention_ids.map((id) => mentionById.get(id)).filter(Boolean)
-      .map((mention) => ({ mention, entity: state.entities.get(mention.subject_entity_id) }))
-      .filter((row) => row.entity && focusable(row.entity) && (row.entity.entity_class === 'person' || row.entity.entity_class === 'thing' || row.entity.entity_class === 'group'))
-      .sort((left, right) => left.mention.start_offset - right.mention.start_offset);
     // Prefer an early non-prepositional mention. A nearby place must not displace
     // a named narrator such as "In Buda, R. Efraim...".
     const subject = candidates.find(({ mention }) => !/\b(?:in|at|from|to|near|within|of)\s*$/iu.test(clause.text.slice(0, Math.max(0, mention.start_offset - clause.start_offset))))
       ?? candidates[0];
     if (subject) touch(state, subject.entity, subject.mention, clause);
+    const uniqueCandidates = [...new Map(candidates.map((row) => [row.entity.entity_id, row])).values()];
+    if (uniqueCandidates.length === 2) {
+      const between = clause.text.slice(
+        Math.max(0, uniqueCandidates[0].mention.end_offset - clause.start_offset),
+        Math.max(0, uniqueCandidates[1].mention.start_offset - clause.start_offset),
+      );
+      state.ordinal_pair = /\b(?:and|or|but)\b/iu.test(between)
+        ? { clause_id: clause.clause_id, page_ref: clause.page_ref, entities: uniqueCandidates.map(({ entity, mention }) => ({ entity_id: entity.entity_id, mention_id: mention.mention_id })) }
+        : null;
+    } else state.ordinal_pair = null;
     transitions.push({
       clause_id: clause.clause_id, page_ref: clause.page_ref, before_focus: before, after_focus: { ...state.focus },
       references: references.filter((row) => row.clause_id === clause.clause_id),
@@ -382,6 +631,133 @@ export const resolveSubjectReferences = ({ state, clauses, mentionById, nounPhra
     });
   }
   return { references, transitions, ambiguities, unresolved, ledgerMentions: [...ledgerMentions.values()] };
+};
+
+const startsWithWords = (text, candidate) => {
+  const actual = words(text);
+  const expected = words(candidate);
+  return expected.length > 0 && expected.length <= actual.length && expected.every((word, index) => actual[index] === word);
+};
+
+const containsWords = (text, candidate) => {
+  const haystack = ` ${phrase(text)} `;
+  const needle = phrase(candidate);
+  return Boolean(needle) && haystack.includes(` ${needle} `);
+};
+
+const escapedPattern = (value) => words(value).map((token) => token.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join('\\s+');
+
+// A name merely present in a clause is not necessarily its subject. This
+// source-local syntax guard prevents an object alias ("referred to as Juden
+// Gasse") from being promoted to fact subject while retaining explicit
+// subjects, coordinated subjects, and named reporting attributions.
+const safeSourceAliasBinding = (clauseText, alias, entity) => {
+  const pattern = escapedPattern(alias);
+  if (!pattern) return false;
+  const match = new RegExp(`\\b${pattern}\\b`, 'iu').exec(String(clauseText ?? ''));
+  if (!match) return false;
+  const before = String(clauseText).slice(0, match.index).trim();
+  const after = String(clauseText).slice(match.index + match[0].length).trim();
+  if (!before || /^(?:the\s+)?$/iu.test(before)) return true;
+  if (/\b(?:and|or)\s*$/iu.test(before) && /^(?:,\s*)?(?:was|were|is|are|had|has|did|could|would|became|remained|served|built|founded|occupied|lived|wrote|noted|said|reported)\b/iu.test(after)) return true;
+  if (/^(?:in|on|at|by|after|before|during|from|until|around|about)\b[^,;]{0,100},\s*$/iu.test(before)) return true;
+  if (entity?.entity_class === 'person') {
+    if (/\bas\s*$/iu.test(before) && /^(?:notes?|writes?|says?|observes?|reports?|records?|describes?|recalls?)\b/iu.test(after)) return true;
+    if (/\b(?:wrote|noted|said|reported|recorded|described|recalled)\s*$/iu.test(before)) return true;
+  }
+  return false;
+};
+
+const isClauseLeadingSubjectReference = (reference, clause) => {
+  const first = words(reference.surface)[0];
+  const definite = /^the\s+/iu.test(String(reference.surface ?? ''));
+  if (!['he', 'she', 'they'].includes(first) && !definite) return false;
+  const offset = Number(reference.start_offset) - Number(clause.start_offset);
+  if (!Number.isFinite(offset) || offset < 0) return false;
+  const prefix = clause.text.slice(0, offset);
+  return /^(?:(?:while|and|but|however|then|later|also)\s+)?$/iu.test(prefix);
+};
+
+/**
+ * Attach an item only when its subject has source-local evidence. References
+ * elsewhere in the clause are participants, never a licence to make their
+ * antecedent the fact subject ("Mendel greeted him" must not become a King
+ * Matthias fact). The structured failure is intentionally returned so callers
+ * can persist a machine-readable confession rather than guessing.
+ */
+export const resolveItemSubjectAttribution = ({ item, clauseById, references, mentionById, state }) => {
+  const itemClauses = (item.clause_ids ?? []).map((id) => clauseById.get(id)).filter(Boolean);
+  const possessiveReferences = (references ?? []).filter((reference) => reference.resolved_entity_id
+    && itemClauses.some((clause) => clause.clause_id === reference.clause_id && /^(?:its|his|her|their)\b/iu.test(String(reference.surface ?? '').trim())));
+  const ownedCandidates = [...state.entities.values()].filter((entity) => entity.owner_entity_id
+    && possessiveReferences.some((reference) => reference.resolved_entity_id === entity.owner_entity_id
+      && itemClauses.some((clause) => clause.clause_id === reference.clause_id && containsWords(clause.text, reference.surface)))
+    && [...(entity.aliases ?? [])].some((alias) => startsWithWords(item.statement_en, alias)));
+  if (ownedCandidates.length === 1) {
+    const entity = ownedCandidates[0];
+    const reference = possessiveReferences.find((row) => row.resolved_entity_id === entity.owner_entity_id);
+    return {
+      status: 'resolved', entity_id: entity.entity_id, literal_subject: reference.surface,
+      resolution_source: 'deterministic_owned_subject', discourse_chain: [entity.owner_entity_id, entity.entity_id],
+    };
+  }
+  if (ownedCandidates.length > 1) return {
+    status: 'ambiguous', reason: 'multiple_owned_subject_candidates', candidate_entity_ids: ownedCandidates.map((entity) => entity.entity_id),
+  };
+  const directReferences = (references ?? []).filter((reference) => {
+    if (!reference.resolved_entity_id || !itemClauses.some((clause) => clause.clause_id === reference.clause_id && isClauseLeadingSubjectReference(reference, clause))) return false;
+    const entity = state.entities.get(reference.resolved_entity_id);
+    // One clause can yield several facts. A leading subject is evidence only
+    // for a fact that names that same subject (or preserves its pronoun), not
+    // for every neighboring claim in the clause.
+    const aliasMatch = [...(entity?.aliases ?? [])].some((alias) => startsWithWords(item.statement_en, alias));
+    const pronoun = ['he', 'she', 'they'].includes(words(reference.surface)[0]);
+    // A bare pronoun in the model paraphrase has no identity evidence of its
+    // own. It may use a same-clause binding, but a carried focus must be named
+    // in the fact or remain unresolved for review.
+    return aliasMatch || (!pronoun && startsWithWords(item.statement_en, reference.surface))
+      || (pronoun && reference.resolution_source === 'deterministic_local_clause' && startsWithWords(item.statement_en, reference.surface));
+  });
+  const directEntityIds = [...new Set(directReferences.map((reference) => reference.resolved_entity_id))];
+  if (directEntityIds.length === 1) {
+    const reference = directReferences.find((row) => row.resolved_entity_id === directEntityIds[0]);
+    return {
+      status: 'resolved', entity_id: directEntityIds[0], literal_subject: reference.surface,
+      resolution_source: reference.resolution_source, discourse_chain: [reference.antecedent_mention_id, directEntityIds[0]].filter(Boolean),
+    };
+  }
+  if (directEntityIds.length > 1) return {
+    status: 'ambiguous', reason: 'multiple_clause_subject_references', candidate_entity_ids: directEntityIds,
+  };
+
+  const explicitEntityIds = new Set(itemClauses.flatMap((clause) => clause.mention_ids ?? [])
+    .map((id) => mentionById.get(id)?.subject_entity_id)
+    .filter(Boolean));
+  const aliasCandidates = (entities) => entities.flatMap((entity) => [...(entity?.aliases ?? [])]
+    .filter((alias) => startsWithWords(item.statement_en, alias) && itemClauses.some((clause) => safeSourceAliasBinding(clause.text, alias, entity)))
+    .map((alias) => ({ entity, alias })));
+  // GLiNER can miss a printed name in a dense clause. Exact name text in both
+  // the source clause and the paraphrase is still safe evidence for a person;
+  // use it only after trying actual clause mentions, so a same-spelled place
+  // cannot compete with an explicit person such as Mendel.
+  let candidates = aliasCandidates([...explicitEntityIds].map((id) => state.entities.get(id)).filter(Boolean));
+  if (!candidates.length) candidates = aliasCandidates([...state.entities.values()].filter((entity) => entity.entity_class === 'person'));
+  const byEntity = new Map();
+  for (const candidate of candidates) {
+    const current = byEntity.get(candidate.entity.entity_id);
+    if (!current || words(candidate.alias).length > words(current.alias).length) byEntity.set(candidate.entity.entity_id, candidate);
+  }
+  if (byEntity.size === 1) {
+    const { entity, alias } = [...byEntity.values()][0];
+    return {
+      status: 'resolved', entity_id: entity.entity_id, literal_subject: alias,
+      resolution_source: 'deterministic_explicit_source_alias', discourse_chain: [entity.entity_id],
+    };
+  }
+  if (byEntity.size > 1) return {
+    status: 'ambiguous', reason: 'multiple_explicit_source_aliases', candidate_entity_ids: [...byEntity.keys()],
+  };
+  return { status: 'unresolved', reason: 'no_safe_subject_binding', candidate_entity_ids: [] };
 };
 
 export const subjectContext = (state) => {
@@ -395,6 +771,7 @@ export const subjectContext = (state) => {
 export const serializeSubjectState = (state, lastPage) => ({
   version: 1, source_id: state.source_id, last_page: lastPage,
   focus: state.focus,
+  ordinal_pair: state.ordinal_pair,
   entities: [...state.entities.values()].filter((entity) => (entity.last_page ?? -1) >= lastPage - 3).map((entity) => ({
     ...entity, aliases: [...entity.aliases].slice(0, 12), roles: [...entity.roles].slice(0, 8), mention_ids: (entity.mention_ids ?? []).slice(-12),
   })),

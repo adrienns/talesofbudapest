@@ -13,6 +13,7 @@ from typing import Any
 PRONOUNS = {"he", "him", "his", "she", "her", "hers", "they", "them", "their", "theirs", "it", "its"}
 DEFINITE = {"the", "this", "that", "these", "those"}
 POSSESSIVE = {"his", "her", "hers", "their", "theirs", "its"}
+ORDINAL_ANAPHORS = {"former", "latter"}
 PERSON_HEADS = {
     "man", "woman", "girl", "boy", "child", "rabbi", "scholar", "author", "writer",
     "father", "mother", "son", "daughter", "husband", "wife", "brother", "sister", "visitor",
@@ -77,12 +78,13 @@ def noun_phrase_rows(doc: Any) -> list[dict[str, Any]]:
         possessive = first in POSSESSIVE
         pronoun = first in PRONOUNS and not possessive
         definite = first in DEFINITE
+        ordinal = next((word for word in words if word in ORDINAL_ANAPHORS), None)
         if len(words) == 1 and first in {"this", "that", "these", "those"}:
             # Deictic words without a noun are handled by sentence semantics,
             # not entity identity. Keep them out of the entity linker.
             definite = False
         named = any(token.pos_ == "PROPN" for token in chunk)
-        reference = pronoun or possessive or definite
+        reference = pronoun or possessive or definite or ordinal is not None
         row = {
             "reading_start": chunk.start_char,
             "reading_end": chunk.end_char,
@@ -95,7 +97,8 @@ def noun_phrase_rows(doc: Any) -> list[dict[str, Any]]:
             "number_hint": number_hint(chunk),
             "dependency": chunk.root.dep_,
             "reference": reference,
-            "reference_kind": "possessive" if possessive else "pronoun" if pronoun else "definite" if definite else None,
+            "reference_kind": "ordinal" if ordinal else "possessive" if possessive else "pronoun" if pronoun else "definite" if definite else None,
+            "ordinal_member": ordinal,
         }
         old = rows.get((chunk.start_char, chunk.end_char))
         if old is None or (row["reference"] and not old["reference"]):

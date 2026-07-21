@@ -10,7 +10,9 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import re
+import socketserver
 import sys
 from typing import Any, Iterable
 
@@ -106,7 +108,11 @@ HEURISTIC_PATTERNS = [
     ("organisation", re.compile(r"\b(?:[A-ZÀ-Ž][A-Za-zÀ-ž'’.-]+\s+){1,5}(?:community|Society|Academy|University|Diet|Parliament|Council|synagogue|school|parish|authorities|leadership)\b")),
     ("work", re.compile(r"\b(?:Sefer|Sha'ar|Mahane|Panim|Mishneh|Yemei)\s+[A-ZÀ-Ža-zà-ž][A-Za-zÀ-ž'’ -]{1,50}")),
     ("group", re.compile(r"\b(?:the\s+)?(?:fanatic\s+)?followers of the (?:new\s+)?Messiah\b", re.IGNORECASE)),
-    ("group", re.compile(r"\b(?:an?|the)\s+(?:observant\s+)?Jew\b", re.IGNORECASE)),
+    # Singular "a/the Jew" denotes an individual, not a population group.
+    # Treating it as a group displaced the actual person focus in appositions
+    # such as "Mendel, the Jew ...", silently sending later "he" to a stale
+    # person. Plural collectives remain GLiNER's group job.
+    ("person", re.compile(r"\b(?:an?|the)\s+(?:observant\s+)?Jew\b", re.IGNORECASE)),
     ("movement", re.compile(r"\b(?:Islam|Moslem|Muslim|Christianity|Protestant|Lutheran|Calvinist|Shabbateans?|Hasid(?:ic|im)?|Sephardi(?:m)?|Ashkenazi(?:m)?|Messianic movement)\b", re.IGNORECASE)),
     ("event", re.compile(r"\b(?:flood|epidemic|cholera epidemic|sieges?|reconquest|War of Independence)\b", re.IGNORECASE)),
 ]
@@ -399,25 +405,10 @@ def noun_ledger_for_page(
     return ledger
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default="fastino/gliner2-multi-v1")
-    parser.add_argument("--threshold", type=float, default=0.50)
-    parser.add_argument("--max-chars", type=int, default=1800)
-    parser.add_argument("--device", default="cpu")
-    parser.add_argument("--noun-ledger", action="store_true")
-    args = parser.parse_args()
-    if not 0 < args.threshold <= 1 or args.max_chars < 500:
-        raise SystemExit("--threshold must be in (0,1] and --max-chars must be >= 500")
-
-    payload = json.load(sys.stdin)
+def process_payload(payload: dict[str, Any], model: Any, noun_parser: Any, args: argparse.Namespace) -> dict[str, Any]:
     pages = payload.get("pages")
     if not isinstance(pages, list) or not pages:
-        raise SystemExit("stdin JSON must contain a non-empty pages array")
-
-    print(f"Loading local GLiNER2 model {args.model} on {args.device}...", file=sys.stderr)
-    model = GLiNER2.from_pretrained(args.model, map_location=args.device)
-    noun_parser = load_noun_phrase_parser() if args.noun_ledger else None
+        raise ValueError("payload must contain a non-empty pages array")
     mentions: list[dict[str, Any]] = []
     reading_pages: list[dict[str, Any]] = []
     noun_phrases: list[dict[str, Any]] = []
@@ -425,33 +416,56 @@ def main() -> None:
         page = source_page.get("page")
         text = source_page.get("text")
         if not isinstance(page, int) or not isinstance(text, str):
-            raise SystemExit("each page needs integer page and string text")
+            raise ValueError("each page needs integer page and string text")
         reading_text, raw_starts, raw_ends = normalize_reading_view(text)
-        reading_pages.append({
-            "page": page,
-            "text": reading_text,
-            "raw_starts": raw_starts,
-            "raw_ends": raw_ends,
-        })
-        mentions.extend(detect_page(
-            model, page, text, reading_text, raw_starts, raw_ends, args.threshold, args.max_chars
-        ))
+        reading_pages.append({"page": page, "text": reading_text, "raw_starts": raw_starts, "raw_ends": raw_ends})
+        mentions.extend(detect_page(model, page, text, reading_text, raw_starts, raw_ends, args.threshold, args.max_chars))
         if noun_parser is not None:
             noun_phrases.extend(noun_ledger_for_page(noun_parser, page, text, reading_text, raw_starts, raw_ends))
-    json.dump(
-        {
-            "engine": "gliner2",
-            "model": args.model,
-            "threshold": args.threshold,
-            "labels": ENTITY_LABELS,
-            "mentions": mentions,
-            "reading_pages": reading_pages,
-            "noun_phrases": noun_phrases if noun_parser is not None else None,
-        },
-        sys.stdout,
-        ensure_ascii=False,
-    )
-    sys.stdout.write("\n")
+    return {"engine": "gliner2", "model": args.model, "threshold": args.threshold, "labels": ENTITY_LABELS, "mentions": mentions, "reading_pages": reading_pages, "noun_phrases": noun_phrases if noun_parser is not None else None}
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", default="fastino/gliner2-multi-v1")
+    parser.add_argument("--threshold", type=float, default=0.50)
+    parser.add_argument("--max-chars", type=int, default=1800)
+    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--noun-ledger", action="store_true")
+    parser.add_argument("--socket", help="serve newline-delimited JSON requests on this local Unix socket")
+    args = parser.parse_args()
+    if not 0 < args.threshold <= 1 or args.max_chars < 500:
+        raise SystemExit("--threshold must be in (0,1] and --max-chars must be >= 500")
+
+    print(f"Loading local GLiNER2 model {args.model} on {args.device}...", file=sys.stderr)
+    model = GLiNER2.from_pretrained(args.model, map_location=args.device)
+    noun_parser = load_noun_phrase_parser() if args.noun_ledger else None
+    if not args.socket:
+        try:
+            result = process_payload(json.load(sys.stdin), model, noun_parser, args)
+        except ValueError as error:
+            raise SystemExit(str(error)) from error
+        json.dump(result, sys.stdout, ensure_ascii=False)
+        sys.stdout.write("\n")
+        return
+    if os.path.exists(args.socket):
+        os.unlink(args.socket)
+
+    class WarmNlpHandler(socketserver.StreamRequestHandler):
+        def handle(self) -> None:
+            try:
+                response: dict[str, Any] = process_payload(json.loads(self.rfile.readline()), model, noun_parser, args)
+            except (ValueError, json.JSONDecodeError) as error:
+                response = {"error": str(error)}
+            self.wfile.write((json.dumps(response, ensure_ascii=False) + "\n").encode("utf-8"))
+
+    with socketserver.UnixStreamServer(args.socket, WarmNlpHandler) as server:
+        print(f"GLiNER socket ready: {args.socket}", file=sys.stderr, flush=True)
+        try:
+            server.serve_forever()
+        finally:
+            if os.path.exists(args.socket):
+                os.unlink(args.socket)
 
 
 if __name__ == "__main__":

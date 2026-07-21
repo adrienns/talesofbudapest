@@ -1,0 +1,8 @@
+{
+  "source_id": "jewish-budapest",
+  "content_pages": "1-579",
+  "index_start_page": 580,
+  "index_end_page": 615,
+  "bibliography_pages": "560-579",
+  "note": "PDF page 580 begins Index / 1. Index of Personal Names; pp.581–615 are personal-name, city, and street-address indexes (not narrative). TOC 'Index 566' is wrong relative to this PDF — 560–579 are still bibliography. Provisional browser/KG rebuilds and full scans should use content_pages (1–579) so index dumps do not inflate mention-sorted entities. Bibliography remains in content unless scrubbed separately."
+}
