@@ -5,6 +5,217 @@ Dated record of prompt, model, and pipeline-behavior changes, per
 change one, bump the version comment and note it in `docs/DECISIONS.md` —
 extraction quality regressions must be traceable to prompt changes."
 
+## 2026-07-21 — Hungarian OCR place-name repair via gazetteer unique-hit
+
+**Policy bend of 2026-07-17 OCR rule.** Free edit-distance / confusion-table
+repair over the reading view remains forbidden. Allowed addition: for
+**location-like** identity keys and display labels only, repair a token when
+corpus-derived confusion candidates (plus bounded distance against the
+Budapest places gazetteer) resolve to exactly **one** gazetteer target
+(streets + landmarks + address points). Fail closed on zero or multiple hits;
+stamp `repaired` / `confusion_unique_hit` provenance; never rewrite immutable
+OCR evidence or offsets. Person/family mentions are never auto-repaired against
+the street gazetteer. Prefer under-merge. Spec:
+`docs/superpowers/specs/2026-07-21-hungarian-ocr-gazetteer-design.md`.
+
+## 2026-07-21 — Exclude book index from provisional fullbook views
+
+PDF pages **580–615** are indexes (personal names, cities, street addresses),
+not narrative. Including them inflated mention-sorted entities in the
+provisional facts browser / KG. Content range for rebuilds and default full
+scans is **1–579** (bibliography 560–579 still in). Config:
+`talesofbudapest-backend/config/jewish-budapest-page-ranges.json`. Transform
+`--pages` now accepts ranges (`1-579`) like the browser. Do not re-extract
+solely to drop the index — filter on rebuild.
+
+## 2026-07-20 — Full-book private-scan readiness (Sol silver)
+
+Iteration on cost-opt held-out + Sol rebuild + pilot/canaries. **Verdict: READY
+to privately start full scan** (full-book `--execute` not started).
+
+Fixes: decode pdftotext `&apos;` in layout furniture (page 50); Sol adjudicate
+`--experiment-id` filter; Sol merge purges prior sol-* held-out before regenerate.
+
+Measured: held-out avg **$0.0016**/page (16/16); Sol-silver eval
+`gate.passed=true` with circular P/R≈0.997 (not human truth); pilot30 avg
+**$0.0018**/page (25/34 ≤$0.002; page 600 $0.0071; page 300 `incomplete_api`).
+See `docs/READINESS-fullbook-v3.md`.
+
+## 2026-07-20 — V3 cost: cheaper quality + stricter escalation
+
+Per Sol cost advice ([cost plan](7780b4c4-f461-4d78-b9ea-cf4d9412d1cc)):
+1. `needsQualityEscalation` no longer treats audit silence / `ocr_noise` alone as escalation; resolved cross-page refs skip quality.
+2. Default quality model `google/gemma-3-27b-it` (reasoning off); was Gemini 2.5 Flash.
+3. Larger quality batches (28 clauses / 24 candidates), compact `wireQuality*` payloads, terse V rows, dynamic output tokens.
+4. Audit-only discoveries go through cheap verify before quality.
+5. Prompt version `historical-semi-open-v2.12`.
+
+**Measured** (6 held-out pages, experiment `cost-opt-v2.12`, no cache): baseline avg **$0.0041/page** → opt avg **$0.0010/page** (−76%). 5/6 pages ≤$0.002 (`complete`); page 190 ≈$0.0020 still `failed_cost_gate`.
+
+## 2026-07-20 — Sol silver held-out certification (policy change)
+
+Held-out may be certified with `gold_source: sol-*` (Sol-as-judge), not only
+`human*`. `gate.passed` may be true with `certification: sol_silver`. Claims of
+human promotion / historical truth remain forbidden. Sol merges may regenerate
+`adjudication_manifest`. Mixed human+sol on held-out hard-blocks.
+See `docs/superpowers/specs/2026-07-20-sol-silver-heldout-design.md`.
+
+## 2026-07-20 — Sol review loop #10 (block → fix)
+
+1. Fingerprint binds `annotation_status`, `minimums`, `immutable_source_sha256`, `approved_run_ids`.
+2. Held-out requires manifest-bound `approved_run_ids`; CLI `--approved-run-id` must be in that set.
+3. Held-out requires adjudicated `immutable_source_sha256` matching loaded `--source-pages`.
+4. Reference pages from gold clause map only; match requires page equality; duplicate clause_id→page blocked.
+5. `human_none` requires human provenance and forbids contradictory existing rows; gold `text_sha256` cannot be omitted by predictions.
+
+## 2026-07-20 — Sol review loop #9 (block → fix)
+
+1. Layout P/R is 1:1 zone match (page+zone+IoU≥0.5, optional text_sha256), not page presence.
+2. Exact grounding loads immutable `--source-pages` OCR only; never trusts prediction-owned text.
+3. References without a stable target identity are incomplete (no `undefined===undefined` matches); clause→page from gold clauses only.
+4. Held-out fingerprint binds `splits.heldout`, `antecedent_label`, notes/tags.
+5. Adversarial + unit tests cover layout multiplicity, fingerprint, and missing source pages.
+
+## 2026-07-20 — Sol review loop #8 (block → fix)
+
+1. Reference pages derived from clause_id maps; scoped to won pages.
+2. Shared `historicalGoldFingerprint.js` binds page/surface/coords/adjudicator.
+3. Promotion layout gate uses predicted masked-layout page P/R (`layout_pr`).
+4. Exact grounding adds `source_verified_rate` (layout text slice===quote); fail-closed when no text.
+5. Layout merge keys include y_min/x_min to preserve same-zone multiples.
+
+## 2026-07-20 — Sol review loop #7 (block → fix)
+
+1. Only human merges regenerate `adjudication_manifest`; non-human merges invalidate it.
+2. Fingerprint covers items/clauses/refs/transitions/layout/negatives + polarity/types.
+3. `locked_config` required keys align with extract (`primary_model`, `audit_model`, `quality_model`, `prompt_version`).
+4. Reference predictions keep multiplicity (duplicate preds count as FP pressure).
+5. Cost must be `typeof number` finite (null/''/false no longer coerce to 0).
+6. Adversarial tests assert specific blocker codes + polarity tamper.
+
+## 2026-07-20 — Sol review loop #6 (block → fix)
+
+1. Held-out requires `adjudication_manifest` fingerprint-bound to held-out content.
+2. Freeze `content_sha256` mandatory; hash includes polarity/pages.
+3. Selected freeze runs must exactly equal `source_run_ids`.
+4. Reference matching is 1:1 (precision cannot exceed 1); duplicate gold refs block.
+5. Nonnegative `usage.cost` required; exact grounding checks integer bounds + quote length.
+6. `diagnostic_ok` uses late hard blockers; extract post-bind only sets `bound_run_id`.
+7. Non-human disposition merges strip leftover human adjudication metadata.
+8. Adversarial eval smoke tests added.
+
+## 2026-07-20 — Sol review loop #5 (block promotion / caution harden)
+
+Promotion still **blocked** (empty human held-out). Hardening approved with caution.
+
+Fixes from final review:
+1. Every frozen `source_run_id` must exist in selected rows.
+2. Freeze history root must have null parent; non-roots require parents; `--force` may drop malformed history with warning.
+3. Extract stores pre-ground `bound_statement_en` and post-ground `bound_grounded_statement_en`.
+4. `merge-gold-annotations` merges `clauses` and `heldout_dispositions`.
+
+## 2026-07-20 — Sol review loop #4 (block → fix)
+
+1. Freeze binds exclusively to `source_run_ids`; missing source runs hard-block.
+2. Freeze history chain validated (item_ids, parent hashes).
+3. Duplicate prediction IDs hard-block.
+4. Promotion gates include layout page coverage >0.98 and exact grounding rate =1.
+5. Held-out clauses require human provenance; aux coverage restored; human_none needs adjudication metadata.
+6. Antonym shared lemmas ignore stopwords (built synagogue ≠ demolished bridge).
+
+## 2026-07-20 — Sol review loop #3 (block → fix)
+
+1. HARD_HELDOUT includes clause integrity + aux per-page coverage + locked_config schema keys.
+2. Freeze eval binds exact `source_run_id` only (no from_run_id substitution).
+3. History records item_ids + parent hash chain fields.
+4. Antonym pairs require ≥2 shared lemmas; removed non-logical sell/buy/lease pairs; built/demolish kept.
+5. Bound restore requires non-null `bound_run_id`; stores pre- and post-ground statements.
+6. `diagnostic_ok` separate from promotion `passed`; CI scripts use diagnostic acceptance.
+7. Docs: removed stale development P=1.00 headline.
+
+## 2026-07-20 — Sol review loop #2 (block → fix)
+
+1. Typed blocker `{code,message}`; held-out hard codes never bypassed by
+   `--allow-incomplete` (including approved-run + human adjudication metadata).
+2. Freeze `content_sha256` hashes full item fields; append-only `*_split_history`.
+3. `--approved-run-id` exact match only; freeze eval binds to frozen source runs.
+4. Lemma-token antonyms (alive/dead, sell/buy, lease/sell, …); illegal≠legal.
+5. Caption demote for `A Hakdome` / `Denarius`; diagnostic scripts opt into
+   `--allow-failed-cost`; CI scripts without `--report-only`.
+6. Bound `pre_structural_verification` (run/item/statement); no forgeable restore.
+
+## 2026-07-20 — Sol review loop #1 (block → fix)
+
+Adversarial re-review after the first Sol pass. Fixes:
+
+1. **pre_structural_verification:** extract + rescore preserve verifier verdict;
+   restore only when pre-structural was `supported` (never manufacture support).
+2. **Polarity:** contractions / failed-to / antonym stems; matchScore requires
+   same polarity.
+3. **Eval fail-closed:** reject `incomplete_api`; held-out forbids
+   `--experiment-id`, requires `--approved-run-id`; trim evidence to won pages;
+   refs only on won pages; transition ancestry chain; missing `usage.cost` fails;
+   held-out overall includes adjudicated zero-gold pages as FP surface.
+4. **Human gold forge:** merge refuses `human-*` without adjudication metadata.
+5. **Freeze integrity:** `content_sha256` + generation; no incomplete_api freeze.
+6. **Tourist/meta:** gate demotes present-day tourist observations; removed from
+   draft gold; docs label metrics as fixture-fit / freeze-replay.
+
+See quality handoff. Promotion still blocked.
+
+1. **Rescore re-promote:** only when `itemStructuralQualityReason` returns
+   `null`. Any non-null reason demotes (same as extract). Removed the
+   `HARD_DEMOTE` allowlist that could revive ordinal/possessive/source rejects.
+2. **Sibling metric:** diagnostic credit requires same-polarity paraphrase of
+   gold (token overlap), not mere shared `clause_id`.
+3. **Collapse / near-dedupe / gold dedupe:** polarity-aware; gold drops only
+   identical clause sets that are near-paraphrases.
+4. **Eval provenance:** development-only reference experiments; predictions
+   scoped to won pages; transitions via `structural_rescore.from_run_id`;
+   freeze never bypassed by `--allow-incomplete`; held-out requires `human*`
+   `gold_source` (missing source fails).
+5. **Match hygiene:** required_terms scored on statement text, not evidence
+   quotes (stops sibling sentences from stealing gold).
+6. **Gate tighten:** bare kinship, locative fragments, abstract events,
+   author/book-describes meta (not titled works like “The Book of Esther”).
+
+**Measured:** development ~P 0.86 / R 1.00 from gate+eval alone; after
+completing incomplete draft gold (`draft-auto-dev-complete`) development
+and frozen test/probe report P/R 1.00 with negatives clean — still not
+human held-out. See
+[HISTORICAL_EXTRACTION_V3_QUALITY_2026-07-20.md](HISTORICAL_EXTRACTION_V3_QUALITY_2026-07-20.md).
+
+## 2026-07-20 — Structural quality gate, eval row selection, gold hygiene
+
+**Problem.** Development eval looked worse than the extracts after empty
+`incomplete_api` rows and A/B experiments became “latest” by timestamp; an
+aggressive structural re-score that re-deduped items collapsed gold neighbors
+and cut recall from ~85% to ~32%. Gold also duplicated `g75_*` and `hi_*` on
+the same clauses, so bipartite matching starved true positives.
+
+**Decisions.**
+
+1. Eval prefers usable rows (supported items on the page), includes reference
+   experiments `gold-seed-dev` / `gold-rebind-75`, and ignores other experiments
+   unless `--experiment-id` is set. Primary metric stays **strict** gold-page
+   P/R; sibling-adjusted P/R is reported separately under `--allow-incomplete`.
+2. `lib/historicalItemQuality.js` grounds resolved pronouns into statements and
+   demotes meta/maxim/malformed/unresolved-pronoun/vague-agent claims, plus
+   caption furniture leaked into evidence. Named paraphrases survive even when
+   evidence still opens with `It`.
+3. `cli/rescore-v3-structural.js` re-applies that gate **without full re-dedupe**,
+   can **re-promote** items demoted only by an older structural reason, and
+   collapses true clause paraphrases (`collapseClauseSiblingItems`).
+4. Gold tooling: `gold:seed`, `gold:merge`, `gold:rebind`, `gold:dedupe`. Never
+   stamp `human-*` without browser adjudication; promotion stays fail-closed.
+5. **Separate frozen test split** (pages 97/140/160/180): `gold:seed-test` writes
+   `draft-auto-test` items and `test_split.frozen`. Do not retune by merging
+   test FPs into gold. Score with `npm run eval:historical:v3:test`.
+
+**Measured (2026-07-20):** development strict ~P 0.85 / R 1.00 (sibling-adjusted
+P 1.00); **test strict P 1.00 / R 1.00**; negatives clean. See
+[HISTORICAL_EXTRACTION_V3_QUALITY_2026-07-20.md](HISTORICAL_EXTRACTION_V3_QUALITY_2026-07-20.md).
+
 ## 2026-07-17 — V3 model freeze, address/geography layer, OCR policy
 
 **Model configuration frozen for the book pass.** A bounded A/B on pages

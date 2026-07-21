@@ -3,6 +3,11 @@
 Supersedes the status section of `HISTORICAL_EXTRACTION_V3_HANDOFF.md`, which
 remains the authoritative architecture document. Read that first, then this.
 
+**For quality metrics, eval harness behavior, structural rescore, and gold
+seed/merge/dedupe as of 2026-07-20, use
+[HISTORICAL_EXTRACTION_V3_QUALITY_2026-07-20.md](HISTORICAL_EXTRACTION_V3_QUALITY_2026-07-20.md)
+instead of the older eval notes below.**
+
 ## The goal, unchanged
 
 Extract every meaningful historical event/assertion from a restricted book,

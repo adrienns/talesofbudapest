@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 
 export const HISTORICAL_V2_SCHEMA_VERSION = 'historical-items-v2';
-export const HISTORICAL_V2_PROMPT_VERSION = 'historical-semi-open-v2.11';
+export const HISTORICAL_V2_PROMPT_VERSION = 'historical-semi-open-v2.12';
 
 export const ASSERTION_KINDS = new Set(['state', 'rule_custom', 'relationship', 'belief_report', 'description']);
 export const ITEM_KINDS = new Set(['event', 'assertion']);
@@ -48,6 +48,75 @@ export const semanticTokenOverlap = (left, right) => {
   return overlap / Math.max(1, Math.min(leftTokens.size, rightTokens.size));
 };
 
+/** Negation / polarity cues — check raw text so apostrophe folding cannot hide n't. */
+export const statementHasNegation = (text) => {
+  const raw = String(text ?? '');
+  if (/\b(?:not|never|no|without|neither|nor|cannot|can't|didn't|don't|doesn't|isn't|wasn't|weren't|hasn't|haven't|hadn't|won't|wouldn't|couldn't|shouldn't|failed\s+to|unable\s+to|no\s+longer)\b/iu.test(raw)) return true;
+  if (/\b\w+n't\b/iu.test(raw)) return true;
+  const folded = foldText(raw);
+  return /\b(?:not|never|no|without|neither|nor|cannot|cant|didn|don|doesn|isn|wasn|weren|hasn|haven|hadn|won|wouldn|couldn|shouldn|failed to|unable to|no longer)\b/iu.test(folded);
+};
+
+/** Token-boundary antonym lemmas (not substring regex — avoids illegal⊃legal). */
+const ANTONYM_LEMMAS = [
+  ['permit', 'prohibit'],
+  ['allow', 'forbid'],
+  ['open', 'close'],
+  ['settle', 'expel'],
+  ['include', 'exclude'],
+  ['accept', 'reject'],
+  ['build', 'demolish'],
+  ['create', 'destroy'],
+  ['arrive', 'leave'],
+  ['enter', 'exit'],
+  ['rise', 'fall'],
+  ['gain', 'lose'],
+  ['alive', 'dead'],
+  ['public', 'private'],
+  ['legal', 'illegal'],
+  ['build', 'demolish'],
+  ['create', 'destroy'],
+];
+
+const lemmaTokens = (text) => {
+  const raw = foldText(text).split(/\s+/u).filter(Boolean);
+  return new Set(raw.map((token) => {
+    if (token === 'opened' || token === 'opening') return 'open';
+    if (token === 'closed' || token === 'closing') return 'close';
+    if (token === 'entered' || token === 'entering') return 'enter';
+    if (token === 'exited' || token === 'exiting') return 'exit';
+    if (token === 'permitted' || token === 'permitting') return 'permit';
+    if (token === 'prohibited' || token === 'prohibiting') return 'prohibit';
+    if (token === 'allowed' || token === 'allowing') return 'allow';
+    if (token === 'forbidden' || token === 'forbidding') return 'forbid';
+    if (token === 'settled' || token === 'settling') return 'settle';
+    if (token === 'expelled' || token === 'expelling') return 'expel';
+    if (token === 'built' || token === 'building') return 'build';
+    if (token === 'demolished' || token === 'demolishing') return 'demolish';
+    if (token === 'created' || token === 'creating') return 'create';
+    if (token === 'destroyed' || token === 'destroying') return 'destroy';
+    if (token.length > 5) return token.replace(/(?:ing|ed|es|s)$/u, '');
+    return token;
+  }));
+};
+
+export const statementsContradictPredicates = (left, right) => {
+  const a = lemmaTokens(left);
+  const b = lemmaTokens(right);
+  const stop = new Set(['the', 'and', 'that', 'this', 'was', 'were', 'with', 'from', 'into', 'they', 'them', 'their', 'for', 'but', 'not', 'are', 'who', 'which', 'had', 'has', 'have']);
+  const sharedContent = [...a].filter((token) => b.has(token) && !stop.has(token) && token.length >= 3);
+  for (const [pos, neg] of ANTONYM_LEMMAS) {
+    if (((a.has(pos) && b.has(neg)) || (a.has(neg) && b.has(pos))) && sharedContent.length >= 1) return true;
+  }
+  return false;
+};
+
+export const statementsSamePolarity = (left, right) => {
+  if (statementHasNegation(left) !== statementHasNegation(right)) return false;
+  if (statementsContradictPredicates(left, right)) return false;
+  return true;
+};
+
 export const realignModelItemsToClauses = ({ items, availableClauses, allClauses }) => {
   const clauseById = new Map(allClauses.map((clause) => [clause.clause_id, clause]));
   return items.map((item) => {
@@ -86,6 +155,14 @@ const trimMappedSpan = (readingText, start, end) => {
 // corpus) and common abbreviations are not sentence ends; splitting there
 // fragmented names mid-clause ("His son, R." | "Judah...").
 const ABBREVIATION_END = /(?:\b[A-Z]|\b(?:Dr|Mr|Mrs|Ms|St|Prof|ca|cf|vs|Jr|Sr))\.$/u;
+const QUOTE_SPAN_PATTERN = /[“"][^”"]*[”"]|[‘'][^’']*[’']/gu;
+
+/** Inclusive [start, end) ranges for quoted spans in a sentence. */
+export const quoteSpansInText = (text) => [...String(text).matchAll(QUOTE_SPAN_PATTERN)]
+  .map((match) => [match.index, match.index + match[0].length]);
+
+const indexInsideQuote = (index, spans) => spans.some(([start, end]) => index >= start && index < end);
+
 const sentenceSpans = (readingText) => {
   const raw = Array.from(new Intl.Segmenter('en', { granularity: 'sentence' }).segment(readingText))
     .map((segment) => trimMappedSpan(readingText, segment.index, segment.index + segment.segment.length))
@@ -101,6 +178,7 @@ const sentenceSpans = (readingText) => {
 
 const clauseBoundaries = (sentenceText) => {
   const cuts = [0];
+  const quoteSpans = quoteSpansInText(sentenceText);
   const chronologyLabel = /(?:^|\s)(?:c\.\s*)?(?:1[5-9]\d{2}|20\d{2})(?:\s*[–-]\s*\d{2,4})?\s*:/giu;
   const protectedColons = new Set([...sentenceText.matchAll(chronologyLabel)].map((match) => match.index + match[0].lastIndexOf(':')));
   const pattern = /[;:]\s+|\s+[—–]\s+|\s+(?=(?:but|while|whereas|although|however|therefore|nevertheless)\b)/giu;
@@ -108,16 +186,45 @@ const clauseBoundaries = (sentenceText) => {
     // A chronology label belongs to its event. Splitting `1827:` into a
     // standalone clause made the verifier reject otherwise grounded entries.
     if (match[0].startsWith(':') && protectedColons.has(match.index)) continue;
+    // Never split inside a quotation (Maimonides exhortations became five
+    // one-line "events" when colons/semicolons inside quotes were cuts).
+    if (indexInsideQuote(match.index, quoteSpans)) continue;
     cuts.push(match.index + match[0].length);
   }
   // OCR frequently collapses a timeline into one line: `1827: ... 1830: ...`.
   // Start a new clause at later labels, never between a label and its content.
   for (const match of sentenceText.matchAll(chronologyLabel)) {
     const start = match.index + (match[0].match(/^\s*/u)?.[0].length ?? 0);
-    if (start > 0) cuts.push(start);
+    if (start > 0 && !indexInsideQuote(start, quoteSpans)) cuts.push(start);
   }
   cuts.push(sentenceText.length);
   return [...new Set(cuts)].sort((a, b) => a - b);
+};
+
+const clauseZone = (text) => {
+  const trimmed = text.trim();
+  if (!trimmed) return 'body';
+  const quoted = quoteSpansInText(trimmed).reduce((sum, [start, end]) => sum + (end - start), 0);
+  return quoted / trimmed.length >= 0.5 ? 'quote' : 'body';
+};
+
+const explicitSpeakerFromPrior = (priorText, mentions) => {
+  if (!priorText || !/\b(?:said|says|wrote|writes|exclaimed|declared|according to)\b/iu.test(priorText)) return null;
+  const people = mentions.filter((mention) => mention.type === 'person' || mention.type === 'family');
+  return people.at(-1)?.mention_id ?? null;
+};
+
+const explicitSpeakerForClause = ({ text, startOffset, priorText, pageMentions }) => {
+  const spans = quoteSpansInText(text);
+  if (!spans.length) return null;
+  const fromPrior = explicitSpeakerFromPrior(priorText, pageMentions.filter((mention) => mention.end_offset <= startOffset));
+  if (fromPrior) return fromPrior;
+  // Inline attribution in the same clause: `R. Efraim said “Return…”`.
+  if (!/\b(?:said|says|wrote|writes|exclaimed|declared|according to)\b/iu.test(text.slice(0, spans[0][0]))) return null;
+  const quoteStart = startOffset + spans[0][0];
+  const people = pageMentions.filter((mention) => (mention.type === 'person' || mention.type === 'family')
+    && mention.end_offset <= quoteStart);
+  return people.at(-1)?.mention_id ?? null;
 };
 
 const ocrNoise = (text) => {
@@ -185,6 +292,16 @@ export const buildClauseLedger = ({ sourceId, targetPages, readingPages, mention
       const clauseMentions = mentions.filter((mention) => mention.page === sourcePage.page
         && mention.start_offset < endOffset && mention.end_offset > startOffset);
       const text = readingPage.text.slice(readingStart, readingEnd);
+      const priorText = index > 0
+        ? readingPage.text.slice(rawClauses[index - 1].readingStart, rawClauses[index - 1].readingEnd)
+        : '';
+      const zone = clauseZone(text);
+      const pageMentions = mentions.filter((mention) => mention.page === sourcePage.page);
+      const speakerMentionId = (zone === 'quote' || quoteSpansInText(text).length)
+        ? explicitSpeakerForClause({ text, startOffset, priorText, pageMentions })
+        : null;
+      const riskFlags = localRiskFlags({ text, mentions: clauseMentions, first: index === 0, last: index === rawClauses.length - 1 });
+      if (zone === 'quote' || quoteSpansInText(text).length) riskFlags.push('quoted_span');
       clauses.push({
         clause_id: `cl_${sha256(`${sourceId}\u001f${sourcePage.page}\u001f${startOffset}\u001f${endOffset}`).slice(0, 20)}`,
         page_ref: sourcePage.page,
@@ -192,10 +309,12 @@ export const buildClauseLedger = ({ sourceId, targetPages, readingPages, mention
         end_offset: endOffset,
         text,
         source_quote: sourceByPage.get(sourcePage.page).text.slice(startOffset, endOffset),
+        zone: zone === 'body' && quoteSpansInText(text).length ? 'quote' : zone,
+        speaker_mention_id: speakerMentionId,
         mention_ids: clauseMentions.map((mention) => mention.mention_id),
         suggested_schemas: retrieveSchemas(text, clauseMentions),
         allow_other: true,
-        risk_flags: localRiskFlags({ text, mentions: clauseMentions, first: index === 0, last: index === rawClauses.length - 1 }),
+        risk_flags: riskFlags,
         item_ids: [],
         disposition: 'ambiguous',
         audit_status: 'pending',
@@ -279,28 +398,115 @@ export const normalizeModelItems = ({ rawItems, clauses, mentions, sourceId, dis
 
 export const dedupeHistoricalItems = (items) => {
   const selected = new Map();
-  const merge = (left, right) => ({
-    ...left,
-    clause_ids: [...new Set([...left.clause_ids, ...right.clause_ids])],
-    participants: [...new Map([...left.participants, ...right.participants].map((participant) => [`${participant.mention_id}\u001f${participant.role}`, participant])).values()],
-    evidence: [...new Map([...left.evidence, ...right.evidence].map((evidence) => [`${evidence.page_ref}\u001f${evidence.start_offset}\u001f${evidence.end_offset}`, evidence])).values()],
-    corefers_with: [...new Set([...(left.corefers_with ?? []), ...(right.corefers_with ?? [])])],
-    discovery_sources: [...new Set([...(left.discovery_sources ?? []), ...(right.discovery_sources ?? [])])],
-  });
+  const merge = (left, right) => {
+    // Prefer the more specific statement when one clearly contains the other.
+    const leftText = String(left.statement_en ?? '');
+    const rightText = String(right.statement_en ?? '');
+    const preferRight = rightText.length > leftText.length + 12
+      && semanticTokenOverlap(leftText, rightText) >= 0.7;
+    const base = preferRight ? right : left;
+    const other = preferRight ? left : right;
+    return {
+      ...base,
+      clause_ids: [...new Set([...base.clause_ids, ...other.clause_ids])],
+      participants: [...new Map([...base.participants, ...other.participants].map((participant) => [`${participant.mention_id}\u001f${participant.role}`, participant])).values()],
+      evidence: [...new Map([...base.evidence, ...other.evidence].map((evidence) => [`${evidence.page_ref}\u001f${evidence.start_offset}\u001f${evidence.end_offset}`, evidence])).values()],
+      corefers_with: [...new Set([...(base.corefers_with ?? []), ...(other.corefers_with ?? [])])],
+      discovery_sources: [...new Set([...(base.discovery_sources ?? []), ...(other.discovery_sources ?? [])])],
+    };
+  };
   const nearby = (left, right) => left.evidence.some((a) => right.evidence.some((b) => a.page_ref === b.page_ref && Math.abs(a.start_offset - b.start_offset) <= 420));
+  const contained = (left, right) => {
+    const leftTokens = contentTokens(left.statement_en);
+    const rightTokens = contentTokens(right.statement_en);
+    if (!leftTokens.size || !rightTokens.size) return false;
+    const smaller = leftTokens.size <= rightTokens.size ? leftTokens : rightTokens;
+    const larger = leftTokens.size <= rightTokens.size ? rightTokens : leftTokens;
+    if (smaller.size < 2) return false;
+    return [...smaller].every((token) => larger.has(token));
+  };
   for (const item of items) {
     const key = `${item.kind}\u001f${item.assertion_kind ?? ''}\u001f${item.open_type}\u001f${item.clause_ids.join(',')}\u001f${foldText(item.statement_en)}`;
     const previous = selected.get(key);
     if (previous) { selected.set(key, merge(previous, item)); continue; }
     const nearKey = [...selected.entries()].find(([, candidate]) => candidate.kind === item.kind
       && candidate.assertion_kind === item.assertion_kind
-      && candidate.open_type === item.open_type
+      && statementsSamePolarity(candidate.statement_en, item.statement_en)
       && nearby(candidate, item)
-      && semanticTokenOverlap(candidate.statement_en, item.statement_en) >= 0.82)?.[0];
+      && (
+        semanticTokenOverlap(candidate.statement_en, item.statement_en) >= 0.75
+        || contained(candidate, item)
+      ))?.[0];
     if (nearKey) selected.set(nearKey, merge(selected.get(nearKey), item));
     else selected.set(key, item);
   }
   return [...selected.values()];
+};
+
+/**
+ * Keep one item per identical (kind, assertion_kind, open/canonical type,
+ * clause_id set) when statements are near-paraphrases with the same polarity.
+ * Opposite polarity ("settled" vs "did not settle") and distinct facts that
+ * only share a clause id are kept separate.
+ */
+export const collapseClauseSiblingItems = (items, { supportedOnly = true, minOverlap = 0.68 } = {}) => {
+  const score = (item) => {
+    const statement = String(item.statement_en ?? '');
+    const year = /\b(?:1[5-9]\d{2}|20[0-2]\d)\b/u.test(statement) ? 20 : 0;
+    const place = /\b(?:Buda|Pest|Budapest|Óbuda|Obuda|Jews?|Jewish|R\.)\b/u.test(statement) ? 10 : 0;
+    return statement.length + year + place;
+  };
+  const contained = (left, right) => {
+    const leftTokens = contentTokens(left);
+    const rightTokens = contentTokens(right);
+    if (!leftTokens.size || !rightTokens.size) return false;
+    const smaller = leftTokens.size <= rightTokens.size ? leftTokens : rightTokens;
+    const larger = leftTokens.size <= rightTokens.size ? rightTokens : leftTokens;
+    if (smaller.size < 2) return false;
+    return [...smaller].every((token) => larger.has(token));
+  };
+  const isParaphrase = (left, right) => statementsSamePolarity(left, right)
+    && (semanticTokenOverlap(left, right) >= minOverlap || contained(left, right));
+  const keyFor = (item) => {
+    const clauseKey = [...(item.clause_ids ?? [])].sort().join('\u001f');
+    if (!clauseKey) return null;
+    return [
+      item.kind,
+      item.assertion_kind ?? '',
+      item.open_type ?? '',
+      item.canonical_type ?? '',
+      clauseKey,
+    ].join('\u001f');
+  };
+  const groups = new Map();
+  const passthrough = [];
+  for (const item of items) {
+    if (supportedOnly && item.verification?.verdict !== 'supported') {
+      passthrough.push(item);
+      continue;
+    }
+    const key = keyFor(item);
+    if (!key) {
+      passthrough.push(item);
+      continue;
+    }
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+  const kept = [];
+  for (const group of groups.values()) {
+    const selected = [];
+    for (const item of group) {
+      const twinIndex = selected.findIndex((other) => isParaphrase(other.statement_en, item.statement_en));
+      if (twinIndex === -1) {
+        selected.push(item);
+        continue;
+      }
+      if (score(item) > score(selected[twinIndex])) selected[twinIndex] = item;
+    }
+    kept.push(...selected);
+  }
+  return [...passthrough, ...kept];
 };
 
 export const applyCoverage = ({ clauses, items, coverageRows = [], auditStatus = 'agreed' }) => {
@@ -318,10 +524,14 @@ export const applyCoverage = ({ clauses, items, coverageRows = [], auditStatus =
   });
 };
 
-export const needsQualityEscalation = (item, auditorVerdict, clauseById) => {
-  if (auditorVerdict !== 'supported') return true;
-  const flags = new Set(item.clause_ids.flatMap((id) => clauseById.get(id)?.risk_flags ?? []));
-  return ['unresolved_reference', 'contextual_reference', 'cross_page_continuation', 'ocr_noise'].some((flag) => flags.has(flag));
+export const needsQualityEscalation = (item, auditorVerdict, clauseById, mentionById = new Map(), resolvedReferences = []) => {
+  // Explicit auditor/verifier failure always escalates.
+  if (auditorVerdict && auditorVerdict !== 'supported') return true;
+  const flags = new Set((item.clause_ids ?? []).flatMap((id) => clauseById.get(id)?.risk_flags ?? []));
+  const risky = flags.has('unresolved_reference') || flags.has('contextual_reference') || flags.has('cross_page_continuation');
+  // ocr_noise alone is not a quality trigger. Audit silence is not disagreement.
+  if (!risky) return false;
+  return !itemHasResolvedReferences(item, clauseById, mentionById, resolvedReferences);
 };
 
 export const itemHasResolvedReferences = (item, clauseById, mentionById, resolvedReferences = []) => {
@@ -392,3 +602,62 @@ export const aggregateUsage = (calls) => {
 };
 
 export const batchesOf = (items, size) => Array.from({ length: Math.ceil(items.length / size) }, (_, index) => items.slice(index * size, (index + 1) * size));
+
+/** True when audit short-form rows should not default to kind=event. */
+export const looksLikeQuotedMaterial = (statement, clauses = []) => {
+  const text = String(statement ?? '');
+  if (/[“"][^”"]*[”"]|[‘'][^’']*[’']/u.test(text)) return true;
+  if (clauses.some((clause) => clause.zone === 'quote' || clause.risk_flags?.includes('quoted_span'))) return true;
+  return /^(?:let |may |blessed |hear,? o israel|thou |thee )/iu.test(text.trim());
+};
+
+/**
+ * Group supported grounded claims into schema-constrained event frames.
+ * Only assembles when canonical_type (or a retrieved schema) is in SCHEMA_REGISTRY.
+ * Derived relations are projections, not new source claims.
+ */
+export const assembleCanonicalEvents = (items) => {
+  const events = [];
+  for (const item of items) {
+    if (item.verification?.verdict && item.verification.verdict !== 'supported') continue;
+    const eventType = item.canonical_type
+      && SCHEMA_REGISTRY[item.canonical_type]
+      ? item.canonical_type
+      : (item.kind === 'event' && item.open_type && SCHEMA_REGISTRY[item.open_type] ? item.open_type : null);
+    if (!eventType) continue;
+    const yearHints = [...new Set((String(item.statement_en ?? '').match(/\b(1[0-9]{3}|20[0-2][0-9])\b/gu) ?? []).map(Number))];
+    const subject = item.subject_entity_id ?? null;
+    const participants = [
+      ...(subject ? [{ entity_id: subject, role: 'subject' }] : []),
+      ...[...new Set((item.participants ?? []).map((participant) => participant.resolved_entity_id).filter(Boolean))]
+        .filter((entityId) => entityId !== subject)
+        .map((entityId) => ({ entity_id: entityId, role: 'participant' })),
+    ];
+    const key = `${eventType}\u001f${subject ?? ''}\u001f${yearHints[0] ?? ''}\u001f${foldText(item.statement_en).slice(0, 80)}`;
+    const existing = events.find((event) => event.merge_key === key);
+    if (existing) {
+      existing.evidence_claim_ids.push(item.item_id);
+      for (const participant of participants) {
+        if (!existing.participants.some((row) => row.entity_id === participant.entity_id && row.role === participant.role)) {
+          existing.participants.push(participant);
+        }
+      }
+      continue;
+    }
+    events.push({
+      event_id: `ev_${sha256(key).slice(0, 20)}`,
+      merge_key: key,
+      event_type: eventType,
+      participants,
+      time: item.time ?? (yearHints[0] ? String(yearHints[0]) : null),
+      place: item.place ?? null,
+      evidence_claim_ids: [item.item_id],
+      derived_relations: participants.flatMap((participant) => (subject && participant.entity_id !== subject
+        ? [{ from_entity_id: subject, relation: `event_${eventType}`, to_entity_id: participant.entity_id, projection: true }]
+        : [])),
+      review_status: 'needs_review',
+      publication_status: 'private',
+    });
+  }
+  return events.map(({ merge_key, ...event }) => event);
+};

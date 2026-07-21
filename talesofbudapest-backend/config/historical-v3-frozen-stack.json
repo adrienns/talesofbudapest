@@ -1,0 +1,27 @@
+{
+  "name": "historical-v3-cost-opt-v2.12",
+  "frozen_at": "2026-07-20",
+  "source_id": "jewish-budapest",
+  "schema_version": "historical-items-v3",
+  "prompt_version": "historical-semi-open-v2.12",
+  "primary_cache_version": "historical-stateful-v3.1",
+  "models": {
+    "primary_model": "google/gemini-2.5-flash-lite",
+    "audit_model": "qwen/qwen3-30b-a3b-instruct-2507",
+    "quality_model": "google/gemma-3-27b-it",
+    "nlp_model": "fastino/gliner2-multi-v1",
+    "nlp_threshold": 0.5
+  },
+  "quality": {
+    "max_quality_clauses": 28,
+    "max_quality_candidates": 24,
+    "reasoning": "off"
+  },
+  "cost": {
+    "promotion_gate_usd_per_page": 0.002,
+    "extract_default_max_usd_per_page": 0.005,
+    "pilot_target_mean_usd_per_page": 0.002
+  },
+  "note": "Frozen stack for full-book private extract. Sol-silver certification is not human promotion.",
+  "page_ranges": "See config/jewish-budapest-page-ranges.json — content ends at 579; index is 580–615."
+}

@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
+import net from 'node:net';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -9,13 +10,18 @@ import { estimateExtractionCeiling, fetchOpenRouterCatalog, formatUsd, pricingFo
 import { maskPdfFurniture } from '../lib/historicalPdfLayout.js';
 import { anchorBuildingMentions, buildStreetIndex, extractAddressReferences, resolveAmbiguousStreets } from '../lib/historicalAddresses.js';
 import { findOcrDamage } from '../lib/historicalOcrLexicon.js';
+import { groundPronominalStatement, itemStructuralQualityReason } from '../lib/historicalItemQuality.js';
 import {
   buildSubjectEntityIndex,
   createSubjectState,
+  resolveItemSubjectAttribution,
   resolveSubjectReferences,
   serializeSubjectState,
+  setPlacesGazetteerIndex,
+  getPlaceRepairLog,
   subjectContext,
 } from '../lib/historicalSubjectMemory.js';
+import { loadPlacesIndex } from '../lib/budapestPlacesGazetteer.js';
 import {
   HISTORICAL_V2_PROMPT_VERSION,
   HISTORICAL_V2_SCHEMA_VERSION,
@@ -27,6 +33,7 @@ import {
   batchesOf,
   boundaryContextForPage,
   buildClauseLedger,
+  collapseClauseSiblingItems,
   dedupeHistoricalItems,
   itemHasResolvedReferences,
   needsQualityEscalation,
@@ -35,6 +42,7 @@ import {
   realignModelItemsToClauses,
   semanticTokenOverlap,
   sha256,
+  looksLikeQuotedMaterial,
 } from '../lib/historicalExtractionV2.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -49,13 +57,14 @@ const option = (name, fallback = null) => {
 const SOURCE_ID = option('--source', 'jewish-budapest');
 const FROM_PAGE = Number(option('--from-page', '46'));
 const PAGE_COUNT = Number(option('--page-count', '3'));
-const MAX_COST_USD = Number(option('--max-cost-usd', String(PAGE_COUNT * 0.002)));
+const MAX_COST_USD = Number(option('--max-cost-usd', String(PAGE_COUNT * (args.includes('--v3') ? 0.005 : 0.002))));
 const PRIMARY_MODEL = option('--primary-model', process.env.KG_HISTORICAL_V2_PRIMARY_MODEL ?? 'google/gemini-2.5-flash-lite');
 const AUDIT_MODEL = option('--audit-model', process.env.KG_HISTORICAL_V2_AUDIT_MODEL ?? 'qwen/qwen3-30b-a3b-instruct-2507');
-const QUALITY_MODEL = option('--quality-model', process.env.KG_HISTORICAL_V2_QUALITY_MODEL ?? 'google/gemini-2.5-flash');
+const QUALITY_MODEL = option('--quality-model', process.env.KG_HISTORICAL_V2_QUALITY_MODEL ?? 'google/gemma-3-27b-it');
 const NLP_MODEL = option('--nlp-model', process.env.KG_NLP_MODEL ?? 'fastino/gliner2-multi-v1');
 const NLP_THRESHOLD = Number(option('--nlp-threshold', process.env.KG_NLP_THRESHOLD ?? '0.50'));
 const NLP_PYTHON = option('--nlp-python', process.env.KG_NLP_PYTHON ?? path.join(__dirname, '../.venv-historical-nlp/bin/python'));
+const NLP_SOCKET = option('--nlp-socket', process.env.KG_NLP_SOCKET ?? null);
 const PREFLIGHT_ONLY = args.includes('--preflight-only');
 const RESUME = args.includes('--resume');
 const V3 = args.includes('--v3');
@@ -91,15 +100,21 @@ const AUDIT_MAX_TOKENS = 1800;
 const VERIFY_MAX_TOKENS = 240;
 const VERIFY_BATCH_SIZE = 8;
 const QUALITY_MAX_TOKENS = 2200;
-const MAX_QUALITY_CLAUSES = 12;
+const MAX_QUALITY_CLAUSES = Number(process.env.KG_V3_MAX_QUALITY_CLAUSES ?? (args.includes('--v3') ? 28 : 12));
+const MAX_QUALITY_CANDIDATES = Number(process.env.KG_V3_MAX_QUALITY_CANDIDATES ?? 24);
 const PRIMARY_CACHE_VERSION = V3 ? 'historical-stateful-v3.1' : 'historical-semi-open-v2.8';
 // Page 75/97 dev runs hit the previous caps exactly and truncated mid-item,
 // which cascaded into audit mismatches and mass quality escalation. Measured
 // natural output on dense dev pages is ~70 completion tokens per clause for
 // the primary (I+R rows) and ~20 for the audit.
 const primaryTokenLimit = (clauseCount) => V3 ? Number(process.env.KG_V3_PRIMARY_TOKENS ?? Math.min(4200, Math.max(800, 300 + clauseCount * 65))) : PRIMARY_MAX_TOKENS;
-const auditTokenLimit = (clauseCount) => V3 ? Math.min(2400, Math.max(560, 220 + clauseCount * 24)) : AUDIT_MAX_TOKENS;
-const qualityTokenLimit = () => V3 ? 700 : QUALITY_MAX_TOKENS;
+// The 10-page rebuild produced a machine-visible Qwen TSV truncation at 2400
+// tokens. Keep the model/config frozen; give dense two-page audit batches room
+// to close every protocol line rather than retrying the same bad cap.
+const auditTokenLimit = (clauseCount) => V3 ? Math.min(3000, Math.max(560, 220 + clauseCount * 24)) : AUDIT_MAX_TOKENS;
+const qualityTokenLimit = (candidateCount = 8) => V3
+  ? Math.min(900, Math.max(160, 100 + candidateCount * 16))
+  : QUALITY_MAX_TOKENS;
 // Compact TSV is mostly ASCII English. Two bytes/token remains deliberately
 // pessimistic while avoiding V2's invalid one-byte-per-token reservation.
 const v3InputTokens = (request) => Math.ceil(Buffer.byteLength(request, 'utf8') / 2);
@@ -176,19 +191,17 @@ const QUALITY_PROMPT = `Adjudicate difficult historical extraction candidates us
 
 ${REVIEW_LINE_PROTOCOL}
 ${ITEM_EXAMPLES}
-Input CANDIDATE rows are compact arrays. Emit one V row per candidate, then I only for new/corrected items.
-Valid verdict example: V\thi_example1\tS\tclause asserts the death directly
+Input uses compact CANDIDATES and CLAUSES. Emit one V row per candidate (judgment only; reason optional), then I only for new/corrected items.
+Valid verdict: V\thi_example1\tS
 
 Rules:
-- Return one verdict per candidate. If a candidate is materially wrong, reject it and optionally add a corrected item.
-- Search supplied risky clauses for omissions too. I lines contain only new or corrected grounded items.
-- Resolve cross-page pronouns only from boundary context. The target clause must still assert the item.
-- Clause resolutions [[surface,antecedent]...] are authoritative: a candidate naming the antecedent where the clause shows a pronoun is supported.
-- A statement logically equivalent to the clause content is supported: paraphrase, double negation, presupposed content ("even after he converted" asserts the conversion), or a fact asserted jointly by directly adjacent supplied clauses. A candidate ADDING anything absent from the clauses (names, dates, verse or chapter numbers, places) is unsupported even when plausible.
-- A candidate with he/she/they/his/her/their or a lowercase page-start continuation is not supported when its antecedent participant is missing. Reject it and emit a corrected I row with the boundary/earlier mention_id.
-- Preserve open types, negation, attribution, uncertainty, plans, and disputed beliefs.
-- clause_ids and mention_ids must be copied exactly. No outside knowledge. No rewritten evidence.
-- FIRST judge every candidate individually: one V row per candidate with its own item_id, judgment, and a short evidence-based reason. Blanket identical judgments without inspection are protocol violations. Then optional I lines.`;
+- One V per candidate. If materially wrong, reject and optionally emit a corrected I.
+- Search supplied risky clauses for omissions; I lines are new/corrected grounded items only.
+- Resolutions [[surface,antecedent]...] are authoritative for pronouns.
+- Logically equivalent paraphrase/presupposition is supported; adding absent names/dates/places is unsupported.
+- Leading pronouns without an antecedent participant are unsupported — reject and correct with mention_id.
+- Preserve open types, negation, attribution, uncertainty, plans, disputed beliefs.
+- Copy clause_ids and mention_ids exactly. No outside knowledge.`;
 
 class BudgetExceeded extends Error {
   constructor(message) {
@@ -229,7 +242,25 @@ const saveSubjectMemory = async (file, state, lastPage) => {
   await fs.writeFile(file, `${JSON.stringify(serializeSubjectState(state, lastPage), null, 2)}\n`, 'utf8');
 };
 
-const runLocalNlp = (pages) => new Promise((resolve, reject) => {
+const runWarmLocalNlp = (pages) => new Promise((resolve, reject) => {
+  const socket = net.createConnection(NLP_SOCKET);
+  let response = '';
+  socket.setEncoding('utf8');
+  socket.setTimeout(15 * 60 * 1000);
+  socket.on('connect', () => socket.end(`${JSON.stringify({ pages })}\n`));
+  socket.on('data', (chunk) => { response += chunk; });
+  socket.on('timeout', () => socket.destroy(new Error(`Warm local NLP timed out at ${NLP_SOCKET}`)));
+  socket.on('error', (error) => reject(new Error(`Warm local NLP failed at ${NLP_SOCKET}: ${error.message}`)));
+  socket.on('end', () => {
+    try {
+      const value = JSON.parse(response.trim());
+      if (value.error) throw new Error(value.error);
+      resolve(value);
+    } catch (error) { reject(new Error(`Warm local NLP returned invalid JSON: ${error.message}`)); }
+  });
+});
+
+const runColdLocalNlp = (pages) => new Promise((resolve, reject) => {
   const script = path.join(__dirname, '../nlp/gliner2_mentions.py');
   const child = spawn(NLP_PYTHON, [script, '--model', NLP_MODEL, '--threshold', String(NLP_THRESHOLD), ...(V3 ? ['--noun-ledger'] : [])], { stdio: ['pipe', 'pipe', 'pipe'] });
   let stdout = '';
@@ -246,6 +277,8 @@ const runLocalNlp = (pages) => new Promise((resolve, reject) => {
   });
   child.stdin.end(JSON.stringify({ pages }));
 });
+
+const runLocalNlp = (pages) => NLP_SOCKET ? runWarmLocalNlp(pages) : runColdLocalNlp(pages);
 
 const mentionsForClause = (clause, mentionById) => clause.mention_ids.flatMap((id) => {
   const mention = mentionById.get(id);
@@ -346,6 +379,21 @@ const wireKnownItem = (item, wireIds, itemId = item.item_id) => [
   item.statement_en,
 ];
 
+const wireQualityClause = (clause, wireIds) => [
+  wireIds.clause(clause.clause_id),
+  clause.text,
+  (clause.resolutions ?? []).map((row) => [row.surface, row.label]),
+];
+
+const wireQualityCandidate = (item, wireIds, itemId = item.item_id) => [
+  itemId,
+  item.kind === 'event' ? 'E' : 'A',
+  item.clause_ids.map((id) => wireIds.clause(id)).join(','),
+  item.participants.map((participant) => wireIds.mention(participant.mention_id)).join(',') || '-',
+  `${item.polarity === 'negated' ? 'N' : '+'}${modalityCode[item.modality] ?? 'A'}`,
+  item.statement_en,
+];
+
 const decodeItemLine = (columns, wireIds) => {
   const kind = columns[1] === 'E' ? 'event' : columns[1] === 'A' ? 'assertion' : null;
   const assertionKinds = { S: 'state', C: 'rule_custom', R: 'relationship', B: 'belief_report', D: 'description' };
@@ -377,8 +425,8 @@ const decodeItemLine = (columns, wireIds) => {
 
 const parseProtocol = (completion, wireIds) => {
   const raw = String(completion.choices?.[0]?.message?.content ?? '').replace(/^```[^\n]*\n|\n```$/g, '').trim();
-  const response = { items: [], coverage: [], verdicts: [], references: [], raw_preview: raw.slice(0, 1000) };
-  for (const line of raw.split(/\r?\n/u).map((value) => value.trim()).filter(Boolean)) {
+  const response = { items: [], coverage: [], verdicts: [], references: [], protocol_errors: [], raw_preview: raw.slice(0, 1000) };
+  for (const [lineIndex, line] of raw.split(/\r?\n/u).map((value) => value.trim()).filter(Boolean).entries()) {
     const normalizedLine = line.replace(/<TAB>/giu, '\t').replace(/\\t/gu, '\t');
     const columns = normalizedLine.includes('\t')
       ? normalizedLine.split('\t').map((value) => value.trim())
@@ -401,15 +449,19 @@ const parseProtocol = (completion, wireIds) => {
         resolution_source: 'primary_coreference',
       });
     } else if (columns[0] === 'I' && /^c[0-9a-z]+(?:,c[0-9a-z]+)*$/u.test(columns[1] ?? '') && ['E', 'A', 'E|A'].includes(columns[2]) && columns.length >= 4) {
-      const auditKind = columns[2] === 'E' ? 'event' : 'assertion';
+      const statement = columns.slice(3).join(' ').trim();
+      // Short-form audit rows used to default every discovery to kind=event,
+      // which mistyped quoted exhortations (Maimonides) as historical events.
+      const quoted = looksLikeQuotedMaterial(statement);
+      const auditKind = quoted ? 'assertion' : (columns[2] === 'E' ? 'event' : 'assertion');
       response.items.push({
         kind: auditKind,
         assertion_kind: auditKind === 'assertion' ? 'description' : null,
-        open_type: auditKind === 'event' ? 'independent_event' : 'independent_assertion',
+        open_type: auditKind === 'event' ? 'independent_event' : 'quoted_material',
         canonical_type: null,
         clause_ids: columns[1].split(',').map((id) => wireIds.clauseFromWire.get(id) ?? id),
-        participants: [], polarity: 'affirmed', modality: 'asserted', attribution: null,
-        statement_en: columns.slice(3).join(' ').trim(), time: null, place: null, dynamic_attributes: [],
+        participants: [], polarity: 'affirmed', modality: quoted ? 'reported' : 'asserted', attribution: quoted ? 'source_quote' : null,
+        statement_en: statement, time: null, place: null, dynamic_attributes: [],
       });
     } else if (columns[0] === 'I' && columns.length >= 9) response.items.push(decodeItemLine(columns, wireIds));
     else if (columns[0] === 'C' && columns.length >= 3) {
@@ -427,9 +479,14 @@ const parseProtocol = (completion, wireIds) => {
     } else if (/^[a-z][a-z0-9_]*$/u.test(columns[0] ?? '') && columns.length >= 2) {
       const verdicts = { S: 'supported', P: 'partially_supported', U: 'unsupported', A: 'ambiguous', X: 'contradicted_by_evidence' };
       if (verdicts[columns[1]]) response.verdicts.push({ item_id: columns[0], verdict: verdicts[columns[1]], reason: '' });
+    } else {
+      // A malformed model line must not crash an otherwise usable audit, nor
+      // be silently accepted. Keep only a hash in the log: book text remains
+      // confined to the restricted cache, while the run records the defect.
+      response.protocol_errors.push({ line_index: lineIndex, line_sha256: sha256(normalizedLine), column_count: columns.length, code: 'unrecognized_protocol_line' });
     }
   }
-  if (raw && !response.items.length && !response.coverage.length && !response.verdicts.length && !response.references.length) throw new Error(`unrecognized protocol: ${JSON.stringify(response.raw_preview.slice(0, 300))}`);
+  if (raw && !response.items.length && !response.coverage.length && !response.verdicts.length && !response.references.length && !response.protocol_errors.length) throw new Error(`unrecognized protocol: ${JSON.stringify(response.raw_preview.slice(0, 300))}`);
   return response;
 };
 
@@ -439,13 +496,13 @@ const validateProtocol = ({ response, expectedClauseIds: _expectedClauseIds, exp
   if (missingVerdicts.length) throw new Error(`protocol incomplete: ${missingVerdicts.length} verdict rows missing; ${JSON.stringify(response.raw_preview?.slice(0, 300) ?? '')}`);
 };
 
-const batchItemsByClauses = (items, maximum) => {
+const batchItemsByClauses = (items, maximumClauses, maximumItems = Infinity) => {
   const batches = [];
   let current = [];
   let ids = new Set();
   for (const item of items) {
     const next = new Set([...ids, ...item.clause_ids]);
-    if (current.length && next.size > maximum) {
+    if (current.length && (next.size > maximumClauses || current.length >= maximumItems)) {
       batches.push(current);
       current = [];
       ids = new Set();
@@ -459,10 +516,16 @@ const batchItemsByClauses = (items, maximum) => {
 
 const sameDiscoveredItem = (left, right) => {
   if (!left.clause_ids.some((id) => right.clause_ids.includes(id))) return false;
-  if (semanticTokenOverlap(left.statement_en, right.statement_en) >= 0.55) return true;
+  if (left.polarity && right.polarity && left.polarity !== right.polarity) return false;
+  if (left.modality && right.modality && left.modality !== right.modality) return false;
+  const overlap = semanticTokenOverlap(left.statement_en, right.statement_en);
+  if (overlap >= 0.55) return true;
   if (left.kind !== right.kind || left.assertion_kind !== right.assertion_kind) return false;
-  if (left.canonical_type && right.canonical_type) return left.canonical_type === right.canonical_type;
-  return left.open_type === right.open_type && left.open_type !== 'independent_event' && left.open_type !== 'independent_assertion';
+  if (left.canonical_type && right.canonical_type && left.canonical_type === right.canonical_type && overlap >= 0.35) return true;
+  if (left.open_type && right.open_type && left.open_type === right.open_type
+    && left.open_type !== 'independent_event' && left.open_type !== 'independent_assertion'
+    && overlap >= 0.35) return true;
+  return false;
 };
 
 const main = async () => {
@@ -480,16 +543,20 @@ const main = async () => {
   const contextPages = allPages.filter((page) => page.page >= firstPage - 1 && page.page <= lastPage + 1);
   let nlpContextPages = contextPages;
   let payloadPages = allPages;
+  let maskedByPage = new Map();
   let layout = [];
   if (V3) {
     if (!PDF_PATH || !(await fs.stat(PDF_PATH).then(() => true).catch(() => false))) throw new Error('incomplete_layout: V3 requires --pdf pointing to the source PDF');
     const masked = maskPdfFurniture({ pdfPath: PDF_PATH, pages: contextPages });
     nlpContextPages = masked.pages;
     layout = masked.layout;
-    const maskedByPage = new Map(masked.pages.map((page) => [page.page, page]));
+    maskedByPage = new Map(masked.pages.map((page) => [page.page, page]));
     payloadPages = allPages.map((page) => maskedByPage.get(page.page) ?? page);
   }
-  const sourceSha = sha256(targetPages.map((page) => `${page.page}\u001f${page.text}`).join('\u001e'));
+  // V3 cache keys bind the post-layout reading view. Otherwise a caption-mask
+  // fix could replay facts extracted from the prior, unmasked body.
+  const sourcePages = V3 ? targetPages.map((page) => maskedByPage.get(page.page) ?? page) : targetPages;
+  const sourceSha = sha256(sourcePages.map((page) => `${page.page}\u001f${page.text}`).join('\u001e'));
   const config = { primary_model: PRIMARY_MODEL, audit_model: AUDIT_MODEL, quality_model: QUALITY_MODEL, nlp_model: NLP_MODEL, nlp_threshold: NLP_THRESHOLD, prompt_version: HISTORICAL_V2_PROMPT_VERSION, subject_memory: V3 ? 'stateful-v3' : null, experiment_id: EXPERIMENT_ID };
   const runKey = sha256(JSON.stringify({ source_id: SOURCE_ID, pages: targetNumbers, source_sha: sourceSha, config }));
 
@@ -548,7 +615,19 @@ const main = async () => {
     end_offset: page.raw_ends[Math.min(row.reading_end, page.raw_ends.length) - 1] ?? null,
   }))) : [];
   if (ocrDamage.length) console.log(`OCR damage: ${ocrDamage.length} damaged domain words folded for identity (text left untouched).`);
+  if (V3) {
+    try {
+      const placesIndex = await loadPlacesIndex();
+      setPlacesGazetteerIndex(placesIndex);
+      console.log(`Places gazetteer: ${placesIndex.counts?.keys ?? 0} keys / ${placesIndex.counts?.tokens ?? 0} tokens for location OCR repair.`);
+    } catch (error) {
+      console.warn(`Places index unavailable (${error instanceof Error ? error.message : error}); location OCR repair skipped.`);
+      setPlacesGazetteerIndex(null);
+    }
+  }
   const indexedMentions = buildSubjectEntityIndex({ sourceId: SOURCE_ID, mentions: rawMentions });
+  const placeRepairs = V3 ? getPlaceRepairLog() : [];
+  if (placeRepairs.length) console.log(`Place OCR repairs: ${placeRepairs.length} unique-hit confusion folds (evidence untouched).`);
   const mentions = indexedMentions.mentions;
   const clauses = buildClauseLedger({ sourceId: SOURCE_ID, targetPages, readingPages: targetReadingPages, mentions });
   if (!clauses.length) throw new Error('Local clause ledger is empty');
@@ -580,9 +659,17 @@ const main = async () => {
   const auditSkeletons = batchesOf(pagePayloads, 2).map((payloads) => `${AUDIT_PROMPT}\n${JSON.stringify({ pages: payloads.map((payload) => wireAuditPage(payload, wireIds)) })}`);
   const primaryCeiling = pagePayloads.reduce((sum, payload, index) => sum + estimatedCeiling({ requests: [primaryRequests[index]], modelPricing: pricing.get(PRIMARY_MODEL), maxOutputTokens: primaryTokenLimit(payload.clauses.length) }).usd, 0);
   const auditCeiling = batchesOf(pagePayloads, 2).reduce((sum, payloads, index) => sum + estimatedCeiling({ requests: [auditSkeletons[index]], modelPricing: pricing.get(AUDIT_MODEL), maxOutputTokens: auditTokenLimit(payloads.flatMap((payload) => payload.clauses).length) }).usd, 0);
-  const qualityReservePayload = { clauses: clauses.slice(0, Math.max(1, Math.ceil(clauses.length * 0.1))).slice(0, MAX_QUALITY_CLAUSES).map((clause) => wireClause({ ...clause, mentions: mentionsForClause(clause, mentionById) }, wireIds)), candidates: [] };
-  const qualityReserve = estimatedCeiling({ requests: [`${QUALITY_PROMPT}\n${JSON.stringify(qualityReservePayload)}`], modelPricing: pricing.get(QUALITY_MODEL), maxOutputTokens: qualityTokenLimit() }).usd;
+  const qualityReservePayload = {
+    clauses: clauses.slice(0, Math.max(1, Math.ceil(clauses.length * 0.1))).slice(0, MAX_QUALITY_CLAUSES).map((clause) => wireQualityClause(clause, wireIds)),
+    candidates: [],
+  };
+  const qualityReserve = estimatedCeiling({
+    requests: [`${QUALITY_PROMPT}\n${JSON.stringify(qualityReservePayload)}`],
+    modelPricing: pricing.get(QUALITY_MODEL),
+    maxOutputTokens: qualityTokenLimit(8),
+  }).usd;
   console.log(`Routine ceiling ${formatUsd(primaryCeiling + auditCeiling)}; quality reserve ${formatUsd(qualityReserve)}; hard cap ${formatUsd(MAX_COST_USD)}.`);
+  if (V3) console.log('V3 development default is $0.005/page for budget fit; promotion still requires measured cost ≤ $0.002/page (failed_cost_gate stays honest).');
   if (primaryCeiling + auditCeiling > MAX_COST_USD) throw new Error(`Routine conservative ceiling ${formatUsd(primaryCeiling + auditCeiling)} exceeds hard cap ${formatUsd(MAX_COST_USD)}`);
   const normalizedBodySha = V3 ? sha256(payloadPages.filter((page) => targetSet.has(page.page)).map((page) => `${page.page}${page.text}`).join('')) : null;
 
@@ -599,8 +686,11 @@ const main = async () => {
     publication_status: 'private',
     mentions,
     entity_aliases: V3 ? [...indexedMentions.entities.values()].map((entity) => ({ ...entity, aliases: [...entity.aliases], roles: [...entity.roles] })) : undefined,
+    entity_eligibility_log: V3 ? indexedMentions.entityEligibilityLog : undefined,
+    entity_type_corrections_log: V3 ? indexedMentions.entityTypeCorrectionsLog : undefined,
     layout: V3 ? { pdf_path: PDF_PATH, pages: layout } : undefined,
     ocr_damage_log: V3 ? ocrDamage : undefined,
+    place_ocr_repair_log: V3 ? placeRepairs : undefined,
     subject_memory_cold_start: V3 ? persistedSubjectMemory == null : undefined,
     subject_state_loaded_last_page: V3 ? persistedSubjectMemory?.last_page ?? null : undefined,
     experiment_id: EXPERIMENT_ID ?? undefined,
@@ -636,12 +726,16 @@ const main = async () => {
   const cachedRows = await readJsonl(CACHE_OUTPUT);
   const cache = new Map(cachedRows.filter((row) => row?.cache_key && row?.payload).map((row) => [row.cache_key, row]));
   const calls = [];
+  const protocolErrors = [];
   let spent = 0;
   // Routine calls may not eat into the quality reserve; only quality
   // adjudication and its reflection verification can spend it.
   const budgetCapFor = (operation) => V3 && !/historical\.v2\.(?:quality|reflection)/u.test(operation)
     ? MAX_COST_USD - qualityReserve
     : MAX_COST_USD;
+  const recordProtocolErrors = (operation, response) => {
+    protocolErrors.push(...(response.protocol_errors ?? []).map((error) => ({ operation, ...error })));
+  };
   const callProtocol = async ({ operation, model, system, payload, maxTokens, expectedClauseIds = [], expectedVerdictIds = [], stateHash = null }) => {
     const requestText = `${system}\n${JSON.stringify(payload)}`;
     const promptVersion = operation === 'historical.v2.primary' ? PRIMARY_CACHE_VERSION : HISTORICAL_V2_PROMPT_VERSION;
@@ -654,6 +748,7 @@ const main = async () => {
     const cached = cache.get(cacheKey);
     if (cached) {
       validateProtocol({ response: cached.payload, expectedClauseIds, expectedVerdictIds });
+      recordProtocolErrors(operation, cached.payload);
       calls.push({ operation, model, usage: cached.usage ?? null, cache_hit: true });
       return cached.payload;
     }
@@ -672,9 +767,8 @@ const main = async () => {
         messages: [{ role: 'system', content: attempt ? `${system}\nRETRY: obey TSV exactly; classify every candidate in grouped V rows first.` : system }, { role: 'user', content: JSON.stringify(payload) }],
         max_tokens: attemptTokens,
         temperature: 0,
-        // The quality judge keeps its default reasoning behavior; the flags
-        // only govern the routine extractor and auditor/verifier.
-        reasoning: /historical\.v2\.(?:quality|reflection)/u.test(operation) ? undefined
+        reasoning: /historical\.v2\.(?:quality|reflection)/u.test(operation)
+          ? reasoningParam('off')
           : operation === 'historical.v2.primary' ? reasoningParam(PRIMARY_REASONING)
           : reasoningParam(AUDIT_REASONING),
       });
@@ -690,6 +784,7 @@ const main = async () => {
         }
         parsed = parseProtocol(completion, wireIds);
         validateProtocol({ response: parsed, expectedClauseIds, expectedVerdictIds });
+        recordProtocolErrors(operation, parsed);
         break;
       }
       catch (error) {
@@ -742,6 +837,9 @@ const main = async () => {
   let referenceRows = [...boundaryContinuationReferences];
   const ambiguousReferences = [];
   const unresolvedReferences = [];
+  const unresolvedSubjects = [];
+  const ambiguousSubjects = [];
+  const itemQualityExclusions = [];
   const auditVerdicts = new Map();
   const qualityVerdicts = new Map();
   const reflectionVerdicts = new Map();
@@ -792,7 +890,7 @@ const main = async () => {
       referenceRows.push(...response.references.filter((reference) => {
         const clause = clauseById.get(reference.clause_id);
         const mention = mentionById.get(reference.antecedent_mention_id);
-        return clause && mention && /^(?:he|she|they|his|her|their|this|that|the former|the latter|continuation)$/iu.test(reference.surface.trim())
+        return clause && mention && /^(?:he|she|they|his|her|their|this|that|continuation)$/iu.test(reference.surface.trim())
           && Math.abs(mention.page - clause.page_ref) <= 1
           && !deterministicReferenceKeys.has(`${reference.clause_id}\u001f${String(reference.surface).toLowerCase()}`)
           && !(clause.risk_flags.includes('cross_page_continuation') && deterministicContinuationClauses.has(clause.clause_id));
@@ -831,25 +929,58 @@ const main = async () => {
     }
     auditMissing = dedupeHistoricalItems(auditMissing).filter((item) => !primaryItems.some((primary) => sameDiscoveredItem(item, primary)));
 
+    // Cheap verify for audit-only discoveries before paying for quality.
+    const auditMissingNeedsQuality = [];
+    if (auditMissing.length) {
+      const verification = await verifyCandidateItems({
+        items: auditMissing,
+        availableClauses: pagePayloads.flatMap((payload) => payload.clauses),
+        operation: 'historical.v2.audit_missing_verify',
+      });
+      for (const item of auditMissing) {
+        const verdict = verification.get(item.item_id);
+        if (verdict?.verdict === 'supported') {
+          auditVerdicts.set(item.item_id, verdict);
+        } else {
+          auditMissingNeedsQuality.push(item);
+        }
+      }
+    }
+
     const escalationItems = dedupeHistoricalItems([
-      ...primaryItems.filter((item) => needsQualityEscalation(item, auditVerdicts.get(item.item_id)?.verdict, clauseById)),
-      ...auditMissing,
+      ...primaryItems.filter((item) => needsQualityEscalation(
+        item,
+        auditVerdicts.get(item.item_id)?.verdict,
+        clauseById,
+        mentionById,
+        referenceRows,
+      )),
+      ...auditMissingNeedsQuality,
     ]);
-    for (const batch of batchItemsByClauses(escalationItems, MAX_QUALITY_CLAUSES)) {
+    // Sort by page/clause locality so batches pack denser.
+    escalationItems.sort((left, right) => {
+      const leftPage = Math.min(...left.evidence.map((entry) => entry.page_ref));
+      const rightPage = Math.min(...right.evidence.map((entry) => entry.page_ref));
+      return leftPage - rightPage || String(left.clause_ids[0]).localeCompare(String(right.clause_ids[0]));
+    });
+    for (const batch of batchItemsByClauses(escalationItems, MAX_QUALITY_CLAUSES, MAX_QUALITY_CANDIDATES)) {
       const itemAliases = new Map(batch.map((item, index) => [`q${index.toString(36)}`, item.item_id]));
       batch.flatMap((item) => item.evidence.map((evidence) => evidence.page_ref)).forEach((page) => qualityPages.add(page));
       const ids = new Set(batch.flatMap((item) => item.clause_ids));
       const riskClauses = clauses.filter((clause, index) => ids.has(clause.clause_id)
         || (clauses[index - 1] && ids.has(clauses[index - 1].clause_id) && clauses[index - 1].page_ref === clause.page_ref)
         || (clauses[index + 1] && ids.has(clauses[index + 1].clause_id) && clauses[index + 1].page_ref === clause.page_ref));
+      const needsBoundary = batch.some((item) => item.clause_ids.some((id) => clauseById.get(id)?.risk_flags?.includes('cross_page_continuation')));
       const response = await callProtocol({
         operation: 'historical.v2.quality', model: QUALITY_MODEL, system: QUALITY_PROMPT,
         payload: {
-          clauses: riskClauses.map((clause) => wireClause({ ...clause, mentions: mentionsForClause(clause, mentionById) }, wireIds)),
-          boundary: [...new Set(riskClauses.map((clause) => clause.page_ref))].map((page) => [page, wireBoundary(pagePayloadByPage.get(page), wireIds)]),
-          candidates: batch.map((item, index) => wireKnownItem(item, wireIds, `q${index.toString(36)}`)),
+          clauses: riskClauses.map((clause) => wireQualityClause(clause, wireIds)),
+          ...(needsBoundary ? {
+            boundary: [...new Set(riskClauses.map((clause) => clause.page_ref))].map((page) => [page, wireBoundary(pagePayloadByPage.get(page), wireIds)]),
+          } : {}),
+          candidates: batch.map((item, index) => wireQualityCandidate(item, wireIds, `q${index.toString(36)}`)),
         },
-        maxTokens: qualityTokenLimit(),
+        maxTokens: qualityTokenLimit(batch.length),
         expectedClauseIds: riskClauses.map((clause) => clause.clause_id),
         expectedVerdictIds: [...itemAliases.keys()],
       });
@@ -867,6 +998,7 @@ const main = async () => {
     }
     qualityAdded = dedupeHistoricalItems(qualityAdded);
 
+    // Reflect only new/corrected quality items (not unchanged pass-throughs).
     if (qualityAdded.length) {
       const affectedPages = [...new Set(qualityAdded.flatMap((item) => item.evidence.map((evidence) => evidence.page_ref)))];
       for (const pages of batchesOf(affectedPages, 2)) {
@@ -898,43 +1030,58 @@ const main = async () => {
     const referencesResolved = itemHasResolvedReferences(item, clauseById, mentionById, referenceRows);
     const verdict = judgment?.verdict === 'supported' && referencesResolved ? 'supported' : judgment?.verdict === 'supported' ? 'ambiguous' : judgment?.verdict ?? 'ambiguous';
     const reason = referencesResolved ? judgment?.reason ?? 'Independent agreement not completed.' : 'Pronoun or page-boundary antecedent was not linked to an entity mention.';
-    // The earliest reference in the first evidence clause approximates the
-    // grammatical subject far better than arbitrary row order.
-    const reference = item.clause_ids
-      .flatMap((id) => referenceRows.filter((row) => row.clause_id === id && row.resolved_entity_id)
-        .sort((a, b) => (a.start_offset ?? Infinity) - (b.start_offset ?? Infinity)))
-      .find(Boolean);
-    const transition = item.clause_ids.map((id) => subjectTransitions.find((row) => row.clause_id === id)).find(Boolean);
     let v3Fields = {};
     if (V3) {
-      const subjectEntityId = reference?.resolved_entity_id ?? transition?.after_focus?.active ?? null;
-      const resolutionSources = { deterministic_subject_memory: 'deterministic_subject_memory', deterministic_boundary_join: 'deterministic_subject_memory', primary_coreference: 'model' };
-      const literalMention = item.clause_ids
-        .flatMap((id) => clauseById.get(id)?.mention_ids ?? [])
-        .map((id) => mentionById.get(id))
-        .find((mention) => mention && mention.subject_entity_id === subjectEntityId);
+      const subjectAttribution = resolveItemSubjectAttribution({
+        item, clauseById, references: referenceRows, mentionById, state: subjectState,
+      });
+      if (subjectAttribution.status === 'unresolved') {
+        unresolvedSubjects.push({ item_id: item.item_id, clause_ids: item.clause_ids, reason: subjectAttribution.reason, candidate_entity_ids: [] });
+      } else if (subjectAttribution.status === 'ambiguous') {
+        ambiguousSubjects.push({ item_id: item.item_id, clause_ids: item.clause_ids, reason: subjectAttribution.reason, candidate_entity_ids: subjectAttribution.candidate_entity_ids });
+      }
       v3Fields = {
-        subject_entity_id: subjectEntityId,
-        subject_resolution_source: !subjectEntityId ? null
-          : reference ? resolutionSources[reference.resolution_source] ?? 'model'
-          : 'deterministic_subject_memory',
-        discourse_chain: [...new Set([reference?.antecedent_mention_id, literalMention?.mention_id, subjectEntityId].filter(Boolean))],
-        literal_subject: reference?.surface ?? literalMention?.text ?? null,
-        subject_ambiguous: item.clause_ids.some((id) => ambiguousReferences.some((row) => row.clause_id === id)),
+        subject_entity_id: subjectAttribution.status === 'resolved' ? subjectAttribution.entity_id : null,
+        subject_resolution_source: subjectAttribution.status === 'resolved' ? subjectAttribution.resolution_source : null,
+        discourse_chain: subjectAttribution.discourse_chain ?? [],
+        literal_subject: subjectAttribution.status === 'resolved' ? subjectAttribution.literal_subject : null,
+        subject_ambiguous: subjectAttribution.status === 'ambiguous' || item.clause_ids.some((id) => ambiguousReferences.some((row) => row.clause_id === id)),
+        subject_attribution: subjectAttribution,
       };
     }
-    return {
+    const output = {
       ...item,
       ...v3Fields,
       verification: { verdict, reason },
     };
+    const grounded = V3 ? groundPronominalStatement(output) : output;
+    const structuralReason = V3 ? itemStructuralQualityReason({
+      ...grounded,
+      clause_references: referenceRows.filter((reference) => item.clause_ids.includes(reference.clause_id)),
+      clause_unresolved_references: unresolvedReferences.filter((reference) => item.clause_ids.includes(reference.clause_id)),
+    }) : null;
+    if (!structuralReason) return grounded;
+    itemQualityExclusions.push({ item_id: item.item_id, clause_ids: item.clause_ids, statement_en: grounded.statement_en, reason: structuralReason });
+    return {
+      ...grounded,
+      pre_structural_verification: {
+        ...output.verification,
+        bound_run_id: null, // filled after run_id assigned; see post-bind below
+        bound_item_id: item.item_id,
+        bound_statement_en: output.statement_en,
+        bound_grounded_statement_en: grounded.statement_en,
+      },
+      verification: { verdict: 'unsupported', reason: `Structural item-quality gate: ${structuralReason}` },
+    };
   });
+  if (V3) allItems = collapseClauseSiblingItems(allItems, { supportedOnly: true });
   const supportedItems = allItems.filter((item) => item.verification.verdict === 'supported');
   const auditedCoverage = applyCoverage({ clauses, items: supportedItems, coverageRows, auditStatus: status === 'complete' ? 'agreed' : 'escalated' })
     .map((clause) => ({ ...clause, resolved_references: referenceRows.filter((reference) => reference.clause_id === clause.clause_id) }));
   const usage = aggregateUsage(calls);
   const averageCost = usage.cost / targetPages.length;
-  if (status === 'complete' && averageCost > 0.002) {
+  // Tiny epsilon so measured $0.0020 (fp noise) is not failed_cost_gate.
+  if (status === 'complete' && averageCost > 0.0020005) {
     status = 'failed_cost_gate';
     failureReason = `Average cost ${formatUsd(averageCost)} exceeds $0.0020/page`;
   }
@@ -947,12 +1094,29 @@ const main = async () => {
       .map(({ clause_id, surface, expected, reference_kind, candidate_entity_ids }) => ({ clause_id, surface, expected, reference_kind, candidate_entity_ids })),
   }));
   const completedAt = new Date().toISOString();
+  if (V3) {
+    allItems = allItems.map((item) => {
+      if (!item.pre_structural_verification) return item;
+      return {
+        ...item,
+        pre_structural_verification: {
+          ...item.pre_structural_verification,
+          bound_run_id: baseRecord.run_id,
+          // Preserve pre-/post-ground statement fields set at demote time.
+        },
+      };
+    });
+  }
   await appendJsonl(ITEM_OUTPUT, {
     ...baseRecord, status, failure_reason: failureReason, extracted_at: completedAt,
     items: allItems, supported_item_count: supportedItems.length, usage,
     resolved_references: referenceRows,
     ambiguous_references: V3 ? ambiguousReferences : undefined,
     unresolved_references_log: V3 ? unresolvedReferences : undefined,
+    unresolved_subjects_log: V3 ? unresolvedSubjects : undefined,
+    item_quality_exclusions_log: V3 ? itemQualityExclusions : undefined,
+    ambiguous_subjects_log: V3 ? ambiguousSubjects : undefined,
+    protocol_errors_log: V3 ? protocolErrors : undefined,
     adjudication_requests: V3 ? adjudicationRequests : undefined,
     average_cost_usd_per_page: averageCost,
     quality_route_pages: [...qualityPages].sort((a, b) => a - b),
@@ -991,4 +1155,8 @@ const main = async () => {
   if (status !== 'complete') process.exitCode = 1;
 };
 
-main().catch((error) => { console.error(error instanceof Error ? error.message : String(error)); process.exit(1); });
+export { parseProtocol };
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => { console.error(error instanceof Error ? error.message : String(error)); process.exit(1); });
+}

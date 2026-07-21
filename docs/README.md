@@ -38,7 +38,8 @@ Documentation for the monorepo: a Budapest audio-tour app with a map of landmark
 | [Historical book knowledge extraction](HISTORICAL_BOOK_KNOWLEDGE_EXTRACTION.md) | Research, page experiment findings, and the decided evidence-first canonical-event architecture |
 | [Historical reference resolution](HISTORICAL_REFERENCE_RESOLUTION.md) | Detailed pronoun, possessive, repeated-description, batching, caching, validation, and cost design |
 | [Historical Extraction V3 — architecture](HISTORICAL_EXTRACTION_V3_HANDOFF.md) | V3 design: typed subject memory, layout-first processing, cost routing, evaluation gates |
-| [Historical Extraction V3 — current handoff](HISTORICAL_EXTRACTION_V3_HANDOFF_2026-07-17.md) | Current V3 state: frozen model config, measured cost, address/geography and OCR layers, known defects |
+| [Historical Extraction V3 — 2026-07-17 handoff](HISTORICAL_EXTRACTION_V3_HANDOFF_2026-07-17.md) | Frozen model config, measured cost, address/geography and OCR layers |
+| [Historical Extraction V3 — quality & eval (2026-07-20)](HISTORICAL_EXTRACTION_V3_QUALITY_2026-07-20.md) | Current dev metrics, structural gate, rescore, gold seed/merge/dedupe, operator loop |
 | [V3 model comparison](CLAUDE_HANDOFF_MODEL_COMPARISON_2026-07-16.md) | Bounded A/B that froze DeepSeek V4 Flash primary + Qwen audit and rejected GPT-OSS-20B |
 | [Vector DB improvements](VECTOR_DB_IMPROVEMENTS.md) | Retrieval upgrades: enriched embeddings, hybrid search, era taxonomy, name matching |
 | [Decisions log](DECISIONS.md) | Dated record of prompt, model, and pipeline-behavior changes |

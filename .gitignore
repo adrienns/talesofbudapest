@@ -27,3 +27,13 @@ ingest/corpus/**/text/
 ingest/corpus/**/extractions/
 ingest/corpus/**/experiments/
 
+# Local TTS experiments (not part of the product)
+qwen-tts-env/
+generate_tts.py
+qwen-*.wav
+*.wav
+
+# Cursor local state (commit rules explicitly if needed)
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**

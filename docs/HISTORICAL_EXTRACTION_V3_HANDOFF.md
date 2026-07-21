@@ -1,13 +1,11 @@
 # Historical Extraction V3 — implementation handoff
 
-> **Architecture reference. For current state, read
-> [HISTORICAL_EXTRACTION_V3_HANDOFF_2026-07-17.md](HISTORICAL_EXTRACTION_V3_HANDOFF_2026-07-17.md)
-> first.** The goal and design below still hold. Everything describing status
-> is a record of 2026-07-16 and is now out of date: the files listed as
-> "uncommitted" are committed, the model configuration is frozen (DeepSeek V4
-> Flash primary with reasoning off), verification fixes raised supported items
-> from 71% to 91-97% on sampled pages, and address/geography and OCR layers
-> were added.
+> **Architecture reference.** For frozen models / address / OCR (2026-07-17), read
+> [HISTORICAL_EXTRACTION_V3_HANDOFF_2026-07-17.md](HISTORICAL_EXTRACTION_V3_HANDOFF_2026-07-17.md).
+> For current **quality metrics, eval, structural rescore, and gold tooling**
+> (2026-07-20), read
+> [HISTORICAL_EXTRACTION_V3_QUALITY_2026-07-20.md](HISTORICAL_EXTRACTION_V3_QUALITY_2026-07-20.md).
+> The goal and design below still hold; older “status” paragraphs are historical.
 
 ## Read first
 
