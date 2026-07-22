@@ -4,6 +4,7 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { resolveSupabaseServiceRoleKey } from '@backend/lib/supabaseServiceKey.js'
 
 type RuntimeEnvironment = Record<string, string | undefined>
+type SupabaseCredentials = { url: string; key: string }
 
 // Next.js replaces direct `process.env.NAME` references while compiling. That
 // is useful for public browser values, but server credentials for the Worker
@@ -16,38 +17,46 @@ const getRuntimeEnvironment = (): RuntimeEnvironment => {
   }
 }
 
-const readEnvironment = (name: string) => {
-  const runtimeValue = getRuntimeEnvironment()[name]
-  return runtimeValue ?? process.env[name]
+const credentialsFromEnvironment = (
+  environment: RuntimeEnvironment,
+): SupabaseCredentials | null => {
+  const url = environment.SUPABASE_URL ?? environment.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = environment.SUPABASE_SERVICE_ROLE_KEY
+  const anonKey = environment.SUPABASE_ANON_KEY ?? environment.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const jwtSecret = environment.SUPABASE_JWT_SECRET ?? environment.JWT_SECRET
+
+  if (!url || (!serviceRoleKey && !(anonKey && jwtSecret))) {
+    return null
+  }
+
+  return {
+    url,
+    key: resolveSupabaseServiceRoleKey({ serviceRoleKey, anonKey, jwtSecret }),
+  }
 }
 
-const getServiceRoleKey = () =>
-  resolveSupabaseServiceRoleKey({
-    serviceRoleKey: readEnvironment('SUPABASE_SERVICE_ROLE_KEY'),
-    anonKey: readEnvironment('SUPABASE_ANON_KEY') ?? readEnvironment('NEXT_PUBLIC_SUPABASE_ANON_KEY'),
-    jwtSecret: readEnvironment('SUPABASE_JWT_SECRET') ?? readEnvironment('JWT_SECRET'),
-  })
+const getSupabaseCredentials = (): SupabaseCredentials | null =>
+  credentialsFromEnvironment(getRuntimeEnvironment())
+  ?? credentialsFromEnvironment(process.env)
 
 export const getSupabaseAdmin = () => {
-  const url = readEnvironment('SUPABASE_URL') ?? readEnvironment('NEXT_PUBLIC_SUPABASE_URL')
-  const key = getServiceRoleKey()
+  const credentials = getSupabaseCredentials()
 
-  if (!url || !key) {
+  if (!credentials) {
     throw new Error(
       'Supabase service-role credentials are missing. Server API routes must not fall back to an anon key.',
     )
   }
 
-  return createClient(url, key)
+  return createClient(credentials.url, credentials.key)
 }
 
 export const getSupabaseRead = () => {
-  const url = readEnvironment('SUPABASE_URL') ?? readEnvironment('NEXT_PUBLIC_SUPABASE_URL')
-  const key = getServiceRoleKey()
+  const credentials = getSupabaseCredentials()
 
-  if (!url || !key) {
+  if (!credentials) {
     throw new Error('Supabase credentials are not configured')
   }
 
-  return createClient(url, key)
+  return createClient(credentials.url, credentials.key)
 }

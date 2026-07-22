@@ -511,7 +511,7 @@ const HomePageContent = () => {
         activeRoute={activeRoute}
         selectedChapterId={activeChapter?.id ?? null}
         onChapterSelect={handleChapterSelect}
-        showLandmarks={!hasActiveRoute && !isCuratedOnlyStaging}
+        showLandmarks={!hasActiveRoute}
       />
 
       {showChrome && hasActiveRoute && activeChapter && (
