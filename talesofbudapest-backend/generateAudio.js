@@ -1,6 +1,5 @@
 import { supabase } from './supabaseClient.js';
 import { generateLandmarkAudio } from './lib/landmarkAudioPipeline.js';
-import { getOpenRouterApiKey } from './lib/openRouterClient.js';
 import { DEFAULT_TOUR_STYLE_ID, isTourStyleId } from './lib/tourStyles.js';
 import { DEFAULT_LOCALE } from './lib/locale.js';
 import dotenv from 'dotenv';
@@ -22,7 +21,7 @@ const fetchTranslation = async (locationId, locale) => {
   return data;
 };
 
-const buildAudioTourForLocation = async (location, { force, styleId, locale }) => {
+const buildAudioTourForLocation = async (location, { force, styleId, locale, ttsProvider }) => {
   console.log(`\n--- ${location.name} (id: ${location.id}) ---`);
 
   const translation = await fetchTranslation(location.id, locale);
@@ -39,6 +38,7 @@ const buildAudioTourForLocation = async (location, { force, styleId, locale }) =
     translation,
     styleId,
     force,
+    ttsProvider,
   });
 
   if (result.cached) {
@@ -100,19 +100,28 @@ const parseArgs = () => {
   const styleId = isTourStyleId(styleRaw) ? styleRaw : DEFAULT_TOUR_STYLE_ID;
   const localeIndex = args.indexOf('--locale');
   const locale = localeIndex !== -1 ? args[localeIndex + 1] : DEFAULT_LOCALE;
+  const providerIndex = args.indexOf('--audio-provider');
+  const ttsProvider = providerIndex !== -1 ? args[providerIndex + 1] : 'gemini';
+  if (!['gemini', 'openrouter'].includes(ttsProvider)) {
+    throw new Error('--audio-provider must be gemini or openrouter');
+  }
 
-  return { all, force, name, id, styleId, locale };
+  return { all, force, name, id, styleId, locale, ttsProvider };
 };
 
 const run = async () => {
-  const { all, force, name, id, styleId, locale } = parseArgs();
+  const { all, force, name, id, styleId, locale, ttsProvider } = parseArgs();
 
-  if (!getOpenRouterApiKey()) {
-    console.error('OPENROUTER_API_KEY is required in .env');
+  if (ttsProvider === 'gemini' && !process.env.GEMINI_API_KEY) {
+    console.error('GEMINI_API_KEY is required in .env for direct Gemini narration');
+    process.exit(1);
+  }
+  if (ttsProvider === 'openrouter' && !process.env.OPENROUTER_API_KEY) {
+    console.error('OPENROUTER_API_KEY is required when --audio-provider openrouter is selected');
     process.exit(1);
   }
 
-  const options = { force, styleId, locale };
+  const options = { force, styleId, locale, ttsProvider };
 
   try {
     if (all) {

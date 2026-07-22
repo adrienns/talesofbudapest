@@ -50,7 +50,7 @@ export const pcmToMp3 = (
 
 /** Returns `{ buffer, contentType }` — headerless PCM is transcoded to MP3; already-encoded formats pass through. */
 export const synthesizeSpeech = async (script, locale = DEFAULT_LOCALE, options = {}) => {
-  const { speechLexicon = [], provider = 'openrouter', voice } = options;
+  const { speechLexicon = [], provider = 'gemini', voice } = options;
   const { speechText } = prepareSpeechText(script, locale, speechLexicon);
   const chunks = chunkTextForTts(speechText);
 
@@ -73,7 +73,7 @@ export const synthesizeSpeech = async (script, locale = DEFAULT_LOCALE, options 
   return { buffer: pcmToMp3(combined), contentType: CONTENT_TYPES.mp3 };
 };
 
-export const getTtsSpeechCreator = (provider = 'openrouter') => {
+export const getTtsSpeechCreator = (provider = 'gemini') => {
   if (provider === 'openrouter') return createSpeech;
   if (provider === 'gemini') return createGeminiSpeech;
   throw new Error(`Unsupported TTS provider: ${provider}`);

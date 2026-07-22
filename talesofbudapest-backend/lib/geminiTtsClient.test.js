@@ -5,17 +5,14 @@ import {
   createGeminiTtsClient,
   DEFAULT_GEMINI_TTS_MODEL,
   DEFAULT_GEMINI_TTS_VOICE,
+  GeminiFreeTierQuotaError,
   isTerminalGeminiTtsQuotaError,
   parseGeminiTtsResponse,
   retryAfterMs,
 } from './geminiTtsClient.js';
 
 const audioResponse = (value = 'pcm') => ({
-  output_audio: {
-    data: Buffer.from(value).toString('base64'),
-    sample_rate: 24_000,
-    channels: 1,
-  },
+  candidates: [{ content: { parts: [{ inlineData: { data: Buffer.from(value).toString('base64') } }] } }],
 });
 
 test('Gemini TTS request uses the planned model, voice, and narration guardrails', () => {
@@ -26,11 +23,13 @@ test('Gemini TTS request uses the planned model, voice, and narration guardrails
   });
 
   assert.equal(request.model, 'gemini-3.1-flash-tts-preview');
-  assert.deepEqual(request.response_format, { type: 'audio' });
-  assert.deepEqual(request.generation_config.speech_config, [{ voice: 'Sulafat' }]);
-  assert.match(request.input, /measured museum-guide pace/);
-  assert.match(request.input, /Read only the transcript, exactly as written/);
-  assert.match(request.input, /### TRANSCRIPT\nWelcome to Budapest\.$/);
+  assert.deepEqual(request.config.responseModalities, ['AUDIO']);
+  assert.deepEqual(request.config.speechConfig, {
+    voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Sulafat' } },
+  });
+  assert.match(request.contents, /measured museum-guide pace/);
+  assert.match(request.contents, /Read only the transcript, exactly as written/);
+  assert.match(request.contents, /### TRANSCRIPT\nWelcome to Budapest\.$/);
 });
 
 test('Gemini TTS response parser returns raw PCM metadata', () => {
@@ -45,8 +44,8 @@ test('Gemini TTS retries transient failures and then returns audio', async () =>
   let calls = 0;
   const waits = [];
   const client = {
-    interactions: {
-      create: async () => {
+    models: {
+      generateContent: async () => {
         calls += 1;
         if (calls < 3) throw Object.assign(new Error('temporary'), { status: 500 });
         return audioResponse();
@@ -69,7 +68,7 @@ test('Gemini TTS retries transient failures and then returns audio', async () =>
 test('Gemini TTS throttles consecutive free-tier requests', async () => {
   let now = 1_000;
   const waits = [];
-  const client = { interactions: { create: async () => audioResponse() } };
+  const client = { models: { generateContent: async () => audioResponse() } };
   const tts = createGeminiTtsClient({
     client,
     requestIntervalMs: 31_000,
@@ -86,7 +85,7 @@ test('Gemini TTS throttles consecutive free-tier requests', async () => {
 });
 
 test('Gemini TTS rejects missing audio without falling back to another provider', async () => {
-  const client = { interactions: { create: async () => ({ output_text: 'not audio' }) } };
+  const client = { models: { generateContent: async () => ({ candidates: [] }) } };
   const tts = createGeminiTtsClient({ client, requestIntervalMs: 0, maxAttempts: 1 });
   await assert.rejects(
     tts.createSpeech({ input: 'Audio only.', model: 'test', voice: 'Sulafat' }),
@@ -108,8 +107,8 @@ test('depleted prepaid credits are terminal and are not retried', async () => {
   let calls = 0;
   const error = Object.assign(new Error('Your prepayment credits are depleted.'), { status: 429 });
   const client = {
-    interactions: {
-      create: async () => {
+    models: {
+      generateContent: async () => {
         calls += 1;
         throw error;
       },
@@ -120,7 +119,40 @@ test('depleted prepaid credits are terminal and are not retried', async () => {
   assert.equal(isTerminalGeminiTtsQuotaError(error), true);
   await assert.rejects(
     tts.createSpeech({ input: 'Do not retry.', model: 'test', voice: 'Sulafat' }),
-    /prepayment credits are depleted/,
+    GeminiFreeTierQuotaError,
+  );
+  assert.equal(calls, 1);
+});
+
+test('Gemini free-tier quota errors are clear and do not retry or fall back', async () => {
+  let calls = 0;
+  const error = Object.assign(new Error('Resource has been exhausted: free tier quota.'), { status: 429 });
+  const tts = createGeminiTtsClient({
+    client: { models: { generateContent: async () => { calls += 1; throw error; } } },
+    requestIntervalMs: 0,
+  });
+
+  await assert.rejects(
+    tts.createSpeech({ input: 'Quota test.', model: 'test', voice: 'Sulafat' }),
+    /Gemini free-tier quota reached/,
+  );
+  assert.equal(calls, 1);
+});
+
+test('Google RESOURCE_EXHAUSTED quota responses stop immediately', async () => {
+  let calls = 0;
+  const error = Object.assign(
+    new Error('Quota exceeded for metric: generate_content_free_tier_requests. status: RESOURCE_EXHAUSTED'),
+    { status: 429 },
+  );
+  const tts = createGeminiTtsClient({
+    client: { models: { generateContent: async () => { calls += 1; throw error; } } },
+    requestIntervalMs: 0,
+  });
+
+  await assert.rejects(
+    tts.createSpeech({ input: 'Quota test.', model: 'test', voice: 'Sulafat' }),
+    /Gemini free-tier quota reached/,
   );
   assert.equal(calls, 1);
 });

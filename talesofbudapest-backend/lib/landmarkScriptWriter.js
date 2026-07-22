@@ -59,13 +59,16 @@ const SCRIPT_LOCALE = {
     guideIntro: 'Budapesti hangos idegenvezető vagy, a látogató épp a látnivaló előtt áll.',
     rules: [
       'Csak a megadott anyagból indulj ki. Ne találj ki dátumokat, neveket, eseményeket vagy legendákat.',
+      'Önálló, természetes magyar szöveget írj; ne angol mondatszerkezetek vagy fordulatok tükörfordítását.',
       'A legerősebb konkrét részlettel kezdj — évvel, névvel vagy látható elemmel.',
       'Rövid, változatos mondatok, felolvasásra szánt tempó.',
+      'A magyar helynevek és közhasználatú történelmi elnevezések bevett magyar alakját használd.',
       'Ne töltsd ki vékony forrásokat általános budapesti töltelékszöveggel.',
       'Ne említs AI-t, alkalmazást vagy túrát.',
       'Személyneveknél a NÉVJEGYZÉK pontos alakját használd (családnév először).',
     ],
     factsLabel: 'TELJES TÉNYEK (egyetlen hiteles forrás)',
+    landmarkLabel: 'Helyszín',
     narrativeLabel: 'Történészi narratíva (tények tömörítve)',
     highlightsLabel: 'KIEMELÉSEK (az 1-est vezeted, 2–3 további)',
     scriptRequest: (min, max) => `Írj felolvasásra szánt magyar hangos túra szöveget ${min}–${max} szóból.`,
@@ -114,7 +117,7 @@ const buildScriptUserPrompt = ({
     : '';
   const glossaryBlock = nameGlossaryText ? `\n\n${nameGlossaryText}` : '';
 
-  return `Landmark: ${name}
+  return `${copy.landmarkLabel ?? 'Landmark'}: ${name}
 
 ${copy.factsLabel}:
 ${sourceMaterial}
@@ -209,7 +212,13 @@ export const generateCustomStopScript = async ({
       messages: [
         {
           role: 'system',
-          content: `${copy.guideIntro}
+          content: locale === 'hu' ? `${copy.guideIntro}
+Írj egy tematikus budapesti gyalogos túra egyéni térképi megállójához felolvasásra szánt szöveget.
+Szabályok:
+- A seed anyagból következő tényeket használd; ne találj ki történelmi részleteket.
+- A szöveg legyen önálló, természetes magyar, ne angol mondatok tükörfordítása.
+- Erős, konkrét nyitással kezdj. Rövid mondatok, hangos felolvasásra.
+- ${copy.scriptRequest(min, max)}` : `${copy.guideIntro}
 Write a spoken script for a custom map pin on a themed Budapest walking tour.
 Rules:
 - Use only facts implied by the seed material. Do not invent history.

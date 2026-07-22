@@ -1,5 +1,5 @@
 /**
- * Gemini TTS (via OpenRouter) can truncate audio past ~60–100s per request.
+ * Direct Gemini TTS can truncate audio past ~60–100s per request.
  * Chunk long scripts at sentence boundaries and concatenate PCM downstream.
  */
 export const TTS_MAX_WORDS_PER_CHUNK = 110;

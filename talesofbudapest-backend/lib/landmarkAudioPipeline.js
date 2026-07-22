@@ -12,6 +12,7 @@ export const generateLandmarkAudio = async ({
   styleId = DEFAULT_TOUR_STYLE_ID,
   topicIds = [],
   force = false,
+  ttsProvider = 'gemini',
 }) => {
   if (!isAppLocale(locale)) {
     throw new Error(`Unsupported locale: ${locale}`);
@@ -27,6 +28,7 @@ export const generateLandmarkAudio = async ({
     styleId: resolvedStyleId,
     topicIds,
     force,
+    ttsProvider,
     persistLegacy: resolvedStyleId === DEFAULT_TOUR_STYLE_ID,
   });
 };

@@ -122,6 +122,7 @@ export const resolveLandmarkAudio = async ({
   plannerHook,
   force = false,
   existingScript,
+  ttsProvider = 'gemini',
   persistLegacy = false,
 }) => {
   if (!isAppLocale(locale)) {
@@ -210,7 +211,7 @@ export const resolveLandmarkAudio = async ({
       plannerHook,
     }));
 
-  const { buffer, contentType } = await synthesizeSpeech(script, locale);
+  const { buffer, contentType } = await synthesizeSpeech(script, locale, { provider: ttsProvider });
   const fileName = `${location.id}${audioTourFileSuffix(locale, resolvedStyleId)}`;
   const publicUrl = await uploadAudio(supabase, fileName, buffer, contentType);
 

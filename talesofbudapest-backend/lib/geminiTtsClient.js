@@ -13,6 +13,10 @@ const TERMINAL_QUOTA_PATTERNS = [
   /prepayment credits are depleted/i,
   /daily quota/i,
   /requests per day/i,
+  /resource has been exhausted/i,
+  /resource[_ -]?exhausted/i,
+  /quota exceeded/i,
+  /free[- ]tier quota/i,
 ];
 
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -61,16 +65,22 @@ export const buildGeminiTtsRequest = ({
   input,
   model = getGeminiTtsModel(),
   voice = getGeminiTtsVoice(),
+  locale,
 }) => {
   const trimmed = input?.trim();
   if (!trimmed) throw new Error('TTS input text is empty');
 
   return {
     model,
-    input: buildGeminiTtsPrompt(trimmed),
-    response_format: { type: 'audio' },
-    generation_config: {
-      speech_config: [{ voice }],
+    contents: buildGeminiTtsPrompt(trimmed),
+    config: {
+      responseModalities: ['AUDIO'],
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: { voiceName: voice },
+        },
+        ...(locale ? { languageCode: locale } : {}),
+      },
     },
   };
 };
@@ -83,8 +93,10 @@ class RetryableGeminiTtsError extends Error {
   }
 }
 
-export const parseGeminiTtsResponse = (interaction) => {
-  const encoded = interaction?.output_audio?.data;
+export const parseGeminiTtsResponse = (response) => {
+  const audioPart = response?.candidates?.[0]?.content?.parts
+    ?.find((part) => part?.inlineData?.data);
+  const encoded = audioPart?.inlineData?.data;
   if (typeof encoded !== 'string' || !encoded.trim()) {
     throw new RetryableGeminiTtsError('Gemini TTS returned no audio data');
   }
@@ -97,8 +109,8 @@ export const parseGeminiTtsResponse = (interaction) => {
   return {
     buffer,
     format: 'pcm',
-    sampleRate: interaction.output_audio.sample_rate ?? GEMINI_TTS_PCM_SAMPLE_RATE,
-    channels: interaction.output_audio.channels ?? GEMINI_TTS_PCM_CHANNELS,
+    sampleRate: GEMINI_TTS_PCM_SAMPLE_RATE,
+    channels: GEMINI_TTS_PCM_CHANNELS,
   };
 };
 
@@ -113,6 +125,14 @@ const errorMessage = (error) => [
 
 export const isTerminalGeminiTtsQuotaError = (error) =>
   errorStatus(error) === 429 && TERMINAL_QUOTA_PATTERNS.some((pattern) => pattern.test(errorMessage(error)));
+
+export class GeminiFreeTierQuotaError extends Error {
+  constructor() {
+    super('Gemini free-tier quota reached. Try again after the quota resets.');
+    this.name = 'GeminiFreeTierQuotaError';
+    this.status = 429;
+  }
+}
 
 export const isRetryableGeminiTtsError = (error) =>
   !isTerminalGeminiTtsQuotaError(error)
@@ -169,10 +189,13 @@ export const createGeminiTtsClient = ({
         lastRequestStartedAt = nowFn();
 
         try {
-          const interaction = await resolvedClient.interactions.create(request);
-          return parseGeminiTtsResponse(interaction);
+          const response = await resolvedClient.models.generateContent(request);
+          return parseGeminiTtsResponse(response);
         } catch (error) {
           lastError = error;
+          if (isTerminalGeminiTtsQuotaError(error)) {
+            throw new GeminiFreeTierQuotaError();
+          }
           if (!isRetryableGeminiTtsError(error) || attempt === maxAttempts - 1) throw error;
 
           const serverDelay = retryAfterMs(error, nowFn()) ?? 0;
