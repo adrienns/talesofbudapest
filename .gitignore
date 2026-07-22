@@ -3,6 +3,7 @@ dist/
 .next/
 *.tsbuildinfo
 .env
+.env.staging
 *.mp3
 .DS_Store
 *.local
@@ -22,3 +23,4 @@ ingest/corpus/**/raw/
 ingest/corpus/**/text/
 ingest/corpus/**/extractions/
 ingest/corpus/**/experiments/
+
