@@ -30,7 +30,12 @@ self.addEventListener('message', (event) => {
     const results = await Promise.allSettled(uniqueUrls.map(async (url) => {
       const cached = await cache.match(url, { ignoreVary: true })
       if (cached) return
-      const response = await fetch(new Request(url, { mode: 'no-cors', credentials: 'omit' }))
+      const resourceUrl = new URL(url, self.location.origin)
+      const isSameOrigin = resourceUrl.origin === self.location.origin
+      const response = await fetch(new Request(resourceUrl, {
+        mode: isSameOrigin ? 'same-origin' : 'no-cors',
+        credentials: isSameOrigin ? 'same-origin' : 'omit',
+      }))
       if (!response.ok && response.type !== 'opaque') throw new Error('Audio unavailable')
       await cache.put(url, response)
     }))

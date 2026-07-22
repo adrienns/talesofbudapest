@@ -18,7 +18,8 @@ const MAP_PIN_SELECT = `
   importance_score,
   publication_status,
   location_translations (locale, name, audio_url),
-  location_media (url, alt_text, author, source_url, license, license_url, sort_order, review_status, commercial_use_allowed)
+  location_media (url, alt_text, author, source_url, license, license_url, sort_order, review_status, commercial_use_allowed),
+  location_audio_variants (locale, style_id, audio_url)
 `
 
 export const GET = async (request: Request) => {

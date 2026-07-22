@@ -75,8 +75,19 @@ export const useAudioPlayer = (
     const adapter = adapterRef.current
     if (!adapter) return
 
-    await adapter.play()
-    setIsPlaying(true)
+    try {
+      await adapter.play()
+    } catch (error) {
+      // Replacing the source (for example after a locale switch) destroys the
+      // previous audio element. Browsers reject that element's pending play()
+      // promise even though the replacement is expected.
+      if (adapterRef.current !== adapter) return
+      throw error
+    }
+
+    if (adapterRef.current === adapter) {
+      setIsPlaying(true)
+    }
   }, [])
 
   const togglePlayPause = useCallback(async () => {

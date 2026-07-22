@@ -7,4 +7,5 @@ export const DEFAULT_LOCALE: AppLocale = 'en'
 export const isAppLocale = (value: string): value is AppLocale =>
   (SUPPORTED_LOCALES as readonly string[]).includes(value)
 
-export const audioTourFileSuffix = (locale: AppLocale) => `-tour-${locale}.mp3`
+export const audioTourFileSuffix = (locale: AppLocale, styleId = 'storyteller') =>
+  `-tour-${locale}-v2-${styleId}.mp3`

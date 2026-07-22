@@ -23,13 +23,16 @@ export const useArrivalDetection = (target: Target, onArrival: (target: NonNulla
     }
     arrivedId.current = null
     let watchId: number | null = null
+    let retryTimer: number | null = null
 
     const stop = () => {
       if (watchId !== null) navigator.geolocation.clearWatch(watchId)
       watchId = null
+      if (retryTimer !== null) window.clearTimeout(retryTimer)
+      retryTimer = null
     }
     const start = () => {
-      if (document.visibilityState !== 'visible' || watchId !== null) return
+      if (document.visibilityState !== 'visible' || watchId !== null || retryTimer !== null) return
       setStatus('requesting')
       watchId = navigator.geolocation.watchPosition((position) => {
         setAccuracyMeters(position.coords.accuracy)
@@ -45,7 +48,21 @@ export const useArrivalDetection = (target: Target, onArrival: (target: NonNulla
         }
       }, (error) => {
         stop()
-        setStatus(error.code === error.PERMISSION_DENIED ? 'denied' : 'unavailable')
+        if (error.code === error.PERMISSION_DENIED) {
+          setStatus('denied')
+          return
+        }
+
+        // iOS may briefly report POSITION_UNAVAILABLE / "location unknown"
+        // while Core Location acquires a fresh fix. Keep trying while this
+        // visible tour remains open instead of treating it as a hard failure.
+        setStatus('unavailable')
+        if (document.visibilityState === 'visible') {
+          retryTimer = window.setTimeout(() => {
+            retryTimer = null
+            start()
+          }, 4_000)
+        }
       }, { enableHighAccuracy: true, maximumAge: 10_000, timeout: 15_000 })
     }
     const onVisibilityChange = () => {

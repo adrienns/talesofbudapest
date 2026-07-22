@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { DEFAULT_TOUR_STYLE_ID, isTourStyleId } from '@/constants/tourStyles'
-import { assertOpenRouterConfigured } from '@/lib/server/audioEnv'
+import { assertGeminiTtsConfigured } from '@/lib/server/audioEnv'
 import { loadBackendEnv } from '@/lib/server/loadBackendEnv'
 import { getSupabaseAdmin } from '@/lib/server/supabaseAdmin'
 import { DEFAULT_LOCALE, isAppLocale } from '@/types/locale'
@@ -23,7 +23,7 @@ type RouteContext = {
 export const POST = async (request: Request, context: RouteContext) => {
   try {
     loadBackendEnv()
-    assertOpenRouterConfigured()
+    assertGeminiTtsConfigured()
 
     const { id } = await context.params
     const body = await readJsonBody(request, 8_192, true)
@@ -90,14 +90,11 @@ export const POST = async (request: Request, context: RouteContext) => {
     const message = error instanceof Error ? error.message : 'Failed to generate landmark audio'
     console.error('[landmark-audio]', message)
     const isConfigError =
-      message.includes('OPENROUTER_API_KEY') ||
+      message.includes('GEMINI_API_KEY') ||
       message.includes('Unauthorized') ||
       message.includes('service role') ||
       message.includes('User not found')
     const status = isConfigError ? 503 : 500
-    const clientMessage = message.includes('User not found')
-      ? 'OPENROUTER_API_KEY is invalid or expired. Update it in talesofbudapest-backend/.env (get a key at https://openrouter.ai/keys).'
-      : message
-    return NextResponse.json({ error: clientMessage }, { status })
+    return NextResponse.json({ error: message }, { status })
   }
 }

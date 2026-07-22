@@ -79,20 +79,34 @@ export const usePlaybackAudio = (
   const { isPlaying, currentTime, duration, playbackRate, hasAudio, togglePlayPause, seek, play, setPlaybackRate } =
     useAudioPlayer(activeUrl, { initialTime: initialPlaybackPosition, onEnded: onPlaybackEnded })
 
+  const handlePlay = useCallback(async () => {
+    setGenerateError(null)
+    try {
+      await play()
+    } catch {
+      setGenerateError(t('failedToPlayAudio'))
+    }
+  }, [play, t])
+
   useEffect(() => {
     if (!activeUrl || !shouldAutoPlayRef.current) {
       return
     }
 
     shouldAutoPlayRef.current = false
-    void play()
-  }, [activeUrl, play])
+    void handlePlay()
+  }, [activeUrl, handlePlay])
 
   const canRequestAudio = enableOnDemand && Boolean(landmarkId) && !activeUrl
 
   const handlePlayPause = useCallback(async () => {
     if (activeUrl) {
-      await togglePlayPause()
+      setGenerateError(null)
+      try {
+        await togglePlayPause()
+      } catch {
+        setGenerateError(t('failedToPlayAudio'))
+      }
       return
     }
 
@@ -141,7 +155,7 @@ export const usePlaybackAudio = (
     audioUrl: activeUrl,
     historyDepth,
     togglePlayPause: handlePlayPause,
-    play,
+    play: handlePlay,
     seek,
     setPlaybackRate,
   }
