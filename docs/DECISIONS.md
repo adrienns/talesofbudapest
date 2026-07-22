@@ -5,6 +5,117 @@ Dated record of prompt, model, and pipeline-behavior changes, per
 change one, bump the version comment and note it in `docs/DECISIONS.md` —
 extraction quality regressions must be traceable to prompt changes."
 
+## 2026-07-22 — Precision gold + cheap SOTA stance
+
+**Problem.** Medium/low speaker fallbacks included sticky citation FPs
+(Cartledge/Demszky/Vilmos gloss). Literary SOTA (Llama-3 quote attribution,
+BookNLP+) is strong on novels but poorly matched to non-fiction citation prose;
+full LLM attribution passes are expensive.
+
+**Decision.** Tiny human gold (`fixtures/restricted-speaker-precision-gold.json`)
+over all medium/low rows: accept verified Székely speech; reject intervening
+citation/storytelling FPs with named reasons. Apply in annotate ($0). Tighten
+prose-adjacent: no paragraph break between frame and quote. Defer BookNLP /
+paid LLM attribution until gold shows residual recall need.
+
+## 2026-07-22 — Quote-zone gate (direct_speech / prose / unknown)
+
+**Problem.** Nearest speech-frame + page-name expansion stuck across whole
+pages, attributing speakers to later narrator prose (p89 Székely FPs).
+
+**Decision.** After `quote_page` match, classify `evidence.quote_zone` from
+`pages.txt` quote-delimiter runs (`lib/quoteZone.js`). Gate speakers only:
+`direct_speech` → attribute; `prose` → `none`/`non_dialogue_zone` unless an
+immediate speech frame ends within 200 chars before the quote
+(`speech_frame_prose_adjacent`, medium confidence, needs_review); `unknown` →
+`none`/`quote_zone_unknown`. Artifact version `quote-speaker-v2` requires
+`quote_zone` + `quote_zone_reason`. Extraction unchanged; quote_page path
+unchanged.
+
+## 2026-07-22 — Speaker confidence tiers (precision audit)
+
+**Problem.** Zero `quote_page_unmatched` ≠ correct speakers. Global roster and
+page-name expansion can false-positive.
+
+**Decision.** Persist `evidence.speaker.confidence` (`high`|`medium`|`low`) and
+`needs_review`. Page-local `speech_frame`+`speech_frame_person` = high; global
+roster = medium; page-name expansion = low. Integrity requires confidence on
+resolved rows. `npm run report:restricted:speaker-precision` emits a review
+queue (left context + quote) for medium/low — do not auto-promote low→high.
+
+## 2026-07-22 — Restricted p4 one-page windows + quote alignment gate
+
+**Problem.** 3-page windows invited cross-page / paraphrased evidence quotes;
+post-hoc `exact_unique_cross_page` is legacy compatibility only.
+
+**Decision.** `restricted-book-entities-p4` extract uses
+`RESTRICTED_EXTRACTION_PAGES_PER_WINDOW = 1`. After model JSON, drop any
+evidence item whose quote fails fold-exact alignment on the supplied page or
+falls outside 80–200 chars (`lib/restrictedEvidenceQuotes.js`). Re-extract
+Hajdu content pages into a fresh p4 JSONL (do not append into the p3 3-page
+artifact). Annotator keeps cross-page exact for leftover legacy rows only.
+Speaker post-pass: if page-local people miss a speech-frame surface
+(`frame_person_unmatched`), retry against a deduped corpus-wide people roster
+and accept only a unique hit (`resolution_source: speech_frame_global`).
+If still unmatched, expand a surname-only frame from a unique fuller name in
+left page context (`speech_frame_page_name` / `speech_frame_page`) — recovers
+cases like `As Székely explained` + earlier `Professor Gábor Székely` when the
+extractor omitted the person row.
+
+## 2026-07-22 — Cross-page exact quote_page + extract quote floor
+
+**Problem.** ~57/63 `quote_page_unmatched` confessions were exact contiguous
+substrings of the ordered `pdf_pages` concat (true cross-page evidence), not
+single-page hits. Soft-prefix / alnum-strip folds were rejected (false signal /
+ambiguity regression).
+
+**Decision.** After single-page `exact_unique` fails, attribute when the whole
+folded quote appears exactly once in reading-order window concat; persist
+`quote_page` = match start page and `quote_page_reason: exact_unique_cross_page`.
+Fail closed on 0 or >1 concat hits. Still no soft-prefix / fuzzy / nearest-page
+/ V3 merge. Extract prompt bumped to `restricted-book-entities-p4`: evidence
+quotes must be 80–200 chars from **one** page (no page-span); annotator keeps
+cross-page exact for legacy corpus.
+
+## 2026-07-22 — Restricted quote-speaker attribution (fail-closed)
+
+**Problem.** Evidence quotes often start mid-speech; the speaker lives in left
+context (`As Székely explained:`). Presentation-only pronoun linking missed
+first-person `I`/`my` and drifted across surfaces.
+
+**Decision.** Shared deterministic module
+`lib/quoteSpeakerAttribution.js` + offline post-pass
+`npm run annotate:restricted:speakers` writing
+`payload.*.evidence.speaker` (`status`/`reason`/`resolution_source`/
+`surface`/`name_en`/…) beside immutable quotes. Persist `none` too.
+Map/browser consume persisted speaker first; live resolve is legacy fallback.
+Quote→page match is fail-closed (`quote_page_unmatched` — no first-window-page
+guess). Do **not** merge into V3 `explicitSpeakerForClause` as equal truth
+tonight (weaker verb/heuristic); shared detector stays authoritative.
+
+**Artifacts.** `*.entities.content.speakers.jsonl`, map GeoJSON
+`speaker_*` fields, facts browser speaker badges. Map/browser default
+input resolves to the speakers artifact via
+`lib/restrictedSpeakerInput.js` (`content_speakers` provenance).
+Annotated evidence also persists unique exact `quote_page` /
+`quote_page_reason` (no soft-prefix rematch in consumers).
+Map/browser **hard-require** the speakers artifact by default;
+legacy JSONL only via explicit `--input`. Default loads also run
+`assertSpeakersArtifactIntegrity` (`quote-speaker-v1` + speaker/quote_page
+Morning handoff (Sol): harden already includes `quote_page_outside_window`
+gate; keep reviewing the ~65 non-`exact_unique` confessions only; do not
+reintroduce soft-prefix attribution; do not merge V3 speaker heuristics.
+
+## 2026-07-21 — Local Budapest gazetteer vs live geocode APIs
+
+**Documented operator clarification (no schema change).** Day-to-day book
+address matching and the provisional map use **local** files under
+`ingest/gazetteer/` (OSM-derived, ODbL — attribute on display). Live
+**Overpass** runs only when refreshing those files
+(`build:places-gazetteer`). Live **Nominatim** (`geocode:kg`) is a separate
+staged-KG path and does **not** power provisional map pins. See
+`ingest/gazetteer/README.md` and `docs/PROVISIONAL_KG_LOAD_AND_MAP.md`.
+
 ## 2026-07-21 — Hungarian OCR place-name repair via gazetteer unique-hit
 
 **Policy bend of 2026-07-17 OCR rule.** Free edit-distance / confusion-table

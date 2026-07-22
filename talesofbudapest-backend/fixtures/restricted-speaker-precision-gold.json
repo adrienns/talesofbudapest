@@ -1,0 +1,278 @@
+{
+  "source": "budapest-joe-hajdu",
+  "version": "speaker-precision-gold-v1",
+  "adjudicated_at": "2026-07-22",
+  "method": "human page-context review of all medium/low resolved speakers",
+  "notes": [
+    "SOTA literary quote attribution (Llama-3 / BookNLP+) is domain-mismatched for non-fiction citation prose; keep fail-closed sieves + tiny gold.",
+    "Accept only verified utterance speakers; reject sticky citation/storytelling gloss FPs."
+  ],
+  "decisions": [
+    {
+      "id": "szekely-synagogue-1",
+      "quote_page": 89,
+      "quote_prefix": "I look at the Great Synagogue, much as most other people of my ilk do",
+      "speaker_name_en": "Gábor Székely",
+      "verdict": "accept",
+      "confidence": "high",
+      "reason": "inside As Székely explained direct-speech block"
+    },
+    {
+      "id": "szekely-position-1",
+      "quote_page": 89,
+      "quote_prefix": "‘My position is that I accept my Jewishness when Jews are attacked",
+      "speaker_name_en": "Gábor Székely",
+      "verdict": "accept",
+      "confidence": "high",
+      "reason": "opening line of Székely direct-speech block"
+    },
+    {
+      "id": "szekely-synagogue-2",
+      "quote_page": 89,
+      "quote_prefix": "I look at the Great Synagogue, much as most other people of my ilk do",
+      "speaker_name_en": "Gábor Székely",
+      "kind_hint": "facts",
+      "verdict": "accept",
+      "confidence": "high",
+      "reason": "same Székely direct-speech block (fact row)"
+    },
+    {
+      "id": "cartledge-trianon",
+      "quote_page": 62,
+      "quote_prefix": "As far as France and Britain was concerned, Hungary was a defeated enemy",
+      "speaker_name_en": "Bryan Cartledge",
+      "verdict": "reject",
+      "reject_reason": "intervening_narration_after_citation",
+      "detail": "Cartledge citation covers prior death-toll claim; Trianon prose is narrator after a paragraph break"
+    },
+    {
+      "id": "vilmos-pity-1",
+      "quote_page": 67,
+      "quote_prefix": "He took pity on them and arranged for at least Vilmos to be taken to see his father.",
+      "speaker_name_en": "Vilmos Vázsonyi",
+      "verdict": "reject",
+      "reject_reason": "storytelling_gloss_third_person_subject",
+      "detail": "as Vilmos told it is a gloss; He is the prison official, not Vilmos speaking"
+    },
+    {
+      "id": "vilmos-pity-2",
+      "quote_page": 67,
+      "quote_prefix": "He took pity on them and arranged for at least Vilmos to be taken to see his father. This short reunion",
+      "speaker_name_en": "Vilmos Vázsonyi",
+      "verdict": "reject",
+      "reject_reason": "storytelling_gloss_third_person_subject",
+      "detail": "same anecdote continuation"
+    },
+    {
+      "id": "demszky-act-1",
+      "quote_page": 199,
+      "quote_prefix": "The Local Government Act, enacted in August 1990, contained the genesis of the problem",
+      "speaker_name_en": "Demszky",
+      "verdict": "reject",
+      "reject_reason": "narrator_continuation_after_speech",
+      "detail": "follows closed Demszky quotes + he commented; sentence is narrator paraphrase"
+    },
+    {
+      "id": "demszky-act-2",
+      "quote_page": 199,
+      "quote_prefix": "The Local Government Act, enacted in August 1990, contained the genesis of the problem",
+      "speaker_name_en": "Demszky",
+      "verdict": "reject",
+      "reject_reason": "narrator_continuation_after_speech",
+      "detail": "duplicate event/fact row"
+    },
+    {
+      "id": "demszky-act-3",
+      "quote_page": 199,
+      "quote_prefix": "The Local Government Act, enacted in August 1990, contained the genesis of the problem",
+      "speaker_name_en": "Demszky",
+      "verdict": "reject",
+      "reject_reason": "narrator_continuation_after_speech",
+      "detail": "duplicate relation/fact row"
+    },
+    {
+      "id": "granasztoi-reject-reverted",
+      "quote_page": 209,
+      "quote_prefix": "‘They reverted to the old Hungarian nationalism, and that is causing some problems with their neighbours",
+      "speaker_name_en": "György Granasztói",
+      "verdict": "reject",
+      "force_none": true,
+      "reject_reason": "pre_attribution_quote_not_granasztoi",
+      "detail": "page-start Magris continuation; precedes Granasztói explained … following way:; do not inherit later frame"
+    },
+    {
+      "id": "magris-accept-reverted",
+      "quote_page": 209,
+      "quote_prefix": "‘They reverted to the old Hungarian nationalism, and that is causing some problems with their neighbours",
+      "speaker_name_en": "Claudio Magris",
+      "verdict": "accept",
+      "force_resolve": true,
+      "confidence": "high",
+      "reason": "precision_gold_accept",
+      "surface": "Claudio Magris",
+      "role_en": "writer",
+      "detail": "p208 ‘As the writer Claudio Magris succinctly put it:’ then page break; quote opens p209 — gold-only, no generic cross-page frame"
+    },
+    {
+      "id": "granasztoi-accept-homo-sovieticus",
+      "quote_page": 209,
+      "quote_prefix": "‘After their definite rejection of the ideal of homo sovieticus, the Hungarian people seek to redefine",
+      "speaker_name_en": "György Granasztói",
+      "verdict": "accept",
+      "force_resolve": true,
+      "confidence": "high",
+      "reason": "precision_gold_accept",
+      "surface": "Granasztói",
+      "role_en": null,
+      "detail": "Granasztói explained … in the following way: then quote; surname ambiguous vs Pál Granasztoi so gold force-resolves"
+    },
+    {
+      "id": "orban-accept-straddle-said",
+      "quote_page": 209,
+      "quote_prefix": "‘It was the former Communists who, after 1990, handed over Hungary and the Hungarian people to the speculators",
+      "speaker_name_en": "Viktor Orbán",
+      "verdict": "accept",
+      "force_resolve": true,
+      "confidence": "high",
+      "reason": "precision_gold_accept",
+      "surface": "Orbán",
+      "role_en": "Prime Minister of Hungary",
+      "detail": "evidence quote straddles closing quote + ‘Orbán said’; zone stays unknown; gold-only speaker (no zone heuristic change)"
+    },
+    {
+      "id": "antalffy-accept-dentists",
+      "quote_page": 227,
+      "quote_prefix": "We just sounded out a few dentists here in Budapest to see if they would be interested.",
+      "speaker_name_en": "Tamás Antalffy",
+      "verdict": "accept",
+      "force_resolve": true,
+      "confidence": "high",
+      "reason": "precision_gold_accept",
+      "surface": "Tamás",
+      "role_en": "dental tourism entrepreneur",
+      "detail": "page introduces Tamás Antalffy; Tamás explained the modest beginnings…; global roster wrongly mapped Tamás→Egedy"
+    },
+    {
+      "id": "antalffy-accept-website",
+      "quote_page": 227,
+      "quote_prefix": "We then set up a website that people in England looking for cheaper dental treatment could access.",
+      "speaker_name_en": "Tamás Antalffy",
+      "verdict": "accept",
+      "force_resolve": true,
+      "confidence": "high",
+      "reason": "precision_gold_accept",
+      "surface": "Tamás",
+      "role_en": "dental tourism entrepreneur",
+      "detail": "same speech block after Tamás explained…"
+    },
+    {
+      "id": "antalffy-accept-facilitators",
+      "quote_page": 227,
+      "quote_prefix": "At this stage, we were not much more than facilitators working for a fee, bringing chosen dentists",
+      "speaker_name_en": "Tamás Antalffy",
+      "verdict": "accept",
+      "force_resolve": true,
+      "confidence": "high",
+      "reason": "precision_gold_accept",
+      "surface": "Tamás",
+      "role_en": "dental tourism entrepreneur",
+      "detail": "same speech block after Tamás explained…"
+    },
+    {
+      "id": "antalffy-accept-diagnosis",
+      "quote_page": 227,
+      "quote_prefix": "Our dentist would do the diagnosis, give a quote, and after two or three days return to Budapest",
+      "speaker_name_en": "Tamás Antalffy",
+      "verdict": "accept",
+      "force_resolve": true,
+      "confidence": "high",
+      "reason": "precision_gold_accept",
+      "surface": "Tamás",
+      "role_en": "dental tourism entrepreneur",
+      "detail": "continuation after Tamás then continued to describe…; still Antalffy not Egedy"
+    },
+    {
+      "id": "egedy-reject-dental-homonym",
+      "quote_page": 227,
+      "quote_prefix": "We just sounded out a few dentists here in Budapest to see if they would be interested.",
+      "speaker_name_en": "Tamás Egedy",
+      "verdict": "reject",
+      "reject_reason": "wrong_person_first_name_homonym",
+      "detail": "Tamás on p227 is Antalffy (dental tourism); Egedy is urban geographer introduced on p216"
+    },
+    {
+      "id": "szita-accept-secular-majority",
+      "quote_page": 88,
+      "quote_prefix": "The majority are secular, with no interest in religion, or at best some spasmodic observance of its rituals.",
+      "speaker_name_en": "Szabolcs Szita",
+      "verdict": "accept",
+      "force_resolve": true,
+      "confidence": "high",
+      "reason": "precision_gold_accept",
+      "surface": "Szita",
+      "role_en": "historian",
+      "detail": "according to Szita / Professor Szita on p88; global roster ambiguous vs bare Szita person row"
+    },
+    {
+      "id": "arato-accept-secret-policeman",
+      "quote_page": 108,
+      "quote_prefix": "There were occasions when father was away with his work brigade, and a drunken secret policeman would bang on the door",
+      "speaker_name_en": "Antal (Tony) Arató",
+      "verdict": "accept",
+      "force_resolve": true,
+      "confidence": "high",
+      "reason": "precision_gold_accept",
+      "surface": "Tony",
+      "role_en": "deportee and memoirist",
+      "detail": "Tony remembered… on p108; book names Antal (Tony) Arató; global roster ambiguous on Tony"
+    },
+    {
+      "id": "pope-reject-garton-ash-hybrid",
+      "quote_page": 279,
+      "quote_prefix": "‘Hungary now has a hybrid regime, neither a democracy nor a dictatorship.’",
+      "speaker_name_en": "Pope",
+      "verdict": "reject",
+      "reject_reason": "earlier_frame_not_nearest_speaker",
+      "detail": "Timothy Garton Ash, has said: owns this quote; earlier Pope said that: must not stick"
+    },
+    {
+      "id": "garton-ash-accept-hybrid",
+      "quote_page": 279,
+      "quote_prefix": "‘Hungary now has a hybrid regime, neither a democracy nor a dictatorship.’",
+      "speaker_name_en": "Timothy Garton Ash",
+      "verdict": "accept",
+      "force_resolve": true,
+      "confidence": "high",
+      "reason": "precision_gold_accept",
+      "surface": "Timothy Garton Ash",
+      "role_en": "historian",
+      "detail": "The English historian, Timothy Garton Ash, has said: then quote"
+    },
+    {
+      "id": "szita-accept-antisemitism-formulation",
+      "quote_page": 91,
+      "quote_prefix": "‘For some people here, antisemitism is a political activity and has little to do with what Jews do",
+      "speaker_name_en": "Szabolcs Szita",
+      "verdict": "accept",
+      "force_resolve": true,
+      "confidence": "high",
+      "reason": "precision_gold_accept",
+      "surface": "Szita",
+      "role_en": "historian",
+      "detail": "Professor Szita gave one succinct formulation of its presence:"
+    },
+    {
+      "id": "ady-accept-jews-made-budapest",
+      "quote_page": 74,
+      "quote_prefix": "‘The Jews have made the Budapest of today, no doubt about that.’",
+      "speaker_name_en": "Endre Ady",
+      "verdict": "accept",
+      "force_resolve": true,
+      "confidence": "high",
+      "reason": "precision_gold_accept",
+      "surface": "Endre Ady",
+      "role_en": "poet",
+      "detail": "Endre Ady, commented at the time:; was medium speech_frame_global — gold raises to high"
+    }
+  ]
+}

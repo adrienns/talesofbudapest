@@ -32,10 +32,19 @@ All npm commands from the monorepo root and workspaces.
 | `npm run gold:seed-test` | backend | Freeze test split gold (pages 97/140/160/180) |
 | `npm run gold:seed-probe` | backend | Freeze probe split gold (pages 55/65/95/115) |
 | `npm run build:historical:v3-browser` | backend | Build the self-contained V3 facts browser HTML |
-| `npm run build:gazetteer` | backend | Build the Budapest street gazetteer from OpenStreetMap Overpass (ODbL) |
-| `npm run build:places-gazetteer` | backend | Streets + landmarks + address points + places index for OCR unique-hit repair |
-| `npm run measure:hungarian-ocr` | backend | Phase-0 HU OCR place-name damage report (dohdny-class) |
-| `npm run export:historical:map` | backend | Export extracted address facts to GeoJSON for the app map |
+| `npm run build:restricted:browser` | backend | Restricted entities HTML browser (requires `*.entities.content.speakers.jsonl` unless `--input`) |
+| `npm run annotate:restricted:speakers` | backend | Offline fail-closed quote-speaker post-pass → `*.entities.content.speakers.jsonl` |
+| `npm run report:restricted:speakers` | backend | Confession stats for speaker + quote_page attribution |
+| `npm run report:restricted:speaker-precision` | backend | Confidence tiers + review queue for roster/page-name speaker fallbacks |
+| `npm run report:restricted:muzny-candidates` | backend | $0 diagnostic: Muzny trigram speaker candidates on direct_speech/no_frame quotes (CSV only) |
+| `npm run test:restricted:speakers` | backend | Unit + artifact regression tests for quote-speaker attribution |
+| `npm run export:restricted:map` | backend | Restricted locations GeoJSON map (requires speakers artifact unless `--input`) |
+| `npm run build:gazetteer` | backend | Refresh local Budapest street gazetteer via OSM Overpass (ODbL); day-to-day matching is offline |
+| `npm run build:places-gazetteer` | backend | Refresh streets + landmarks + address points + OCR places index (live Overpass) |
+| `npm run measure:hungarian-ocr` | backend | HU OCR place-damage report; promotes unique-hit confusions into config |
+| `npm run export:historical:map` | backend | Address facts → GeoJSON with book mention quotes (local gazetteer coords) |
+| `npm run export:kg:locations:map` | backend | KG location entities → GeoJSON (gazetteer join) |
+| `npm run load:kg:plan` | backend | Load kg-load-plan JSON into private staging/canonical KG tables |
 | `npm run hungaricana:lookup` | backend | Print Hungaricana search URLs for human verification and record confirmed facts |
 | `npm run scrape:budapest100` | ingest | Scrape budapest100.hu → JSON |
 | `npm run ingest:wikipedia` | ingest | Fetch Wikidata landmarks → JSON |
@@ -61,11 +70,11 @@ All npm commands from the monorepo root and workspaces.
 | `npm run extract:mek` | `cli/extract-mek.js` | Extract entities from the public-domain MEK 1939 Budapest lexicon (volume 1) into JSONL |
 | `npm run extract:mek:deep` | `cli/extract-mek-deep.js` | Deep-extraction pass over paginated MEK text into claim-level JSONL for the canonical KG |
 | `npm run load:mek:kg` | `cli/load-mek-kg-supabase.js` | Load MEK deep-extraction JSONL into the private staging knowledge graph |
-| `npm run extract:restricted:deep` | `cli/extract-restricted-book.js` | Extract a restricted book (`--source`, required bounded `--limit` unless explicitly full-book); `--preflight-only` prints the live-price worst-case cost and the default $1 hard ceiling prevents accidental spend |
+| `npm run extract:restricted:deep` | `cli/extract-restricted-book.js` | Extract a restricted book (`--source`, required bounded `--limit` unless explicitly full-book). p4 uses **1 page/window**, 80–200 char fold-aligned quotes, `--output` / `--to-page` / `--failure-output`. `--preflight-only` prints live-price worst-case cost; default `$1` hard ceiling prevents accidental spend |
 | `npm run load:restricted:kg` | `cli/load-restricted-kg.js` | Load restricted-book extraction JSONL into private KG staging; accepts p1, p2, and p3 records, resolves by payload shape (not model name or prompt version) |
 | `npm run load:kg:plan` | `cli/load-kg-load-plan.js` | Load a V3 `*.kg-load-plan*.json` into private staging + draft/private canonical KG (never publishes; provisional plans stay draft). `--commit` required to write |
 | `npm run embed:kg` | `cli/embed-kg.js` | Generate/cache embeddings for canonical entities, staged locations, or claims (`--target canonical\|staging\|claims\|all`, `--seed-public-locations`, `--commit`) |
-| `npm run export:historical:map` | `cli/export-address-geojson.js` | Address mentions → GeoJSON (`--include-experiment` mirrors transform-v3-to-kg) |
+| `npm run export:historical:map` | `cli/export-address-geojson.js` | Address mentions → GeoJSON with full `mention_samples` book quotes; `--include-experiment`; coords from **local** gazetteer (ODbL attribution in file) |
 | `npm run export:kg:locations:map` | `cli/export-kg-locations-geojson.js` | Location entities from a kg-load-plan → GeoJSON (gazetteer/address join; ODbL attribution) |
 | `npm run resolve:kg` | `cli/resolve-kg-locations.js` | Preview/commit auto-linking staged locations to mapped landmarks (`--source-id`, `--geocoded <path>`, `--commit`) |
 | `npm run resolve:kg-relations` | `cli/resolve-kg-relations.js` | Preview/commit exact normalized relation-endpoint links to staged locations, people, organisations, and events (`--source-id`, `--report`, `--commit`) |

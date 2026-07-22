@@ -10,8 +10,12 @@ import {
   RESTRICTED_EXTRACTION_MAX_ITEMS_PER_ARRAY as MAX_ITEMS_PER_ARRAY,
   RESTRICTED_EXTRACTION_MAX_OUTPUT_TOKENS as MAX_OUTPUT_TOKENS,
   RESTRICTED_EXTRACTION_MODEL_LADDER as MODEL_LADDER,
+  RESTRICTED_EXTRACTION_PAGES_PER_WINDOW as PAGES_PER_WINDOW,
   RESTRICTED_EXTRACTION_PROMPT_VERSION as PROMPT_VERSION,
+  RESTRICTED_EXTRACTION_QUOTE_MAX_CHARS as QUOTE_MAX_CHARS,
+  RESTRICTED_EXTRACTION_QUOTE_MIN_CHARS as QUOTE_MIN_CHARS,
 } from '../lib/restrictedExtractionConfig.js';
+import { filterPayloadEvidenceQuotes } from '../lib/restrictedEvidenceQuotes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '../.env') });
@@ -24,8 +28,8 @@ const option = (name) => {
 
 const SOURCE_ID = option('--source') ?? 'jewish-budapest';
 const INPUT = path.join(__dirname, `../../ingest/corpus/restricted/text/${SOURCE_ID}.pages.txt`);
-const OUTPUT = path.join(__dirname, `../../ingest/corpus/restricted/extractions/${SOURCE_ID}.entities.jsonl`);
-const FAILURE_OUTPUT = path.join(__dirname, `../../ingest/corpus/restricted/extractions/${SOURCE_ID}.failures.jsonl`);
+const OUTPUT = path.resolve(option('--output') ?? path.join(__dirname, `../../ingest/corpus/restricted/extractions/${SOURCE_ID}.entities.jsonl`));
+const FAILURE_OUTPUT = path.resolve(option('--failure-output') ?? path.join(__dirname, `../../ingest/corpus/restricted/extractions/${SOURCE_ID}.failures.jsonl`));
 const MODEL_OVERRIDE = process.env.KG_RESTRICTED_EXTRACT_MODEL ?? null;
 // Cheapest-model-that-passes-the-gate ladder (docs/EXTRACTION_PIPELINE.md §2, T3): try a free,
 // JSON-strong model first, then the cheapest verified paid model, escalating further only as
@@ -51,7 +55,7 @@ HARD RULES — violating any of these makes the output worthless:
 1. Extract only what the supplied pages explicitly state. Do not add outside knowledge or "complete" partial information.
 2. Empty arrays are a correct and common answer — a page with no extractable stories returns empty arrays.
 3. Keep each array to at most ${MAX_ITEMS_PER_ARRAY} items, prioritising the highest-value ones. This keeps the JSON short enough to always finish — a truncated response is a total loss.
-4. Every item needs an "evidence" object holding a single "quote": one short supporting sentence (<=200 characters) copied verbatim from the text in its original language. Trim to the most relevant clause; do not translate the quote.
+4. Every item needs an "evidence" object holding a single "quote": one short supporting sentence (${QUOTE_MIN_CHARS}–${QUOTE_MAX_CHARS} characters) copied verbatim from the single supplied page as a contiguous substring in its original language. Do not span page breaks. Prefer a complete sentence; trim only trailing clause noise. Do not translate the quote.
 5. Never sharpen vague dates. If the text says "around 1900" or gives a range, record it exactly as such in when/year_approx — never invent an exact date.
 6. People: source_name is the name exactly as written in the text. If only a surname appears, still record it but set partial_name: true — never invent or complete a full name from a surname alone. name_en is the natural English gloss of the name where one exists, otherwise repeat source_name.
 7. Locations/addresses: source_name and address_source are the name/address AS WRITTEN in the text (historical street names count — never modernize them). name_en and address_en are the English gloss/translation; note a modern name only if the text itself states it.
@@ -65,11 +69,16 @@ const pagesFromText = (text) => Array.from(text.matchAll(/--- PDF PAGE (\d+) ---
   .map((match) => ({ page: Number(match[1]), text: match[2].trim() }))
   .filter((page) => page.text);
 
-const windowsFromPages = (pages) => {
+const windowsFromPages = (pages, pagesPerWindow = PAGES_PER_WINDOW) => {
+  const size = Math.max(1, Number(pagesPerWindow) || 1);
   const windows = [];
-  for (let index = 0; index < pages.length; index += 3) {
-    const group = pages.slice(index, index + 3);
-    windows.push({ pages: group.map((page) => page.page), text: group.map((page) => `--- PDF PAGE ${page.page} ---\n${page.text}`).join('\n\n') });
+  for (let index = 0; index < pages.length; index += size) {
+    const group = pages.slice(index, index + size);
+    windows.push({
+      pages: group.map((page) => page.page),
+      text: group.map((page) => `--- PDF PAGE ${page.page} ---\n${page.text}`).join('\n\n'),
+      pageText: group.map((page) => page.text).join('\n\n'),
+    });
   }
   return windows;
 };
@@ -107,8 +116,16 @@ const extract = async (window) => {
         // never do that: one rung means one billable HTTP request, then escalation.
         fallback_without_response_format: false,
       });
-      const payload = JSON.parse(completion.choices?.[0]?.message?.content);
-      if (valid(payload)) return { payload, model: completion.model ?? rungModel, usage: completion.usage ?? null, attempts: rung + 1 };
+      const rawPayload = JSON.parse(completion.choices?.[0]?.message?.content);
+      if (!valid(rawPayload)) continue;
+      const { payload, dropped } = filterPayloadEvidenceQuotes(rawPayload, window.pageText ?? window.text);
+      return {
+        payload,
+        model: completion.model ?? rungModel,
+        usage: completion.usage ?? null,
+        attempts: rung + 1,
+        quote_gate: { dropped: dropped.length, reasons: dropped },
+      };
     } catch {
       // Invalid payloads / thrown API errors are never staged; move to the next rung (if any) with
       // no retry of this rung — a truncated/invalid response wastes no further tokens on itself.
@@ -120,20 +137,25 @@ const extract = async (window) => {
 const main = async () => {
   const limitRaw = option('--limit');
   const fromPageRaw = option('--from-page');
+  const toPageRaw = option('--to-page');
   const confirmFullBook = args.includes('--confirm-full-book');
   const preflightOnly = args.includes('--preflight-only');
   const limit = validateExtractionLimit({ limitRaw, confirmFullBook });
   const fromPage = Number(fromPageRaw ?? 1);
+  const toPage = toPageRaw == null ? null : Number(toPageRaw);
   const concurrency = Number(option('--concurrency') ?? 4);
   const maxCostUsd = Number(option('--max-cost-usd') ?? process.env.KG_EXTRACTION_MAX_COST_USD ?? DEFAULT_MAX_COST_USD);
   if (!Number.isInteger(fromPage) || fromPage < 1 || !Number.isInteger(concurrency) || concurrency < 1 || concurrency > 8 || !Number.isFinite(maxCostUsd) || maxCostUsd <= 0) throw new Error('Invalid --from-page, --concurrency, or --max-cost-usd');
+  if (toPage != null && (!Number.isInteger(toPage) || toPage < fromPage)) throw new Error('Invalid --to-page');
   // Incident: a real run of `--from-page 1` with no `--limit` re-extracted ~600 pages and cost
   // $8-10 instead of ~$1-2. `--from-page` only narrows the starting point; `limit === 0` (i.e.
   // `--limit` omitted) is what actually removes the cap — see `selected` below. So the guard must
   // trip whenever `--limit` itself is missing, regardless of whether `--from-page` was also given
   // (a from-page-only invocation is exactly the shape that caused the incident, not just a fully
   // bare one). `--confirm-full-book` remains the explicit, intentional opt-out.
-  const windows = windowsFromPages(pagesFromText(await fs.readFile(INPUT, 'utf8')).filter((page) => page.page >= fromPage));
+  const pages = pagesFromText(await fs.readFile(INPUT, 'utf8'))
+    .filter((page) => page.page >= fromPage && (toPage == null || page.page <= toPage));
+  const windows = windowsFromPages(pages, PAGES_PER_WINDOW);
   const selected = limit === 0 ? windows : windows.slice(0, limit);
   const done = await existingIds();
   const pending = selected.filter((window) => !done.has(crypto.createHash('sha256').update(window.text).digest('hex')));
@@ -142,7 +164,8 @@ const main = async () => {
   const pricing = pricingForModels(ladder, await fetchOpenRouterCatalog());
   const ceiling = estimateExtractionCeiling({ requests, modelPricing: pricing, maxOutputTokens: MAX_OUTPUT_TOKENS });
   const modelDescription = MODEL_OVERRIDE ? MODEL_OVERRIDE : `ladder [${MODEL_LADDER.join(' -> ')}]`;
-  console.log(`Restricted extraction: source=${SOURCE_ID}; ${selected.length} windows using ${modelDescription}; concurrency=${concurrency}.`);
+  console.log(`Restricted extraction: source=${SOURCE_ID}; prompt=${PROMPT_VERSION}; pages_per_window=${PAGES_PER_WINDOW}; ${selected.length} windows using ${modelDescription}; concurrency=${concurrency}.`);
+  console.log(`output=${OUTPUT}`);
   console.log(`Pending windows: ${pending.length}; conservative worst-case OpenRouter cost: ${formatUsd(ceiling.usd)}; hard ceiling: ${formatUsd(maxCostUsd)}.`);
   for (const model of ceiling.byModel) console.log(`  ${model.modelId}: up to ${formatUsd(model.usd)}`);
   if (ceiling.usd > maxCostUsd) {
@@ -156,13 +179,15 @@ const main = async () => {
   await fs.mkdir(path.dirname(OUTPUT), { recursive: true });
   let completed = 0;
   let failures = 0;
+  let quotesDropped = 0;
   const processWindow = async (window) => {
     const windowId = crypto.createHash('sha256').update(window.text).digest('hex');
     try {
       const result = await extract(window);
+      quotesDropped += result.quote_gate?.dropped ?? 0;
       await fs.appendFile(OUTPUT, `${JSON.stringify({ window_id: windowId, source: SOURCE_ID, pdf_pages: window.pages, prompt_version: PROMPT_VERSION, extracted_at: new Date().toISOString(), ...result })}\n`, 'utf8');
       completed += 1;
-      console.log(`pages ${window.pages.join('-')}: places=${result.payload.locations.length} people=${result.payload.people.length} events=${result.payload.events.length} facts=${result.payload.facts.length}`);
+      console.log(`pages ${window.pages.join('-')}: places=${result.payload.locations.length} people=${result.payload.people.length} events=${result.payload.events.length} facts=${result.payload.facts.length} quote_dropped=${result.quote_gate?.dropped ?? 0}`);
     } catch (error) {
       failures += 1;
       await fs.appendFile(FAILURE_OUTPUT, `${JSON.stringify({ pdf_pages: window.pages, error: error instanceof Error ? error.message : String(error), failed_at: new Date().toISOString() })}\n`, 'utf8');
@@ -172,7 +197,7 @@ const main = async () => {
   for (let index = 0; index < pending.length; index += concurrency) {
     await Promise.all(pending.slice(index, index + concurrency).map(processWindow));
   }
-  console.log(`Completed ${completed}; failed ${failures}; skipped ${selected.length - pending.length}.`);
+  console.log(`Completed ${completed}; failed ${failures}; skipped ${selected.length - pending.length}; quotes_dropped=${quotesDropped}.`);
 };
 
 main().catch((error) => { console.error(error instanceof Error ? error.message : String(error)); process.exit(1); });

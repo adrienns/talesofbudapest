@@ -1,0 +1,18 @@
+{
+  "source_id": "budapest-joe-hajdu",
+  "title": "Budapest",
+  "author": "Joe Hajdu",
+  "publisher": "Austin Macauley Publishers Ltd",
+  "published": "2026",
+  "isbn_epub": "9781037105807",
+  "local_path": "restricted/raw/Budapest (Joe Hajdu).epub",
+  "sha256": "b5d230258539e94d59ff1561eece118484191f746a56cc6be570712115bcef6c",
+  "bytes": 8630524,
+  "license": "All rights reserved (Austin Macauley / Joe Hajdu 2026)",
+  "license_verdict": "red",
+  "attribution": "Joe Hajdu, Budapest (Austin Macauley, 2026) — private research copy only",
+  "content_pages": "1-294",
+  "excluded_pages": "295-306",
+  "excluded_reason": "Bibliography (no separate print TOC or end index in this EPUB; nav TOC is not in page text)",
+  "notes": "Full intake 2026-07-22: EPUB pagebreaks → pages 1–306; extract 102 windows (~$1.10). Browser/content views use pages 1–294 (excludes bibliography 295–306). Not publication-ready."
+}
