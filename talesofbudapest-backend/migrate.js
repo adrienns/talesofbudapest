@@ -4,9 +4,12 @@ import path from 'path';
 import pg from 'pg';
 import { fileURLToPath } from 'url';
 
-dotenv.config();
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const envFile = process.env.ENV_FILE
+  ? path.resolve(process.cwd(), process.env.ENV_FILE)
+  : path.join(__dirname, '.env');
+dotenv.config({ path: envFile });
+
 const migrationsDir = path.join(__dirname, '..', 'supabase', 'migrations');
 
 const migrationFiles = [
@@ -20,6 +23,7 @@ const migrationFiles = [
   '007_narrative_writes.sql',
   '008_rag_history.sql',
   '009_location_provenance.sql',
+  '009a_upgrade_legacy_location_ids.sql',
   '010_location_translations.sql',
   '011_location_importance.sql',
   '012_locations_map_index.sql',
@@ -47,30 +51,59 @@ const migrationFiles = [
   '034_location_map_points.sql',
 ];
 
+const normalizeConnectionString = (value) => {
+  const match = value.match(/^(postgres(?:ql)?:\/\/)([^:/]+):(.+)@([^/]+)(\/.*)$/iu);
+  if (match) {
+    const [, scheme, username, password, host, databasePath] = match;
+    let decodedPassword;
+    try {
+      decodedPassword = decodeURIComponent(password);
+    } catch {
+      decodedPassword = password;
+    }
+
+    // Normalise both a raw password and an already percent-encoded password.
+    // This avoids #, @, and similar characters being parsed as URL syntax.
+    return `${scheme}${username}:${encodeURIComponent(decodedPassword)}@${host}${databasePath}`;
+  }
+
+  try {
+    new URL(value);
+    return value;
+  } catch {
+    // Supabase displays a URI template, and it is easy to paste a database
+    // password containing @, #, or similar characters without URL encoding.
+    // Preserve the password while encoding only that URI component.
+    throw new Error('DATABASE_URL is not a valid PostgreSQL connection URI. Copy it again from Supabase Connect.');
+  }
+};
+
 const runMigration = async () => {
-  const connectionString = process.env.DATABASE_URL;
+  const connectionString = process.env.DATABASE_URL ?? process.env.STAGING_DATABASE_URL;
 
   if (!connectionString) {
-    console.error('DATABASE_URL is not set in talesofbudapest-backend/.env');
+    console.error(`DATABASE_URL is not set in ${envFile}`);
     console.error('');
     console.error('How to get it:');
     console.error('  1. Supabase Dashboard → your project → Project Settings → Database');
     console.error('  2. Under "Connection string", choose URI');
-    console.error('  3. Copy the Session pooler string (port 6543) and replace [YOUR-PASSWORD]');
-    console.error('  4. Add to .env: DATABASE_URL=postgresql://postgres....');
+    console.error('  3. Copy the Session pooler string (port 5432) and replace [YOUR-PASSWORD]');
+    console.error('  4. Add DATABASE_URL (or STAGING_DATABASE_URL) to the selected env file');
     console.error('');
     console.error('Then run from repo root: npm run db:migrate');
     process.exit(1);
   }
 
-  const client = new pg.Client({
-    connectionString,
-    ssl: connectionString.includes('localhost') || connectionString.includes('127.0.0.1')
-      ? false
-      : { rejectUnauthorized: false },
-  });
+  let client;
 
   try {
+    const normalizedConnectionString = normalizeConnectionString(connectionString);
+    client = new pg.Client({
+      connectionString: normalizedConnectionString,
+      ssl: normalizedConnectionString.includes('localhost') || normalizedConnectionString.includes('127.0.0.1')
+        ? false
+        : { rejectUnauthorized: false },
+    });
     await client.connect();
 
     for (const file of migrationFiles) {
@@ -96,7 +129,7 @@ const runMigration = async () => {
     }
     process.exit(1);
   } finally {
-    await client.end();
+    await client?.end();
   }
 };
 
