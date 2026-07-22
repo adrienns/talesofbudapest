@@ -1,3 +1,6 @@
+import { resolveLocationSlugs } from './canonicalLocationSeeder.js';
+import { mixCuratedNarrationAudio } from './curatedAudioMix.js';
+
 const matchingAudio = (chapter, script, requireMp3, requiredUrlMarker = null) => {
   if (!chapter?.audio_url || chapter.script !== script) return null;
   if (requireMp3 && !chapter.audio_url.endsWith('.mp3')) return null;
@@ -86,6 +89,7 @@ export const seedCuratedTour = async ({
   requireMp3 = false,
   synthesizeAudio,
   uploadAudio,
+  mixAudio = mixCuratedNarrationAudio,
 }) => {
   // Resolve the entire manifest before creating/updating any narrative so a
   // typo cannot leave a partially seeded curated tour.
@@ -103,6 +107,13 @@ export const seedCuratedTour = async ({
     .maybeSingle();
   if (lookupError) throw new Error(lookupError.message);
 
+  const storedAudioDesign = tour.audioDesign ? {
+    ...tour.audioDesign,
+    ...(tour.audioDesign.musicAsset ? {
+      musicAsset: (({ localFileUrl, ...asset }) => asset)(tour.audioDesign.musicAsset),
+    } : {}),
+  } : null;
+
   const narrativeValues = {
     title: tour.title,
     user_prompt: `curated:${tour.slug}:v${tour.version}:${tour.locale}`,
@@ -110,6 +121,13 @@ export const seedCuratedTour = async ({
       locale: tour.locale,
       curated: true,
       observationMinutes: tour.stops.reduce((total, item) => total + item.observationMinutes, 0),
+      ...(tour.audioDesign ? {
+        audioDesign: storedAudioDesign,
+        audioDirections: tour.stops.map((item) => ({
+          key: item.key,
+          ...item.audioDirection,
+        })),
+      } : {}),
     },
     curated_slug: tour.slug,
     content_version: tour.version,
@@ -153,8 +171,13 @@ export const seedCuratedTour = async ({
           throw new Error('Audio synthesis and upload functions are required');
         }
         const { buffer, contentType, extension = 'mp3' } = await synthesizeAudio(item.script, tour.locale);
+        const mixedBuffer = await mixAudio({
+          narrationBuffer: buffer,
+          musicAsset: tour.audioDesign?.musicAsset,
+          enabled: item.audioDirection?.music?.enabled === true,
+        });
         const fileName = `curated/${tour.slug}/v${tour.version}/${tour.locale}/${String(index + 1).padStart(2, '0')}.${extension}`;
-        return uploadAudio(fileName, buffer, contentType);
+        return uploadAudio(fileName, mixedBuffer, contentType);
       },
     });
     counts[result.source] += 1;
@@ -189,4 +212,3 @@ export const seedCuratedTour = async ({
 
   return { narrative, counts, previousVersion: previousNarrative?.content_version ?? null };
 };
-import { resolveLocationSlugs } from './canonicalLocationSeeder.js';

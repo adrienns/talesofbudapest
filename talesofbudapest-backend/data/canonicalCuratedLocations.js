@@ -124,6 +124,54 @@ export const CANONICAL_CURATED_LOCATIONS = [
     facets: { 'food-nightlife': 100, 'local-life': 90, 'jewish-budapest': 70 },
     media: media('/curated/jewish-quarter-and-ruin-bars/kiraly-street.jpg', 'Fred Romero', 'CC BY 2.0', 'https://commons.wikimedia.org/wiki/File:Budapest_-_Kir%C3%A1ly_utca_(1).jpg', 'https://creativecommons.org/licenses/by/2.0/'),
   },
+  {
+    slug: 'house-of-terror', name: 'House of Terror', huName: 'Terror Háza Múzeum',
+    lat: 47.50693, lng: 19.06528, placeKind: 'building',
+    story: 'The former Andrássy út 60 headquarters used by the Arrow Cross and, after 1945, the communist political police.',
+    facets: { 'power-history': 100, 'arts-culture': 55 },
+  },
+  {
+    slug: 'oktogon', name: 'Oktogon', huName: 'Oktogon',
+    lat: 47.50591, lng: 19.0631, placeKind: 'square',
+    story: 'An eight-sided junction renamed November 7 Square under communist rule and restored to its familiar name in 1990.',
+    facets: { 'power-history': 90, architecture: 65, 'local-life': 75 },
+  },
+  {
+    slug: 'imre-nagy-statue-jaszai', name: 'Imre Nagy Statue', huName: 'Nagy Imre-szobor',
+    lat: 47.51302, lng: 19.04718, placeKind: 'monument',
+    story: 'A bronze memorial to the 1956 prime minister, relocated to Jászai Mari Square in 2019.',
+    facets: { 'power-history': 100, 'arts-culture': 60 },
+  },
+  {
+    slug: 'kossuth-square-1956', name: 'Kossuth Square 1956 Memorial Site', huName: 'Kossuth téri 1956-os emlékhely',
+    lat: 47.50718, lng: 19.04567, placeKind: 'historical_site',
+    story: 'The central political square where gunfire killed and wounded demonstrators on 25 October 1956.',
+    facets: { 'power-history': 100, architecture: 70 },
+  },
+  {
+    slug: 'astoria', name: 'Astoria', huName: 'Astoria',
+    lat: 47.49448, lng: 19.06016, placeKind: 'square',
+    story: 'A central junction crossed by the growing peaceful demonstration on 23 October 1956.',
+    facets: { 'power-history': 90, 'local-life': 80 },
+  },
+  {
+    slug: 'hungarian-radio-brody-sandor', name: 'Former Hungarian Radio Headquarters', huName: 'A Magyar Rádió egykori székháza',
+    lat: 47.49091, lng: 19.0651, placeKind: 'historical_site',
+    story: 'The Bródy Sándor Street broadcasting complex where the confrontation over the students’ sixteen demands escalated into fighting.',
+    facets: { 'power-history': 100, 'arts-culture': 70 },
+  },
+  {
+    slug: 'hungarian-national-museum', name: 'Hungarian National Museum', huName: 'Magyar Nemzeti Múzeum',
+    lat: 47.4912, lng: 19.06272, placeKind: 'building',
+    story: 'Hungary’s national history museum, whose collections were severely damaged by fire during fighting in October 1956.',
+    facets: { 'power-history': 95, architecture: 85, 'arts-culture': 100 },
+  },
+  {
+    slug: 'corvin-passage', name: 'Corvin Passage', huName: 'Corvin köz',
+    lat: 47.48691, lng: 19.07014, placeKind: 'historical_site',
+    story: 'A courtyard passage that became one of the most important centres of armed resistance in the 1956 Revolution.',
+    facets: { 'power-history': 100, 'local-life': 70 },
+  },
 ];
 
 export const CURATED_CHAPTER_LOCATION_SLUGS = {
@@ -136,5 +184,10 @@ export const CURATED_CHAPTER_LOCATION_SLUGS = {
     'orczy-house', 'rumbach-street-synagogue', 'dohany-street-synagogue',
     'carl-lutz-memorial-dob-street', 'klauzal-square', 'kazinczy-street-synagogue',
     'szimpla-kert', 'gozsdu-courtyard', 'kiraly-street',
+  ],
+  'communism-cold-war-history': [
+    'house-of-terror', 'oktogon', 'imre-nagy-statue-jaszai',
+    'kossuth-square-1956', 'liberty-square', 'astoria',
+    'hungarian-radio-brody-sandor', 'hungarian-national-museum', 'corvin-passage',
   ],
 };

@@ -4,14 +4,20 @@ import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFile, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { CURATED_TOURS, validateCuratedTours } from '../content/curated/index.js';
 import { seedCuratedTour } from '../lib/curatedTourSeeder.js';
 import { pcmToMp3, synthesizeSpeech, uploadAudio } from '../lib/ttsClient.js';
 import { hasFlag, option } from './_shared/args.js';
 
-dotenv.config();
+const __dirname = dirname(fileURLToPath(import.meta.url));
+dotenv.config({
+  path: process.env.ENV_FILE
+    ? resolve(process.cwd(), process.env.ENV_FILE)
+    : join(__dirname, '..', '.env'),
+});
 
 const args = process.argv.slice(2);
 const skipAudio = hasFlag(args, '--skip-audio');
@@ -20,12 +26,12 @@ const freshAudio = hasFlag(args, '--fresh-audio');
 const selectedSlug = option(args, '--slug');
 const selectedLocale = option(args, '--locale');
 const explicitAudioProvider = option(args, '--audio-provider');
-const audioProvider = explicitAudioProvider ?? 'openrouter';
-const supabaseUrl = process.env.SUPABASE_URL;
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const audioProvider = explicitAudioProvider ?? 'gemini';
+const supabaseUrl = process.env.STAGING_SUPABASE_URL ?? process.env.SUPABASE_URL;
+const serviceKey = process.env.STAGING_SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
 const runFile = promisify(execFile);
 
-if (!supabaseUrl || !serviceKey) throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
+if (!supabaseUrl || !serviceKey) throw new Error('Supabase URL and server key are required');
 if (skipAudio && localAudio) throw new Error('Use either --skip-audio or --local-audio, not both');
 if (localAudio && explicitAudioProvider) throw new Error('--local-audio cannot be combined with --audio-provider');
 if (selectedLocale && !['en', 'hu'].includes(selectedLocale)) throw new Error('--locale must be en or hu');

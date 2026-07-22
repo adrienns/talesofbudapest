@@ -62,7 +62,14 @@ const TOUR_TOPICS_HU = {
 
 export const TOUR_TOPICS = TOUR_TOPICS_EN;
 
-const formatMinutesForPrompt = (minutes) => {
+const formatMinutesForPrompt = (minutes, locale = 'en') => {
+  if (locale === 'hu') {
+    if (minutes % 60 === 0) {
+      return `${minutes / 60} óra`;
+    }
+    return `${minutes} perc`;
+  }
+
   if (minutes % 30 === 0) {
     const hours = minutes / 60;
     return `${hours} hour${hours === 1 ? '' : 's'}`;
@@ -83,9 +90,17 @@ export const buildNarrativePrompt = ({ styleId, topicIds = [], timeBudgetMinutes
   const topics = locale === 'hu' ? TOUR_TOPICS_HU : TOUR_TOPICS_EN;
   const themes = joinPhrases(topicIds.map((id) => topics[id]).filter(Boolean));
   const sanitizedIntent = typeof intent === 'string' ? intent.trim() : '';
-  const request = sanitizedIntent ? ` The visitor also requested: ${sanitizedIntent}.` : '';
+  const request = sanitizedIntent
+    ? locale === 'hu'
+      ? ` A látogató ezt is kérte: ${sanitizedIntent}.`
+      : ` The visitor also requested: ${sanitizedIntent}.`
+    : '';
 
-  return `Create a ${locale === 'hu' ? style.promptPhraseHu : style.promptPhrase} Budapest audio walking tour exploring ${themes || 'the visitor’s stated interests'}, sized for about ${formatMinutesForPrompt(timeBudgetMinutes)} of walking and listening.${request}`;
+  if (locale === 'hu') {
+    return `Készíts ${style.promptPhraseHu} budapesti sétáló hangos túrát. A túra témája: ${themes || 'a látogató megadott érdeklődési köre'}. A túra nagyjából ${formatMinutesForPrompt(timeBudgetMinutes, locale)} sétára és hallgatásra legyen méretezve.${request}`;
+  }
+
+  return `Create a ${style.promptPhrase} Budapest audio walking tour exploring ${themes || 'the visitor’s stated interests'}, sized for about ${formatMinutesForPrompt(timeBudgetMinutes, locale)} of walking and listening.${request}`;
 };
 
 export const CURATED_TOUR_REQUESTS = {

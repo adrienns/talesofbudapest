@@ -16,6 +16,20 @@ test('buildNarrativePrompt owns questionnaire wording and ignores unknown topics
   );
 });
 
+test('buildNarrativePrompt writes the Hungarian planning request in Hungarian', () => {
+  const prompt = buildNarrativePrompt({
+    styleId: 'storyteller',
+    topicIds: ['power-history'],
+    timeBudgetMinutes: 90,
+    intent: 'legyen benne 1956',
+  }, 'hu');
+
+  assert.equal(
+    prompt,
+    'Készíts élénk, történetmesélő budapesti sétáló hangos túrát. A túra témája: királyok, politika, forradalmak és Budapestet formáló erők. A túra nagyjából 90 perc sétára és hallgatásra legyen méretezve. A látogató ezt is kérte: legyen benne 1956.',
+  );
+});
+
 test('curated requests stay server-only and are selected by opaque slug', () => {
   const request = curatedNarrativeRequest('castle-royal');
   assert.equal(request?.styleId, 'storyteller');

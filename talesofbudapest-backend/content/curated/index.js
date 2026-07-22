@@ -1,8 +1,14 @@
 import { TOUR_EN } from './how-budapest-became-budapest.en.js';
 import { TOUR_HU } from './how-budapest-became-budapest.hu.js';
 import { JEWISH_QUARTER_TOUR_EN } from './jewish-quarter-and-ruin-bars.en.js';
+import { COMMUNISM_COLD_WAR_TOUR_EN } from './communism-cold-war-history.en.js';
 
-export const CURATED_TOURS = [TOUR_EN, TOUR_HU, JEWISH_QUARTER_TOUR_EN];
+export const CURATED_TOURS = [
+  TOUR_EN,
+  TOUR_HU,
+  JEWISH_QUARTER_TOUR_EN,
+  COMMUNISM_COLD_WAR_TOUR_EN,
+];
 
 export const findCuratedTour = (slug, locale) =>
   CURATED_TOURS.find((tour) => tour.slug === slug && tour.locale === locale) ?? null;
@@ -47,6 +53,12 @@ export const validateCuratedTours = (tours = CURATED_TOURS) => {
         errors.push(`${identity}:${tour.locale}:${item.key}: script has ${count} words`);
       }
       if (!item.sourceIds?.length) errors.push(`${identity}:${tour.locale}:${item.key}: no source IDs`);
+      if (tour.audioDesign && !item.audioDirection) {
+        errors.push(`${identity}:${tour.locale}:${item.key}: no audio direction`);
+      }
+      if (tour.audioDesign?.musicAsset && typeof item.audioDirection?.music?.enabled !== 'boolean') {
+        errors.push(`${identity}:${tour.locale}:${item.key}: music direction must explicitly enable or disable the cue`);
+      }
       if (tour.sources) {
         for (const sourceId of item.sourceIds ?? []) {
           if (!tour.sources[sourceId]) errors.push(`${identity}:${tour.locale}:${item.key}: unknown source ${sourceId}`);

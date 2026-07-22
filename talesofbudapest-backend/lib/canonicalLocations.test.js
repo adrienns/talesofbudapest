@@ -6,9 +6,9 @@ import {
 } from '../data/canonicalCuratedLocations.js';
 import { CURATED_TOURS } from '../content/curated/index.js';
 
-test('canonical curated catalog contains exactly 18 unique places', () => {
-  assert.equal(CANONICAL_CURATED_LOCATIONS.length, 18);
-  assert.equal(new Set(CANONICAL_CURATED_LOCATIONS.map((item) => item.slug)).size, 18);
+test('canonical curated catalog contains exactly 26 unique places', () => {
+  assert.equal(CANONICAL_CURATED_LOCATIONS.length, 26);
+  assert.equal(new Set(CANONICAL_CURATED_LOCATIONS.map((item) => item.slug)).size, 26);
 });
 
 test('Orczy House is retained as a demolished historical site', () => {
