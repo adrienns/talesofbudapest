@@ -162,6 +162,7 @@
     "close": "Bezárás",
     "quickStart": "Gyors indítás",
     "readyMadeTours": "Válassz kész túrát",
+    "customToursUnavailable": "Az egyedi túrák ebben a tesztverzióban nem elérhetők.",
     "or": "VAGY",
     "quickStarts": {
       "flagshipTitle": "Hogyan lett Budapestből Budapest?",

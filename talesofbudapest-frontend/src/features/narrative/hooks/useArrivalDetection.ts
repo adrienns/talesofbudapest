@@ -5,7 +5,12 @@ import { haversineKm } from '@/lib/geo/haversine'
 
 type Target = { id: string; lat: number; lng: number; title?: string } | null
 
-/** Low-power next-stop proximity check; never follows visitors in the background. */
+const GEO_OPTIONS: PositionOptions = {
+  enableHighAccuracy: false,
+  maximumAge: 30_000,
+  timeout: 20_000,
+}
+
 export const useArrivalDetection = (target: Target, onArrival: (target: NonNullable<Target>) => void) => {
   const arrivedId = useRef<string | null>(null)
   const [status, setStatus] = useState<'idle' | 'requesting' | 'tracking' | 'weak' | 'paused' | 'denied' | 'unavailable'>('idle')
@@ -53,17 +58,14 @@ export const useArrivalDetection = (target: Target, onArrival: (target: NonNulla
           return
         }
 
-        // iOS may briefly report POSITION_UNAVAILABLE / "location unknown"
-        // while Core Location acquires a fresh fix. Keep trying while this
-        // visible tour remains open instead of treating it as a hard failure.
         setStatus('unavailable')
         if (document.visibilityState === 'visible') {
           retryTimer = window.setTimeout(() => {
             retryTimer = null
             start()
-          }, 4_000)
+          }, 2_500)
         }
-      }, { enableHighAccuracy: true, maximumAge: 10_000, timeout: 15_000 })
+      }, GEO_OPTIONS)
     }
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') start()

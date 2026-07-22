@@ -162,6 +162,7 @@
     "close": "Close",
     "quickStart": "Quick start",
     "readyMadeTours": "Pick a ready-made tour",
+    "customToursUnavailable": "Custom tours are not enabled in this staging test.",
     "or": "OR",
     "quickStarts": {
       "flagshipTitle": "How Budapest Became Budapest",

@@ -182,16 +182,55 @@ const HomePageContent = () => {
     setArrivalMessage(null)
   }, [activeChapter?.id])
 
+  const openExternalWalkingDirections = useCallback((
+    destination: { lat: number; lng: number },
+    origin?: { lat: number; lng: number } | null,
+  ) => {
+    if (typeof window === 'undefined') return
+
+    const isApple = /iPhone|iPad|iPod|Macintosh/u.test(navigator.userAgent)
+    if (isApple) {
+      const params = new URLSearchParams({
+        daddr: `${destination.lat},${destination.lng}`,
+        dirflg: 'w',
+      })
+      if (origin) {
+        params.set('saddr', `${origin.lat},${origin.lng}`)
+      }
+      window.location.assign(`https://maps.apple.com/?${params.toString()}`)
+      return
+    }
+
+    const params = new URLSearchParams({
+      api: '1',
+      destination: `${destination.lat},${destination.lng}`,
+      travelmode: 'walking',
+    })
+    if (origin) {
+      params.set('origin', `${origin.lat},${origin.lng}`)
+    }
+    window.location.assign(`https://www.google.com/maps/dir/?${params.toString()}`)
+  }, [])
+
   const handleReroute = useCallback(() => {
-    if (!activeChapter || !navigator.geolocation) return
+    if (!activeChapter) return
+
+    const destination = { lat: activeChapter.lat, lng: activeChapter.lng }
+    const knownOrigin =
+      narrativeContext.userLat != null && narrativeContext.userLng != null
+        ? { lat: narrativeContext.userLat, lng: narrativeContext.userLng }
+        : null
+
+    openExternalWalkingDirections(destination, knownOrigin)
+
+    if (isCuratedOnlyStaging || !navigator.geolocation) return
+
     setIsRerouting(true)
     navigator.geolocation.getCurrentPosition(
       async (position) => {
+        const origin = { lat: position.coords.latitude, lng: position.coords.longitude }
         try {
-          const route = await requestWalkingRoute([
-            { lat: position.coords.latitude, lng: position.coords.longitude },
-            { lat: activeChapter.lat, lng: activeChapter.lng },
-          ])
+          const route = await requestWalkingRoute([origin, destination])
           setTemporaryRoute(route)
         } catch {
           setTemporaryRoute(null)
@@ -200,9 +239,9 @@ const HomePageContent = () => {
         }
       },
       () => setIsRerouting(false),
-      { enableHighAccuracy: false, maximumAge: 30_000, timeout: 10_000 },
+      { enableHighAccuracy: false, maximumAge: 60_000, timeout: 8_000 },
     )
-  }, [activeChapter])
+  }, [activeChapter, narrativeContext.userLat, narrativeContext.userLng, openExternalWalkingDirections])
 
   const playbackItem = useMemo<PlaybackItem | null>(() => {
     if (activeChapter && activeRoute) {
@@ -464,14 +503,9 @@ const HomePageContent = () => {
   }, [activeChapter, activeChapterIndex, activeRoute, handleArrival, setActiveChapterIndex])
 
   const handleOpenDirections = useCallback(() => {
-    if (!activeChapter || typeof window === 'undefined') return
-    const params = new URLSearchParams({
-      api: '1',
-      destination: `${activeChapter.lat},${activeChapter.lng}`,
-      travelmode: 'walking',
-    })
-    window.location.assign(`https://www.google.com/maps/dir/?${params.toString()}`)
-  }, [activeChapter])
+    if (!activeChapter) return
+    openExternalWalkingDirections({ lat: activeChapter.lat, lng: activeChapter.lng })
+  }, [activeChapter, openExternalWalkingDirections])
 
   const selectAdjacentChapter = useCallback(
     (direction: -1 | 1) => {
