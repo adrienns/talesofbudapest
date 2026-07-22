@@ -22,6 +22,7 @@
     "generate:audio": "npm run generate:audio --workspace=talesofbudapest-backend",
     "generate:audio:all": "npm run generate:audio:all --workspace=talesofbudapest-backend",
     "db:migrate": "npm run db:migrate --workspace=talesofbudapest-backend",
+    "db:migrate:staging": "ENV_FILE=.env.staging npm run db:migrate --workspace=talesofbudapest-backend",
     "setup": "npm run setup --workspace=talesofbudapest-backend",
     "scrape:budapest100": "npm run scrape -w ingest --",
     "ingest:wikipedia": "npm run ingest:wikipedia -w ingest --",
@@ -39,6 +40,10 @@
     "poll:open-commons": "npm run poll:open-commons -w ingest --",
     "load:landmarks": "npm run load -w ingest --",
     "seed:curated-tours": "npm run seed:curated-tours --workspace=talesofbudapest-backend --",
+    "seed:staging:canonical": "ENV_FILE=talesofbudapest-backend/.env.staging node talesofbudapest-backend/cli/seed-canonical-locations.js",
+    "seed:staging:curated": "ENV_FILE=.env.staging npm run seed:curated-tours --workspace=talesofbudapest-backend --",
+    "copy:staging-curated-audio": "node talesofbudapest-backend/cli/copy-curated-audio-to-staging.js",
+    "copy:staging:curated-audio": "ENV_FILE=talesofbudapest-backend/.env.staging npm run copy:staging-curated-audio --",
     "fix:service-key": "node infra/scripts/fix-service-role-key.mjs"
   },
   "license": "ISC",
