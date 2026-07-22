@@ -71,6 +71,8 @@ const AudioDrawer = dynamic(
   { ssr: false },
 )
 
+const isCuratedOnlyStaging = process.env.NEXT_PUBLIC_TALES_CURATED_ONLY === 'true'
+
 const HomePageContent = () => {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -230,6 +232,7 @@ const HomePageContent = () => {
         imageAlt: selectedLandmark.images[0]?.alt ?? selectedLandmark.name,
         locationId: selectedLandmark.id,
         landmarkId: selectedLandmark.id,
+        script: selectedLandmark.story_prompt,
         lat: selectedLandmark.lat,
         lng: selectedLandmark.lng,
       }
@@ -273,7 +276,7 @@ const HomePageContent = () => {
       return
     }
 
-    if (searchParams.get('guide') === '1') {
+    if (!isCuratedOnlyStaging && searchParams.get('guide') === '1') {
       setOverlayReturnTo(safeReturnTo)
       setIsGuideOpen(true)
       router.replace('/')
@@ -282,6 +285,8 @@ const HomePageContent = () => {
 
   /** Style→Topics→Recap flow, and the free-text intent bar — both go through the route preview. */
   const handlePlan = async (extras: QuestionnaireExtras) => {
+    if (isCuratedOnlyStaging) return
+
     setLastPrompt(JSON.stringify(extras))
     setLastExtras(extras)
     setSelectedLandmark(null)
@@ -300,6 +305,14 @@ const HomePageContent = () => {
 
   /** One-tap curated starters skip the preview — the prompt is pre-vetted. */
   const handleStartCurated = async (starter: CuratedStarter, initialChapterIndex = 0) => {
+    if (isCuratedOnlyStaging && starter.kind !== 'fixed') return
+
+    // This is a direct user action, so mobile browsers can show the location
+    // permission prompt before the asynchronous tour load begins.
+    if (starter.kind === 'fixed') {
+      void requestLocation()
+    }
+
     setLastPrompt(`curated:${starter.slug}`)
     setSelectedLandmark(null)
     setLastNarrativePeek(null)
@@ -487,7 +500,7 @@ const HomePageContent = () => {
         activeRoute={activeRoute}
         selectedChapterId={activeChapter?.id ?? null}
         onChapterSelect={handleChapterSelect}
-        showLandmarks={!hasActiveRoute}
+        showLandmarks={!hasActiveRoute && !isCuratedOnlyStaging}
         temporaryRoute={temporaryRoute}
       />
 
@@ -599,6 +612,7 @@ const HomePageContent = () => {
           locationStatus={locationStatus}
           focusInput={startDictation}
           initialIntent={questionnaireInitialIntent}
+          curatedOnly={isCuratedOnlyStaging}
         />
       )}
 
@@ -677,12 +691,13 @@ const HomePageContent = () => {
             setOverlayReturnTo(null)
             setIsGuideOpen(true)
           }}
+          showAiGuide={!isCuratedOnlyStaging}
           showNavigation={!hasActiveRoute}
           variant="map"
         />
       )}
 
-      <AiGuideChat
+      {!isCuratedOnlyStaging && <AiGuideChat
         isOpen={isGuideOpen}
         context={{
           locale,
@@ -712,7 +727,7 @@ const HomePageContent = () => {
           setIsGuideOpen(false)
           handleOpenElicitation(intent)
         }}
-      />
+      />}
     </main>
   )
 }

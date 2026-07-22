@@ -23,6 +23,7 @@ type Props = {
   locationStatus: QuestionnaireLocationStatus
   focusInput?: boolean
   initialIntent?: string
+  curatedOnly?: boolean
 }
 
 export const NarrativeQuestionnaire = ({
@@ -34,6 +35,7 @@ export const NarrativeQuestionnaire = ({
   locationStatus,
   focusInput = false,
   initialIntent = '',
+  curatedOnly = false,
 }: Props) => {
   const t = useTranslations('questionnaire')
   const questionnaire = useQuestionnaire({ isOpen, initialIntent, locationStatus, onRequestLocation })
@@ -41,7 +43,7 @@ export const NarrativeQuestionnaire = ({
   if (!isOpen) return null
 
   const isSetupStep = questionnaire.step === 'setup'
-  const curatedTours = CURATED_STARTERS.map((starter) => (
+  const curatedTours = CURATED_STARTERS.filter((starter) => !curatedOnly || starter.kind === 'fixed').map((starter) => (
     starter.kind === 'fixed'
       ? {
           slug: starter.slug,
@@ -87,6 +89,7 @@ export const NarrativeQuestionnaire = ({
             minutes={questionnaire.minutes}
             nearMe={questionnaire.nearMe}
             locationStatus={locationStatus}
+            curatedOnly={curatedOnly}
             canContinue={questionnaire.canContinue}
             onSelectCuratedTour={handleCuratedTourSelect}
             onSelectStyle={questionnaire.selectStyle}

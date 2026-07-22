@@ -167,6 +167,9 @@
       "flagshipTitle": "Hogyan lett Budapestből Budapest?",
       "flagshipTagline": "Kb. 2¼ óra · kilenc fordulópont",
       "flagshipImageAlt": "Az Országház és a Duna a kiemelt budapesti történelmi sétán",
+      "communismTitle": "Kommunizmus és hidegháború",
+      "communismTagline": "Kb. 2¾ óra · sztálinizmus, 1956 és 1989",
+      "communismImageAlt": "Az Országház és a Kossuth tér, az 1956-os forradalom egyik fontos helyszíne",
       "jewishQuarterTitle": "Zsidó negyed és romkocsmák",
       "jewishQuarterTagline": "Kb. 1¾ óra · hit, túlélés és éjszakai élet",
       "jewishQuarterImageAlt": "A Dohány utcai zsinagóga Budapesten"
@@ -232,6 +235,7 @@
     "dismissHint": "Elrejtés"
   },
   "errors": {
-    "failedToGenerateAudio": "Nem sikerült generálni a hangos túrát"
+    "failedToGenerateAudio": "Nem sikerült generálni a hangos túrát",
+    "failedToPlayAudio": "Ezt a hanganyagot nem sikerült lejátszani"
   }
 }

@@ -5,6 +5,7 @@ export type BottomNavProps = {
   onTabChange: (tab: NavTabId) => void
   onCreateTour: () => void
   onOpenAiGuide: () => void
+  showAiGuide?: boolean
   showNavigation?: boolean
   className?: string
   variant?: 'default' | 'map'

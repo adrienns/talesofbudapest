@@ -23,6 +23,7 @@ export const BottomNav = ({
   onTabChange,
   onCreateTour,
   onOpenAiGuide,
+  showAiGuide = true,
   showNavigation = true,
   className = '',
   variant = 'default',
@@ -86,14 +87,16 @@ export const BottomNav = ({
           </nav>
         )}
 
-        <button
-          type="button"
-          onClick={onOpenAiGuide}
-          aria-label={t('openAiGuide')}
-          className="bottom-nav-ai-button flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition active:scale-95"
-        >
-          <MessageCircle className="bottom-nav-ai-button__icon h-5 w-5" strokeWidth={1.9} aria-hidden="true" />
-        </button>
+        {showAiGuide && (
+          <button
+            type="button"
+            onClick={onOpenAiGuide}
+            aria-label={t('openAiGuide')}
+            className="bottom-nav-ai-button flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition active:scale-95"
+          >
+            <MessageCircle className="bottom-nav-ai-button__icon h-5 w-5" strokeWidth={1.9} aria-hidden="true" />
+          </button>
+        )}
       </div>
     </div>
   )

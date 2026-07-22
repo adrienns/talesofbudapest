@@ -15,6 +15,7 @@ type SetupStepProps = {
   minutes: number
   nearMe: boolean
   locationStatus: QuestionnaireLocationStatus
+  curatedOnly?: boolean
   canContinue: boolean
   onSelectCuratedTour: (slug: string) => void
   onSelectStyle: (styleId: string) => void
@@ -29,6 +30,7 @@ export const SetupStep = ({
   minutes,
   nearMe,
   locationStatus,
+  curatedOnly = false,
   canContinue,
   onSelectCuratedTour,
   onSelectStyle,
@@ -49,47 +51,51 @@ export const SetupStep = ({
           />
         </div>
       </section>
-      <QuestionnaireWaveSeparator label={t('or')} />
-      <section className="flex-1 bg-[var(--color-ai-chat-bg)] px-5 pb-8 pt-1">
-        <div className="mx-auto flex max-w-md flex-col gap-7">
-          <div className="text-center">
-            <h2 className="text-xl font-extrabold text-on-surface">{t('styleQuestion')}</h2>
-            <p className="mt-1 text-sm text-on-surface/55">{t('styleHelper')}</p>
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            {TOUR_STYLES.map((style, index) => (
-              <QuestionnaireChoiceCard
-                key={style.id}
-                icon={style.icon}
-                label={style.label}
-                description={style.blurb}
-                colorIndex={index}
-                selected={selectedStyleId === style.id}
-                onSelect={() => onSelectStyle(style.id)}
-                variant="style"
+      {!curatedOnly && (
+        <>
+          <QuestionnaireWaveSeparator label={t('or')} />
+          <section className="flex-1 bg-[var(--color-ai-chat-bg)] px-5 pb-8 pt-1">
+            <div className="mx-auto flex max-w-md flex-col gap-7">
+              <div className="text-center">
+                <h2 className="text-xl font-extrabold text-on-surface">{t('styleQuestion')}</h2>
+                <p className="mt-1 text-sm text-on-surface/55">{t('styleHelper')}</p>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {TOUR_STYLES.map((style, index) => (
+                  <QuestionnaireChoiceCard
+                    key={style.id}
+                    icon={style.icon}
+                    label={style.label}
+                    description={style.blurb}
+                    colorIndex={index}
+                    selected={selectedStyleId === style.id}
+                    onSelect={() => onSelectStyle(style.id)}
+                    variant="style"
+                  />
+                ))}
+              </div>
+              <DurationPicker
+                value={minutes}
+                onChange={onSetMinutes}
+                label={t('durationQuestion')}
+                hint={t('durationHint', { minutes: formatMinutesShort(minutes) })}
+                headerAction={(
+                  <LocationToggle
+                    nearMe={nearMe}
+                    locationStatus={locationStatus}
+                    onToggle={onToggleNearMe}
+                    label={t('startNearMe')}
+                    requestingLabel={t('locationRequesting')}
+                  />
+                )}
               />
-            ))}
-          </div>
-          <DurationPicker
-            value={minutes}
-            onChange={onSetMinutes}
-            label={t('durationQuestion')}
-            hint={t('durationHint', { minutes: formatMinutesShort(minutes) })}
-            headerAction={(
-              <LocationToggle
-                nearMe={nearMe}
-                locationStatus={locationStatus}
-                onToggle={onToggleNearMe}
-                label={t('startNearMe')}
-                requestingLabel={t('locationRequesting')}
-              />
-            )}
-          />
-          <button type="button" disabled={!canContinue} onClick={onNext} className="q-start-btn rounded-full py-3.5 font-bold text-white disabled:opacity-35">
-            {t('continue')}
-          </button>
-        </div>
-      </section>
+              <button type="button" disabled={!canContinue} onClick={onNext} className="q-start-btn rounded-full py-3.5 font-bold text-white disabled:opacity-35">
+                {t('continue')}
+              </button>
+            </div>
+          </section>
+        </>
+      )}
     </div>
   )
 }

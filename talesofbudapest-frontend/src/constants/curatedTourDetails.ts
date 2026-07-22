@@ -106,6 +106,26 @@ const tours: Record<string, CuratedTourDetail> = {
       },
     ], '/curated/jewish-quarter-and-ruin-bars/orczy-house.webp'),
   },
+  'communism-cold-war-history': {
+    duration: '2 hr 45 min', distance: '7.6 km',
+    summary: 'A source-checked walk through political policing, the 1956 Revolution, Cold War Budapest, and the negotiated end of one-party rule.',
+    chapters: makeChapters('communism-cold-war-history', [
+      { title: 'The Address the Secret Police Took Over', lat: 47.50693, lng: 19.06528 },
+      { title: 'Renaming the City—and Stalin’s Empty Boots', lat: 47.50591, lng: 19.0631 },
+      { title: 'Imre Nagy: A Communist Who Broke with Moscow', lat: 47.51302, lng: 19.04718 },
+      { title: 'Bloody Thursday, Without False Precision', lat: 47.50718, lng: 19.04567 },
+      { title: 'The Cold War in One City Block', lat: 47.50455, lng: 19.05021 },
+      { title: 'When the March Was Still Peaceful', lat: 47.49448, lng: 19.06016 },
+      { title: 'Sixteen Points and the Fight for the Radio', lat: 47.49091, lng: 19.0651 },
+      { title: 'The Museum Caught in the Crossfire', lat: 47.4912, lng: 19.06272 },
+      { title: 'Corvin Passage: Resistance, Reprisals, Afterlife', lat: 47.48691, lng: 19.07014 },
+    ], '/quick-start/parliement.webp'),
+    walkingRoute: {
+      geometry: [[47.506826,19.065433],[47.506102,19.062262],[47.508003,19.059309],[47.509848,19.056736],[47.510374,19.055336],[47.511316,19.053067],[47.512765,19.048945],[47.512948,19.047743],[47.512986,19.04713],[47.510948,19.046113],[47.508864,19.045415],[47.506894,19.045264],[47.505291,19.044881],[47.504078,19.045201],[47.504412,19.050367],[47.503226,19.05094],[47.500618,19.052038],[47.498513,19.053574],[47.497904,19.055065],[47.496491,19.057707],[47.495128,19.059497],[47.494156,19.060214],[47.491716,19.061467],[47.490301,19.063062],[47.490927,19.065094],[47.49073,19.064104],[47.490621,19.062788],[47.491083,19.062111],[47.490643,19.062592],[47.491182,19.06385],[47.489483,19.064268],[47.489049,19.065656],[47.48754,19.070202],[47.486909,19.070154]],
+      distanceMeters: 7589,
+      durationSeconds: 5729,
+    },
+  },
   'hidden-pest': {
     duration: '2 hr 30 min', distance: '2.6 km',
     summary: 'Step off the postcard route for courtyards, quiet façades, and coffeehouse lore. A slow, curious wander for people who want the city’s small details to do the talking.',

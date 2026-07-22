@@ -169,6 +169,17 @@ export const CURATED_STARTERS: CuratedStarter[] = [
   },
   {
     kind: 'fixed',
+    slug: 'communism-cold-war-history',
+    titleKey: 'quickStarts.communismTitle',
+    taglineKey: 'quickStarts.communismTagline',
+    imageAltKey: 'quickStarts.communismImageAlt',
+    imageSrc: '/quick-start/parliement.webp',
+    icon: Landmark,
+    styleId: 'deep-dive',
+    topicIds: ['power-history'],
+  },
+  {
+    kind: 'fixed',
     slug: 'jewish-quarter-and-ruin-bars',
     titleKey: 'quickStarts.jewishQuarterTitle',
     taglineKey: 'quickStarts.jewishQuarterTagline',

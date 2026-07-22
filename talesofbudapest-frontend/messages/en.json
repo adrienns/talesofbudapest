@@ -167,6 +167,9 @@
       "flagshipTitle": "How Budapest Became Budapest",
       "flagshipTagline": "About 2¼ h · nine turning points",
       "flagshipImageAlt": "Hungarian Parliament and the Danube on the flagship Budapest history walk",
+      "communismTitle": "Communism & Cold War History",
+      "communismTagline": "About 2¾ h · Stalinism, 1956 and 1989",
+      "communismImageAlt": "Hungarian Parliament and Kossuth Square, a key site of the 1956 Revolution",
       "jewishQuarterTitle": "Jewish Quarter & Ruin Bars",
       "jewishQuarterTagline": "About 1¾ h · faith, survival and nightlife",
       "jewishQuarterImageAlt": "Dohány Street Synagogue in Budapest"
@@ -232,6 +235,7 @@
     "dismissHint": "Dismiss"
   },
   "errors": {
-    "failedToGenerateAudio": "Failed to generate audio tour"
+    "failedToGenerateAudio": "Failed to generate audio tour",
+    "failedToPlayAudio": "This audio could not be played"
   }
 }
