@@ -1,6 +1,7 @@
 import type { NextConfig } from 'next'
 import { config as loadEnv } from 'dotenv'
 import createNextIntlPlugin from 'next-intl/plugin'
+import { initOpenNextCloudflareForDev } from '@opennextjs/cloudflare'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -8,12 +9,29 @@ const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts')
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-// Load sibling backend .env so API routes get OPENROUTER, Supabase keys in dev.
-loadEnv({ path: path.join(__dirname, '../talesofbudapest-backend/.env') })
-loadEnv({
-  path: path.join(__dirname, '../infra/supabase-upstream/docker/.env'),
-  override: false,
-})
+const isCloudflareStagingBuild = process.env.NEXT_PUBLIC_TALES_CURATED_ONLY === 'true'
+
+// Next loads `.env.local` before this configuration file. Never allow local
+// Supabase endpoints or credentials to become fallbacks in the staging Worker.
+if (isCloudflareStagingBuild) {
+  delete process.env.NEXT_PUBLIC_SUPABASE_URL
+  delete process.env.SUPABASE_URL
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY
+  delete process.env.SUPABASE_ANON_KEY
+  delete process.env.SUPABASE_JWT_SECRET
+}
+
+// Load local services for development only. A Cloudflare deployment must not
+// read or bundle the developer's local Supabase and AI credentials.
+if (!isCloudflareStagingBuild) {
+  loadEnv({ path: path.join(__dirname, '../talesofbudapest-backend/.env') })
+  loadEnv({
+    path: path.join(__dirname, '../infra/supabase-upstream/docker/.env'),
+    override: false,
+  })
+}
+
+initOpenNextCloudflareForDev()
 
 const isProduction = process.env.NODE_ENV === 'production'
 
@@ -58,6 +76,12 @@ const nextConfig: NextConfig = {
   devIndicators: false,
   experimental: {
     externalDir: true,
+  },
+  outputFileTracingExcludes: {
+    '/*': [
+      '../talesofbudapest-backend/.env',
+      '../infra/supabase-upstream/docker/.env',
+    ],
   },
   webpack: (config) => {
     config.resolve.alias = {
