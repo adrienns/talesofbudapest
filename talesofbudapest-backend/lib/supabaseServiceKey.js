@@ -20,7 +20,11 @@ const signJwt = (payload, secret) => {
   return `${encodedHeader}.${encodedPayload}.${signature}`;
 };
 
-const isValidServiceRoleKey = (token) => {
+const isValidServerKey = (token) => {
+  // Supabase's current opaque secret keys are intended for server-only use
+  // and replace the older JWT-shaped service_role keys.
+  if (token?.startsWith('sb_secret_')) return true;
+
   const payload = decodePayload(token);
   return payload?.iss === 'supabase' && payload?.role === 'service_role';
 };
@@ -30,7 +34,7 @@ export const resolveSupabaseServiceRoleKey = ({
   anonKey = process.env.SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   jwtSecret = process.env.SUPABASE_JWT_SECRET ?? process.env.JWT_SECRET,
 } = {}) => {
-  if (serviceRoleKey && isValidServiceRoleKey(serviceRoleKey)) {
+  if (serviceRoleKey && isValidServerKey(serviceRoleKey)) {
     return serviceRoleKey;
   }
 
