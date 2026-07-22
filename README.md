@@ -14,7 +14,7 @@ supabase/migrations/        # Database and storage SQL migrations
 infra/                      # Self-hosted Supabase Docker (local → Oracle)
 rag/                        # RAG ingestion scripts (Python)
 ingest/                     # Budapest100 scraper (TypeScript)
-talesofbudapest-backend/    # Node.js CLI pipeline (Supabase, OpenRouter LLM + TTS)
+talesofbudapest-backend/    # Node.js CLI pipeline (Supabase, OpenRouter LLM + direct Gemini TTS)
 talesofbudapest-frontend/   # Next.js + TypeScript + Tailwind CSS app
 talesofbudapest-admin/      # Private KG operations/review console (port 3100)
 ```
@@ -140,16 +140,16 @@ python ingest.py --file corpus/sample.txt --source-id budapest-sample-001
 | `node infra/scripts/generate-keys.mjs` | Generate self-hosted Supabase secrets |
 | `bash infra/scripts/setup.sh` | Start local Supabase Docker stack |
 
-### Refresh the flagship English voice with direct Gemini
+### Generate curated narration with direct Gemini free tier
 
 Create a Free-tier API key in [Google AI Studio](https://aistudio.google.com/apikey), leave billing disabled, and add it as `GEMINI_API_KEY` in `talesofbudapest-backend/.env`. Seed the unchanged Hungarian version first by inheriting matching audio from the previous version, then generate the new English version:
 
 ```bash
 npm run seed:curated-tours -- --slug how-budapest-became-budapest --locale hu --skip-audio
-npm run seed:curated-tours -- --slug how-budapest-became-budapest --locale en --audio-provider gemini --fresh-audio
+npm run seed:curated-tours -- --slug how-budapest-became-budapest --locale en --fresh-audio
 ```
 
-`--fresh-audio` replaces older-version URLs temporarily inherited into the current record but still resumes audio already uploaded to the current version's path. Direct Gemini generation uses `Sulafat` by default and does not change the app's OpenRouter TTS default.
+`--fresh-audio` replaces older-version URLs temporarily inherited into the current record but still resumes audio already uploaded to the current version's path. Direct Gemini is the default narration provider and uses `gemini-3.1-flash-tts-preview` with `Sulafat`. The free tier is quota-limited and intentionally does not fall back to paid OpenRouter TTS; use `--audio-provider openrouter` only when you explicitly want that paid route.
 
 ### Knowledge-graph pipeline scripts
 

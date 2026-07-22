@@ -122,7 +122,7 @@ Domain hooks live next to their feature — not in a top-level `src/hooks/` fold
 | `mapLandmarksQuery.ts` | Bbox parsing, importance tier filtering |
 | `narrativePool.ts` | Landmark pool for LLM route planning |
 | `loadBackendEnv.ts` | Load sibling backend `.env` |
-| `audioEnv.ts` | Assert OpenRouter key present |
+| `audioEnv.ts` | Assert direct Gemini TTS key present |
 
 ## Types (`src/types/`)
 

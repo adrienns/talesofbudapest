@@ -29,7 +29,8 @@ flowchart TB
     Historian[historianNarrative]
     Audio[landmarkAudioPipeline]
     Narrative[narrativePipeline]
-    OR[OpenRouter LLM + TTS]
+    OR[OpenRouter LLM]
+    Gemini[Direct Gemini TTS]
   end
 
   subgraph frontend [Next.js frontend]
@@ -64,6 +65,7 @@ flowchart TB
   API --> Narrative
   Audio --> Historian
   Audio --> OR
+  Audio --> Gemini
   Narrative --> OR
   Audio --> S3
   Narrative --> S3

@@ -5,7 +5,8 @@
 - Node.js 20+
 - npm (workspaces)
 - Docker Desktop (for self-hosted Supabase)
-- OpenRouter API key (for LLM + TTS)
+- OpenRouter API key (for LLM and optional paid TTS override)
+- Google AI Studio API key (for default Gemini free-tier TTS)
 - Optional: OpenAI API key (for RAG ingest only)
 
 ## Install
@@ -33,8 +34,12 @@ For audio generation, also set:
 
 ```env
 SUPABASE_SERVICE_ROLE_KEY=<service role key>
-OPENROUTER_API_KEY=sk-or-...
+GEMINI_API_KEY=<Google AI Studio key>
 ```
+
+Direct Gemini TTS is the default and uses the free-tier, quota-limited model
+`gemini-3.1-flash-tts-preview`. Set `OPENROUTER_API_KEY` only if you explicitly
+choose the paid `--audio-provider openrouter` override for curated narration.
 
 For migrations:
 

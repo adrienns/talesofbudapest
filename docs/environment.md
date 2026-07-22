@@ -29,11 +29,11 @@ Copy from `talesofbudapest-backend/.env.example`.
 | `SUPABASE_JWT_SECRET` | Key derivation | Sign service role if key missing |
 | `DATABASE_URL` | Migrations, direct PG | Postgres connection string |
 
-### OpenRouter (LLM + TTS)
+### OpenRouter (LLM) and direct Gemini TTS
 
 | Variable | Required for | Default / notes |
 |----------|--------------|-----------------|
-| `OPENROUTER_API_KEY` | Audio, narratives, historian | Required for generation |
+| `OPENROUTER_API_KEY` | Script generation, narratives, historian, optional paid TTS | Not used by the default Gemini narration path |
 | `OPENROUTER_LOGS` | All OpenRouter calls | Structured redacted request logs; defaults enabled, set `0` only for local suppression |
 | `OPENROUTER_MODEL` | General chat | Fallback for other models |
 | `OPENROUTER_HISTORIAN_MODEL` | Historian enrichment | Falls back to `OPENROUTER_MODEL` |
@@ -48,13 +48,13 @@ Copy from `talesofbudapest-backend/.env.example`.
 | `OPENROUTER_EMBEDDING_DIMENSIONS` | KG embeddings | Must match the database vector dimension |
 | `OPENROUTER_EMBEDDING_INPUT_COST_PER_MILLION` | Embedding cost reports | Estimate only; defaults to `0.02` |
 | `OPENROUTER_AUDIO_MODEL` | Tour script generation | |
-| `OPENROUTER_TTS_MODEL` | Text-to-speech | Gemini flash TTS (multilingual HU) |
-| `OPENROUTER_TTS_VOICE` | TTS voice preset | |
+| `OPENROUTER_TTS_MODEL` | Optional paid OpenRouter TTS override | Not used by the default narration path |
+| `OPENROUTER_TTS_VOICE` | Optional OpenRouter TTS voice preset | |
 | `OPENROUTER_TTS_RESPONSE_FORMAT` | Text-to-speech | Optional response-format override; normally inferred from model |
-| `GEMINI_API_KEY` | Direct Gemini curated TTS | Server-only Google AI Studio key; not used by default runtime TTS |
-| `GEMINI_TTS_MODEL` | Direct Gemini curated TTS | Defaults to `gemini-3.1-flash-tts-preview` |
-| `GEMINI_TTS_VOICE` | Direct Gemini curated TTS | Defaults to the warm `Sulafat` voice |
-| `GEMINI_TTS_REQUEST_INTERVAL_MS` | Direct Gemini curated TTS | Defaults to `31000` for conservative free-tier pacing |
+| `GEMINI_API_KEY` | Default direct Gemini TTS | Server-only Google AI Studio key; keep billing disabled for free-tier use |
+| `GEMINI_TTS_MODEL` | Default direct Gemini TTS | Defaults to `gemini-3.1-flash-tts-preview` |
+| `GEMINI_TTS_VOICE` | Default direct Gemini TTS | Defaults to the warm `Sulafat` voice |
+| `GEMINI_TTS_REQUEST_INTERVAL_MS` | Default direct Gemini TTS | Defaults to `31000` for conservative free-tier pacing |
 | `OPENROUTER_SITE_URL` | OpenRouter requests | HTTP referer used by shared chat/TTS client; defaults to localhost |
 | `OPENROUTER_HTTP_REFERER` | Embedding requests | Optional HTTP referer for embedding calls |
 | `OPENROUTER_APP_NAME` | Embedding requests | Optional OpenRouter `X-Title` attribution |
@@ -133,8 +133,8 @@ See `infra/.env.example` for port settings.
 |------|-------------------|
 | Frontend dev (map only) | `SUPABASE_URL`, `SUPABASE_ANON_KEY` |
 | Admin console | `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` |
-| Landmark audio generation | + `SUPABASE_SERVICE_ROLE_KEY`, `OPENROUTER_API_KEY` |
-| Direct Gemini curated audio | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY` |
+| Landmark or curated audio generation | + `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY` |
+| Explicit paid OpenRouter audio override | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENROUTER_API_KEY` |
 | Restricted-book cost preflight | `OPENROUTER_API_KEY` is not used for `--preflight-only`, but live catalog access is required |
 | Restricted-book extraction | `OPENROUTER_API_KEY`; optional `KG_EXTRACTION_MAX_COST_USD` |
 | KG load/resolve/placeholder creation | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` |

@@ -26,7 +26,8 @@ npm run enrich:history -- --id <uuid> --force
 
 | Module | File | Role |
 |--------|------|------|
-| OpenRouter client | `openRouterClient.js` | Chat completions, TTS speech, model config |
+| OpenRouter client | `openRouterClient.js` | Chat completions and explicit paid TTS override |
+| Gemini TTS client | `geminiTtsClient.js` | Default free-tier narration provider and quota pacing |
 | TTS + upload | `ttsClient.js` | PCM → MP3 (lamejs), upload to `audio-tours` bucket |
 | Landmark audio | `landmarkAudioPipeline.js` | Full landmark audio pipeline (see below) |
 | Historian | `historianNarrative.js` | LLM fact-only narrative from `source_material` |
@@ -50,7 +51,7 @@ flowchart TD
   B -->|yes, not force| Z[Return audio_url]
   B -->|no| C[ensureHistorianNarrative]
   C --> D[generateLandmarkScript]
-  D --> E[synthesizeSpeech OpenRouter TTS]
+  D --> E[synthesizeSpeech direct Gemini TTS]
   E --> F[uploadAudio to audio-tours bucket]
   F --> G[Upsert location_audio_variants]
   G --> H[Update location_translations]
@@ -62,7 +63,7 @@ flowchart TD
 1. **Read source** — `source_material` (HU facts) or fallback `story_prompt`; compute `history_depth`
 2. **Historian narrative** — `historianNarrative.js` distills facts into `location_translations.historical_narrative` (skipped for `thin` depth)
 3. **Script generation** — locale-aware spoken script shaped by `styleId` + topic lens from `tourStyles.js`
-4. **TTS** — OpenRouter Gemini TTS (multilingual HU/EN); default model in `openRouterClient.js`
+4. **TTS** — Direct Gemini TTS (multilingual HU/EN); default model in `geminiTtsClient.js`. OpenRouter is available only as an explicit paid override.
 5. **Upload** — MP3 to Supabase Storage bucket `audio-tours`
 6. **Cache** — row in `location_audio_variants` per `(location_id, locale, style_id)`
 
@@ -114,8 +115,10 @@ Runs migrations from `supabase/migrations/` in order. Currently lists through `0
 | `OPENROUTER_MODEL` | General chat |
 | `OPENROUTER_HISTORIAN_MODEL` | Historian enrichment |
 | `OPENROUTER_AUDIO_MODEL` | Tour script generation |
-| `OPENROUTER_TTS_MODEL` | Text-to-speech (default: Gemini flash TTS) |
-| `OPENROUTER_TTS_VOICE` | Voice preset |
+| `GEMINI_TTS_MODEL` | Default direct Gemini text-to-speech (`gemini-3.1-flash-tts-preview`) |
+| `GEMINI_TTS_VOICE` | Default direct Gemini voice preset |
+| `OPENROUTER_TTS_MODEL` | Explicit paid OpenRouter TTS override |
+| `OPENROUTER_TTS_VOICE` | Explicit OpenRouter voice preset |
 
 ## Related
 

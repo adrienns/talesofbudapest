@@ -45,7 +45,7 @@ Task IDs are stable — reference them in commits (`feat: KG-12 person resolver`
 (`ingest/src/`: Budapest100, Wikipedia/Wikidata, műemlékem.hu, Fortepan
 enrichment, geocoding, dedup, importance scoring); Supabase schema migrations
 001–013 (locations, provenance, translations, audio variants, RAG/pgvector);
-narrative planning + generation APIs; OpenRouter LLM + TTS clients; Next.js
+narrative planning + generation APIs; OpenRouter LLM + direct Gemini TTS clients; Next.js
 map app with clustering, questionnaire, full-screen player, hu/en i18n.
 
 ---
