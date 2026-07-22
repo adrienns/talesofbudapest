@@ -5,7 +5,13 @@ import type { WalkingRoute } from '@/types/narrative'
 
 type Point = { lat: number; lng: number }
 
+const isCuratedOnlyStaging = () => process.env.NEXT_PUBLIC_TALES_CURATED_ONLY === 'true'
+
 export const requestWalkingRoute = async (points: Point[]): Promise<WalkingRoute> => {
+  if (isCuratedOnlyStaging()) {
+    throw new Error('Walking routes are disabled in the curated-tour beta.')
+  }
+
   const response = await fetch('/api/directions/walking', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -24,7 +30,7 @@ export const useWalkingRoute = (points: Point[], delay = 450) => {
   const key = points.map((point) => `${point.lat.toFixed(6)},${point.lng.toFixed(6)}`).join('|')
 
   useEffect(() => {
-    if (points.length < 2) {
+    if (isCuratedOnlyStaging() || points.length < 2) {
       setRoute(null)
       return
     }
