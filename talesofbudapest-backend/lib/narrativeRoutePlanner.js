@@ -7,7 +7,39 @@ import {
   withRetry,
 } from './narrativeParsing.js';
 
-const routeSystemPrompt = (stopCount) => `You are a master historian and audio tour guide in Budapest.
+export const buildRouteSystemPrompt = (stopCount, locale = 'en') => {
+  if (locale === 'hu') {
+    return `Tapasztalt budapesti történész és hangos idegenvezető vagy.
+Kizárólag természetes, idiomatikus magyarul gondolkodj és írj; ne angol szöveg fordítását készítsd.
+Tervezz összefüggő, ${stopCount} megállós gyalogos narratívát a látogató hangulata és kérése alapján.
+CSAK az alábbi sémának megfelelő érvényes JSON-t adj vissza:
+{
+  "title": "Hangulatos magyar címet adj az útvonalnak",
+  "chapters": [
+    {
+      "landmark_id": "azonosító a megadott helyszínek közül",
+      "title": "1. fejezet: ...",
+      "hook": "Egy mondat: melyik, az anyagban szereplő konkrét részlet teszi a helyszínt a túra részévé."
+    },
+    {
+      "custom_stop": {
+        "lat": 47.49,
+        "lng": 19.04,
+        "title": "3. fejezet: ...",
+        "script": "2–3 perces, felolvasásra szánt magyar szöveg (kb. 300 szó)"
+      }
+    }
+  ]
+}
+Szabályok:
+- Pontosan ${stopCount} fejezet legyen.
+- Legalább ${Math.max(2, stopCount - 1)} fejezetben a megadott helyszínlista landmark_id-ját használd.
+- Csak olyan helyszínt válassz, amelynek megadott anyaga valóban alátámasztja a témát; a hook konkrét, valós részletet említsen, ne általánosságot.
+- Legfeljebb 1 egyéni megálló lehet Budapest határain belüli koordinátákkal; a szövege kb. 2–3 perces, erős konkrét nyitással indul, és nem tartalmaz metakommentárt.
+- A fejezetek logikus gyalogos sorrendet kövessenek.`;
+  }
+
+  return `You are a master historian and audio tour guide in Budapest.
 Plan a cohesive 3-4 stop walking narrative based on the user's mood.
 Return ONLY valid JSON matching this schema:
 {
@@ -34,6 +66,7 @@ Rules:
 - Pick landmarks whose provided material genuinely supports the requested theme — the hook must cite a real detail, not a generic connection.
 - At most 1 chapter may use custom_stop with coordinates inside Budapest; its script must be about 2-3 minutes when spoken (~300 words), start with a narrative hook, no meta commentary.
 - Chapters should form a logical walking order.`;
+};
 
 const stopCountForContext = (context = {}) => {
   const minutes = Number(context.timeBudgetMinutes) || 90;
@@ -44,7 +77,24 @@ const stopCountForContext = (context = {}) => {
   return base;
 };
 
-const REPLACE_STOP_SYSTEM_PROMPT = `You are a master historian and audio tour guide in Budapest.
+const replaceStopSystemPrompt = (locale = 'en') => {
+  if (locale === 'hu') {
+    return `Tapasztalt budapesti történész és hangos idegenvezető vagy.
+Kizárólag természetes, idiomatikus magyarul gondolkodj és írj; ne angol szöveg fordítását készítsd.
+A látogató a gyalogos túrája EGY megállóját szeretné másikra cserélni.
+CSAK az alábbi sémának megfelelő érvényes JSON-t adj vissza:
+{
+  "landmark_id": "azonosító a megadott helyszínek közül",
+  "title": "N. fejezet: ...",
+  "hook": "Egy mondat: melyik, az anyagban szereplő konkrét részlet teszi a helyszínt a túra részévé."
+}
+Szabályok:
+- A landmark_id a megadott helyszínlistából származzon, és ne ismételjen a túra más megállóival.
+- A hook valós, a helyszín anyagában szereplő részletet említsen, ne általánosságot.
+- A megálló maradjon tematikusan és földrajzilag is összhangban a túra többi részével.`;
+  }
+
+  return `You are a master historian and audio tour guide in Budapest.
 The traveler wants ONE stop of their walking tour replaced with something different.
 Return ONLY valid JSON matching this schema:
 {
@@ -56,6 +106,7 @@ Rules:
 - landmark_id MUST come from the provided landmark pool and must not repeat any landmark already used elsewhere in the tour.
 - The hook must cite a real detail from the landmark's provided material, not a generic connection.
 - Keep it thematically and geographically consistent with the rest of the tour.`;
+};
 
 /** Plans a route (one LLM call, no TTS, nothing persisted) — cheap and fast. */
 export const planNarrativeRoute = async ({ userPrompt, context, landmarks }) =>
@@ -67,7 +118,7 @@ export const planNarrativeRoute = async ({ userPrompt, context, landmarks }) =>
       max_tokens: 4096,
       temperature: 0.4,
       messages: [
-        { role: 'system', content: routeSystemPrompt(stopCount) },
+        { role: 'system', content: buildRouteSystemPrompt(stopCount, context?.locale) },
         {
           role: 'user',
           content: JSON.stringify({
@@ -107,7 +158,7 @@ export const planReplacementStop = async ({
       max_tokens: 1024,
       temperature: 0.6,
       messages: [
-        { role: 'system', content: REPLACE_STOP_SYSTEM_PROMPT },
+        { role: 'system', content: replaceStopSystemPrompt(context?.locale) },
         {
           role: 'user',
           content: JSON.stringify({
