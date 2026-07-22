@@ -26,7 +26,6 @@ import {
   type LastNarrativePeek,
 } from '@/features/narrative/hooks/useNarratives'
 import { usePlanNarrative } from '@/features/narrative/hooks/usePlanNarrative'
-import { requestWalkingRoute } from '@/features/narrative/hooks/useWalkingRoute'
 import { useArrivalDetection } from '@/features/narrative/hooks/useArrivalDetection'
 import { useTourReadiness } from '@/features/narrative/hooks/useTourReadiness'
 import { useResolveLandmark } from '@/features/landmarks/hooks/useResolveLandmark'
@@ -37,7 +36,7 @@ import { useNarrativeStore } from '@/stores/narrativeStore'
 import { useTourPreferencesStore } from '@/stores/tourPreferencesStore'
 import { getLandmarkImageUrl } from '@/lib/landmarkImage'
 import type { Landmark, MapPin } from '@/types/landmark'
-import type { DraftNarrative, NarrativeChapter, NarrativeRequest, PlaybackItem, WalkingRoute } from '@/types/narrative'
+import type { DraftNarrative, NarrativeChapter, NarrativeRequest, PlaybackItem } from '@/types/narrative'
 import type { SheetSnap } from '@/types/tourSheet'
 import type { NavTabId } from '@/types/navigation'
 import type { AppLocale } from '@/types/locale'
@@ -116,8 +115,6 @@ const HomePageContent = () => {
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(true)
 
   const [sheetSnap, setSheetSnap] = useState<SheetSnap>('collapsed')
-  const [temporaryRoute, setTemporaryRoute] = useState<WalkingRoute | null>(null)
-  const [isRerouting, setIsRerouting] = useState(false)
   const [arrivalMessage, setArrivalMessage] = useState<string | null>(null)
   const [manualPlayRequest, setManualPlayRequest] = useState<{ chapterId: string; requestId: number } | null>(null)
 
@@ -178,7 +175,6 @@ const HomePageContent = () => {
   }, [activeChapter, handleArrival])
 
   useEffect(() => {
-    setTemporaryRoute(null)
     setArrivalMessage(null)
   }, [activeChapter?.id])
 
@@ -222,25 +218,6 @@ const HomePageContent = () => {
         : null
 
     openExternalWalkingDirections(destination, knownOrigin)
-
-    if (isCuratedOnlyStaging || !navigator.geolocation) return
-
-    setIsRerouting(true)
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const origin = { lat: position.coords.latitude, lng: position.coords.longitude }
-        try {
-          const route = await requestWalkingRoute([origin, destination])
-          setTemporaryRoute(route)
-        } catch {
-          setTemporaryRoute(null)
-        } finally {
-          setIsRerouting(false)
-        }
-      },
-      () => setIsRerouting(false),
-      { enableHighAccuracy: false, maximumAge: 60_000, timeout: 8_000 },
-    )
   }, [activeChapter, narrativeContext.userLat, narrativeContext.userLng, openExternalWalkingDirections])
 
   const playbackItem = useMemo<PlaybackItem | null>(() => {
@@ -535,7 +512,6 @@ const HomePageContent = () => {
         selectedChapterId={activeChapter?.id ?? null}
         onChapterSelect={handleChapterSelect}
         showLandmarks={!hasActiveRoute && !isCuratedOnlyStaging}
-        temporaryRoute={temporaryRoute}
       />
 
       {showChrome && hasActiveRoute && activeChapter && (
@@ -568,10 +544,9 @@ const HomePageContent = () => {
               <button
                 type="button"
                 onClick={handleReroute}
-                disabled={isRerouting}
-                className="rounded-full border border-outline-variant/50 px-3 py-2 font-bold disabled:opacity-60"
+                className="rounded-full border border-outline-variant/50 px-3 py-2 font-bold"
               >
-                {isRerouting ? tNavigation('rerouting') : tNavigation('reroute')}
+                {tNavigation('reroute')}
               </button>
               {(arrivalDetection.status === 'denied' || arrivalDetection.status === 'unavailable') && (
                 <button type="button" onClick={arrivalDetection.retry} className="rounded-full px-3 py-2 font-bold text-accent">
