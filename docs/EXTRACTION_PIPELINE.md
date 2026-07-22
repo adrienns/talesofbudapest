@@ -554,8 +554,19 @@ second exhaustive remote pass to every page can fail the USD 0.002/page total
 gate. See [Historical Reference Resolution](HISTORICAL_REFERENCE_RESOLUTION.md)
 for the algorithm, measured costs, cache, commands, and held-out gate.
 
-### Geocoding (restricted-book locations, `cli/geocode-kg.js`)
+### Geocoding (restricted-book locations)
 
+Two different paths — do not confuse them:
+
+**A. Book extract → address facts → provisional map (default)**  
+Uses the **local** Budapest gazetteer under `ingest/gazetteer/` (streets,
+landmarks, `addr:*` points built from OpenStreetMap). Matching and pin
+coordinates are **offline**. Live OSM/Overpass is only used when you run
+`npm run build:places-gazetteer` to refresh those files. See
+[`ingest/gazetteer/README.md`](../ingest/gazetteer/README.md). OSM data is
+**ODbL** — attribute © OpenStreetMap contributors on any public map.
+
+**B. Staged KG Nominatim (`cli/geocode-kg.js`)**  
 Not an extraction prompt — a deterministic lookup that feeds the entity
 resolver. `npm run geocode:kg -- --dry-run|--limit N|--input <jsonl>` reads
 unique staged location names/addresses out of a restricted book's extraction
@@ -584,6 +595,7 @@ the distance <= 50m arm of the auto-link rule
   vague match can't silently satisfy the 50m rule.
 - **Known gap:** historical street names that no longer exist won't geocode
   — those locations rely on the name/alias-matching auto-link arm instead.
+- **Not used by** the provisional full-book map viewer (that path is A).
 
 ---
 

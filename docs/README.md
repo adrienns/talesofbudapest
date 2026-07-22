@@ -40,6 +40,9 @@ Documentation for the monorepo: a Budapest audio-tour app with a map of landmark
 | [Historical Extraction V3 — architecture](HISTORICAL_EXTRACTION_V3_HANDOFF.md) | V3 design: typed subject memory, layout-first processing, cost routing, evaluation gates |
 | [Historical Extraction V3 — 2026-07-17 handoff](HISTORICAL_EXTRACTION_V3_HANDOFF_2026-07-17.md) | Frozen model config, measured cost, address/geography and OCR layers |
 | [Historical Extraction V3 — quality & eval (2026-07-20)](HISTORICAL_EXTRACTION_V3_QUALITY_2026-07-20.md) | Current dev metrics, structural gate, rescore, gold seed/merge/dedupe, operator loop |
+| [Provisional KG load + map](PROVISIONAL_KG_LOAD_AND_MAP.md) | Load provisional V3 plan → pgvector; GeoJSON map with book mentions; standalone viewer |
+| [Full-book readiness](READINESS-fullbook-v3.md) | Sol-silver private-scan checklist (not human-certified) |
+| [Budapest places gazetteer](../ingest/gazetteer/README.md) | Local OSM-derived streets/landmarks/addresses; ODbL; offline match vs Overpass refresh |
 | [V3 model comparison](CLAUDE_HANDOFF_MODEL_COMPARISON_2026-07-16.md) | Bounded A/B that froze DeepSeek V4 Flash primary + Qwen audit and rejected GPT-OSS-20B |
 | [Vector DB improvements](VECTOR_DB_IMPROVEMENTS.md) | Retrieval upgrades: enriched embeddings, hybrid search, era taxonomy, name matching |
 | [Decisions log](DECISIONS.md) | Dated record of prompt, model, and pipeline-behavior changes |

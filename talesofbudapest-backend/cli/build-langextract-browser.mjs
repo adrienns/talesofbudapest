@@ -8,6 +8,7 @@ import { loadPlacesIndex } from '../lib/budapestPlacesGazetteer.js';
 import { canonicalEntityIdForAlias, entityPresentationExclusionReason } from '../lib/historicalEntityPresentation.js';
 import { itemStructuralQualityReason } from '../lib/historicalItemQuality.js';
 import { displayReadingText } from '../lib/historicalDisplayText.js';
+import { canonicalizeLocationText, isLocationLikeMention, repairKnownOcrInText } from '../lib/hungarianOcrGazetteer.js';
 
 const backend = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const workspace = path.resolve(backend, '..');
@@ -212,10 +213,11 @@ let localMentions = typeCorrection.mentions;
 // (Dohdny/Dohany) merge on browser rebuild without a full-book re-extract.
 let v3Entities = new Map((run.entity_aliases ?? []).map((entity) => [entity.entity_id, entity]));
 let placeOcrRepairCount = 0;
+let placesIndexForDisplay = null;
 if (v3) {
   try {
-    const placesIndex = await loadPlacesIndex();
-    setPlacesGazetteerIndex(placesIndex);
+    placesIndexForDisplay = await loadPlacesIndex();
+    setPlacesGazetteerIndex(placesIndexForDisplay);
     const reindexed = buildSubjectEntityIndex({
       sourceId,
       mentions: localMentions.map((mention) => ({ ...mention, subject_entity_id: undefined })),
@@ -479,6 +481,44 @@ const entities = [...entityGroups.values()].map((group) => {
   })(),
   });
 }).sort((a, b) => b.mentions.length - a.mentions.length || String(a.label ?? '').localeCompare(String(b.label ?? '')));
+
+// Presentation OCR polish: repair known place damage in labels/aliases/quotes.
+// Keep ocr_* raw surfaces; never rewrite immutable evidence offsets.
+if (placesIndexForDisplay) {
+  for (const entity of entities) {
+    const locationLike = isLocationLikeMention({ type: entity.type, label: entity.label });
+    const ocrLabel = entity.label;
+    if (locationLike) {
+      entity.ocr_label = ocrLabel;
+      entity.label = canonicalizeLocationText(ocrLabel, placesIndexForDisplay).text;
+    } else {
+      const polished = repairKnownOcrInText(ocrLabel, placesIndexForDisplay).text;
+      if (polished !== ocrLabel) {
+        entity.ocr_label = ocrLabel;
+        entity.label = polished;
+      }
+    }
+    entity.ocr_aliases = [...entity.aliases];
+    entity.aliases = entity.aliases.map((alias) => (
+      locationLike
+        ? canonicalizeLocationText(alias, placesIndexForDisplay).text
+        : repairKnownOcrInText(alias, placesIndexForDisplay).text
+    ));
+    entity.mentions = entity.mentions.map((mention) => {
+      const ocrText = mention.text;
+      const ocrQuote = mention.quote;
+      const text = repairKnownOcrInText(ocrText, placesIndexForDisplay).text;
+      const quote = repairKnownOcrInText(ocrQuote, placesIndexForDisplay).text;
+      return {
+        ...mention,
+        text,
+        quote,
+        ocr_text: ocrText,
+        ocr_quote: ocrQuote,
+      };
+    });
+  }
+}
 
 // Ambiguities are first-class: a chip must say when identity is not settled.
 const ambiguousReferences = v3 ? (run.ambiguous_references ?? []) : [];

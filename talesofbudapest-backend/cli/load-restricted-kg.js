@@ -11,19 +11,56 @@ import { requireSupabaseEnv, createRestClient } from './_shared/supabaseRest.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 loadCliEnv(import.meta.url);
 
-const SOURCE_ID = 'jewish-budapest-private';
-const VOLUME = 'book';
-const INPUT = path.join(__dirname, '../../ingest/corpus/restricted/extractions/jewish-budapest.entities.jsonl');
-const PAGES = path.join(__dirname, '../../ingest/corpus/restricted/text/jewish-budapest.pages.txt');
-const REPORT = path.join(__dirname, '../../ingest/corpus/restricted/extractions/jewish-budapest.location-candidates.json');
-const SOURCE = {
-  id: SOURCE_ID,
-  title: 'Jewish Budapest: Monuments, Rites, History',
-  author: 'Kinga Frojimovics et al.',
-  source_url: 'private://restricted-corpus/jewish-budapest',
-  license: 'Restricted user-provided research copy',
-  license_verdict: 'red',
-  attribution: 'Jewish Budapest: Monuments, Rites, History (private research corpus)',
+const args = process.argv.slice(2);
+const SOURCE_SLUG = option(args, '--source') ?? 'jewish-budapest';
+const SOURCE_ID = option(args, '--source-id') ?? `${SOURCE_SLUG}-private`;
+const VOLUME = option(args, '--volume') ?? 'book';
+const MAX_PAGE_RAW = option(args, '--max-page');
+const MAX_PAGE = MAX_PAGE_RAW == null ? null : Math.max(1, Number(MAX_PAGE_RAW) || 0);
+const CORPUS = path.join(__dirname, '../../ingest/corpus/restricted');
+const DEFAULT_INPUT = path.join(CORPUS, `extractions/${SOURCE_SLUG}.entities.jsonl`);
+const DEFAULT_PAGES = path.join(CORPUS, `text/${SOURCE_SLUG}.pages.txt`);
+const DEFAULT_REPORT = path.join(CORPUS, `extractions/${SOURCE_SLUG}.location-candidates.json`);
+const DEFAULT_SOURCE_META = path.join(CORPUS, `${SOURCE_SLUG}.source.json`);
+
+const INPUT = path.resolve(option(args, '--input') ?? DEFAULT_INPUT);
+const PAGES = path.resolve(option(args, '--pages') ?? DEFAULT_PAGES);
+const REPORT = path.resolve(option(args, '--report') ?? DEFAULT_REPORT);
+
+const loadSourceMeta = async () => {
+  try {
+    const meta = JSON.parse(await fs.readFile(path.resolve(option(args, '--source-meta') ?? DEFAULT_SOURCE_META), 'utf8'));
+    return {
+      id: SOURCE_ID,
+      title: meta.title ?? SOURCE_SLUG,
+      author: meta.author ?? null,
+      source_url: meta.source_url ?? `private://restricted-corpus/${SOURCE_SLUG}`,
+      license: meta.license ?? 'Restricted user-provided research copy',
+      license_verdict: meta.license_verdict ?? 'red',
+      attribution: meta.attribution ?? `${meta.title ?? SOURCE_SLUG} (private research corpus)`,
+    };
+  } catch {
+    if (SOURCE_SLUG === 'jewish-budapest') {
+      return {
+        id: SOURCE_ID,
+        title: 'Jewish Budapest: Monuments, Rites, History',
+        author: 'Kinga Frojimovics et al.',
+        source_url: 'private://restricted-corpus/jewish-budapest',
+        license: 'Restricted user-provided research copy',
+        license_verdict: 'red',
+        attribution: 'Jewish Budapest: Monuments, Rites, History (private research corpus)',
+      };
+    }
+    return {
+      id: SOURCE_ID,
+      title: SOURCE_SLUG,
+      author: null,
+      source_url: `private://restricted-corpus/${SOURCE_SLUG}`,
+      license: 'Restricted user-provided research copy',
+      license_verdict: 'red',
+      attribution: `${SOURCE_SLUG} (private research corpus)`,
+    };
+  }
 };
 
 const list = (value) => Array.isArray(value) ? value : [];
@@ -95,17 +132,24 @@ export const sanitizePayload = (payload) => {
 const chunks = (rows, size = 100) => Array.from({ length: Math.ceil(rows.length / size) }, (_, index) => rows.slice(index * size, (index + 1) * size));
 
 const main = async () => {
-  const args = process.argv.slice(2);
   const commit = args.includes('--commit');
   const inputPath = path.resolve(option(args, '--input') ?? INPUT);
   const pagesPath = path.resolve(option(args, '--pages') ?? PAGES);
   const reportPath = path.resolve(option(args, '--report') ?? REPORT);
+  const SOURCE = await loadSourceMeta();
   const { baseUrl, serviceKey } = requireSupabaseEnv();
   const { restLegacy } = createRestClient(baseUrl, serviceKey);
 
   const [recordText, pageText] = await Promise.all([fs.readFile(inputPath, 'utf8'), fs.readFile(pagesPath, 'utf8')]);
-  const records = parseRecords(recordText);
-  const pages = parsePages(pageText);
+  const allRecords = parseRecords(recordText);
+  const records = MAX_PAGE == null
+    ? allRecords
+    : allRecords.filter((record) => {
+      const pages = list(record.pdf_pages).map(Number);
+      // Keep windows that touch any content page; drop bibliography/index-only windows.
+      return pages.some((page) => Number.isInteger(page) && page >= 1 && page <= MAX_PAGE);
+    });
+  const pages = parsePages(pageText).filter((page) => MAX_PAGE == null || page.page_number <= MAX_PAGE);
   const sanitized = records.map((record) => ({ record, ...sanitizePayload(object(record.payload)) }));
   const rejected = sanitized.flatMap((entry) => entry.rejectedLocations);
   const upsert = (table, rows, onConflict) => restLegacy(table, 'POST', rows, { on_conflict: onConflict });
@@ -127,7 +171,13 @@ const main = async () => {
     })),
   }));
   const summary = {
-    mode: commit ? 'commit' : 'dry-run', source_id: SOURCE_ID, extraction_windows: records.length, pages: pages.length,
+    mode: commit ? 'commit' : 'dry-run',
+    source_id: SOURCE_ID,
+    source_slug: SOURCE_SLUG,
+    max_page: MAX_PAGE,
+    extraction_windows: records.length,
+    extraction_windows_total: allRecords.length,
+    pages: pages.length,
     accepted_locations: sanitized.reduce((sum, entry) => sum + entry.payload.locations.length, 0),
     accepted_facts: sanitized.reduce((sum, entry) => sum + entry.payload.facts.length, 0),
     unique_locations: uniqueMentions.size, rejected_locations: rejected.length,

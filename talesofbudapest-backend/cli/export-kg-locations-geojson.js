@@ -22,6 +22,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadPlacesIndex, loadStreetGazetteer, loadJsonIfExists, LANDMARKS_PATH, normalizePlaceKey } from '../lib/budapestPlacesGazetteer.js';
+import { repairKnownOcrInText } from '../lib/hungarianOcrGazetteer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -43,6 +44,23 @@ const EXPERIMENT_STATUSES = new Set(['complete', 'failed_cost_gate']);
 
 const normalizeWs = (text) => String(text ?? '').replace(/\s+/gu, ' ').trim();
 
+const polishSampleFields = (sample, placesIndex) => {
+  const polish = (value) => {
+    const raw = normalizeWs(value) || null;
+    if (!raw) return { display: null, ocr: null };
+    if (!placesIndex) return { display: raw, ocr: raw };
+    return { display: repairKnownOcrInText(raw, placesIndex).text, ocr: raw };
+  };
+  const quote = polish(sample.quote);
+  const statement = polish(sample.statement);
+  return {
+    ...sample,
+    quote: quote.display,
+    ocr_quote: quote.ocr,
+    statement: statement.display,
+    ocr_statement: statement.ocr,
+  };
+};
 const nearKey = (quote) => normalizeWs(quote).toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, '').slice(0, 120);
 
 const selectDiverseDeduped = (samples, cap = SAMPLE_CAP) => {
@@ -257,10 +275,12 @@ const main = async () => {
     }
 
     const evidenceSamples = evidenceByEntity.get(entity.entity_id) ?? [];
-    let mentionSamples = selectDiverseDeduped(evidenceSamples, SAMPLE_CAP);
+    let mentionSamples = selectDiverseDeduped(evidenceSamples, SAMPLE_CAP)
+      .map((sample) => polishSampleFields(sample, placesIndex));
     let sampleSource = mentionSamples.length ? 'evidence' : null;
     if (!mentionSamples.length) {
-      mentionSamples = selectDiverseDeduped(factsByEntity.get(entity.entity_id) ?? [], SAMPLE_CAP);
+      mentionSamples = selectDiverseDeduped(factsByEntity.get(entity.entity_id) ?? [], SAMPLE_CAP)
+        .map((sample) => polishSampleFields(sample, placesIndex));
       if (mentionSamples.length) sampleSource = 'fact_statement';
     }
     if (sampleSource === 'evidence') withEvidenceSamples += 1;

@@ -163,7 +163,10 @@ Backend CLIs (`talesofbudapest-backend/cli/`) that turn source books into a cite
 | `npm run load:mek:kg` | Load MEK deep-extraction JSONL into the private staging knowledge graph |
 | `npm run load:restricted:kg` | Load restricted-book extraction JSONL into private KG staging (accepts p1/p2/p3 records) |
 | `npm run embed:kg` | Generate/cache embeddings for canonical entities, staged locations, or claims (`--target canonical\|staging\|claims`, `--seed-public-locations`) |
-| `npm run geocode:kg --workspace=talesofbudapest-backend` | Geocode staged restricted-book locations via free Nominatim |
+| `npm run geocode:kg --workspace=talesofbudapest-backend` | Geocode staged restricted-book locations via free Nominatim (not the provisional map path — that uses the local `ingest/gazetteer/`) |
+| `npm run build:places-gazetteer --workspace=talesofbudapest-backend` | Refresh local Budapest streets/landmarks/addresses from Overpass (ODbL) |
+| `npm run load:kg:plan --workspace=talesofbudapest-backend` | Load a V3 kg-load-plan into private staging (provisional stays draft; see [docs/PROVISIONAL_KG_LOAD_AND_MAP.md](docs/PROVISIONAL_KG_LOAD_AND_MAP.md)) |
+| `npm run export:historical:map --workspace=talesofbudapest-backend` | Address facts → GeoJSON + book mention quotes (local gazetteer coords) |
 | `npm run resolve:kg --workspace=talesofbudapest-backend` | Preview/commit auto-linking staged locations to mapped landmarks (`--commit`) |
 | `npm run eval:kg-matching --workspace=talesofbudapest-backend` | Golden-set eval of Hungarian↔English location-name matching |
 | `npm run expand:kg-aliases --workspace=talesofbudapest-backend` | Materialize translated-name aliases from approved aliases via the curated lexicon |

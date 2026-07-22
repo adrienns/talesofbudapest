@@ -2,8 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildPlacesIndexDocument } from './budapestPlacesGazetteer.js';
 import {
+  BLOCKED_PLACE_CONFUSIONS,
   canonicalizeLocationText,
+  CORPUS_PLACE_CONFUSION,
   isLocationLikeMention,
+  repairKnownOcrInText,
 } from './hungarianOcrGazetteer.js';
 import {
   buildSubjectEntityIndex,
@@ -18,6 +21,7 @@ const fixtureIndex = buildPlacesIndexDocument({
     { modern: 'Király utca', key: 'kiraly utca', center: { lat: 47.5, lon: 19.06, precision: 'street' }, historical: [] },
     { modern: 'Wesselényi utca', key: 'wesselenyi utca', historical: [] },
     { modern: 'Meddőhányó utca', key: 'meddohanyo utca', historical: [] },
+    { modern: 'Dohnányi Ernő utca', key: 'dohnanyi erno utca', historical: [] },
   ],
   landmarks: [
     {
@@ -85,4 +89,39 @@ test('canonicalizeLocationText repairs dohdny against unique street token', () =
   assert.equal(result.identity_key, 'dohany utca');
   assert.match(result.text, /Dohány utca/u);
   assert.ok(result.repairs.some((row) => row.matched_via === 'confusion_unique_hit'));
+});
+
+test('repairKnownOcrInText polishes Dohdny / Kirdly in place-like prose', () => {
+  const street = repairKnownOcrInText('Dohdny utca', fixtureIndex);
+  assert.match(street.text, /Dohány utca/u);
+
+  const quote = repairKnownOcrInText(
+    'the Moorish synagogue on Dohdny Street was crowded',
+    fixtureIndex,
+  );
+  assert.match(quote.text, /Dohány Street/u);
+  assert.ok(quote.repairs.some((row) => row.from === 'dohdny'));
+
+  const kiraly = repairKnownOcrInText('shops along Kirdly utca', fixtureIndex);
+  assert.match(kiraly.text, /Király utca/u);
+});
+
+test('repairKnownOcrInText does not turn Ernő Dohnányi into Dohány', () => {
+  assert.ok(BLOCKED_PLACE_CONFUSIONS.has('dohndnyi'));
+  assert.equal(CORPUS_PLACE_CONFUSION.has('dohndnyi'), false);
+  assert.equal(CORPUS_PLACE_CONFUSION.has('dohanyi'), false);
+
+  const person = repairKnownOcrInText('Ernő Dohnányi conducted', fixtureIndex);
+  assert.match(person.text, /Dohnányi/u);
+  assert.doesNotMatch(person.text, /Dohány/u);
+  assert.equal(person.repairs.length, 0);
+
+  const damagedPerson = repairKnownOcrInText('composer Dohndnyi wrote', fixtureIndex);
+  assert.equal(damagedPerson.text, 'composer Dohndnyi wrote');
+  assert.equal(damagedPerson.repairs.length, 0);
+});
+
+test('diacritic polish: Dohany → Dohány when exact gazetteer token', () => {
+  const result = repairKnownOcrInText('near Dohany market', fixtureIndex);
+  assert.match(result.text, /Dohány/u);
 });

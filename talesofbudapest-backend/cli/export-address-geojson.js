@@ -20,6 +20,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseHistoricalPages } from '../lib/historicalExtractionV2.js';
+import { loadPlacesIndex } from '../lib/budapestPlacesGazetteer.js';
+import { repairKnownOcrInText } from '../lib/hungarianOcrGazetteer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -101,6 +103,14 @@ const selectDiverseSamples = (samples, cap = SAMPLE_CAP) => {
 };
 
 const main = async () => {
+  const placesIndex = await loadPlacesIndex().catch(() => null);
+  const polish = (value) => {
+    const raw = normalizeWs(value) || null;
+    if (!raw) return { display: null, ocr: null };
+    if (!placesIndex) return { display: raw, ocr: raw };
+    const repaired = repairKnownOcrInText(raw, placesIndex).text;
+    return { display: repaired, ocr: raw };
+  };
   const pageTextByRef = new Map(
     parseHistoricalPages(await fs.readFile(PAGES_TXT, 'utf8')).map((page) => [page.page, page.text]),
   );
@@ -136,18 +146,22 @@ const main = async () => {
       if (!entry.center && reference.center) entry.center = reference.center;
       if (record.experiment_id) entry.experiment_ids.add(record.experiment_id);
 
-      const surface = normalizeWs(reference.street_raw) || null;
-      const quote = contextQuote(
+      const surfaceRaw = normalizeWs(reference.street_raw) || null;
+      const quoteRaw = contextQuote(
         pageTextByRef.get(reference.page_ref),
         reference.start_offset,
         reference.end_offset,
       );
-      if (surface || quote) {
+      if (surfaceRaw || quoteRaw) {
+        const surface = polish(surfaceRaw);
+        const quote = polish(quoteRaw);
         entry.samples.push({
           page: reference.page_ref,
-          surface,
+          surface: surface.display,
+          ocr_surface: surface.ocr,
           house_number: reference.house_number ?? null,
-          quote,
+          quote: quote.display,
+          ocr_quote: quote.ocr,
         });
       }
       byStreet.set(key, entry);

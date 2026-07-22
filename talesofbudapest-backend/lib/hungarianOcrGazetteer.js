@@ -7,7 +7,15 @@
  * confusion candidates resolve to exactly one gazetteer target. Immutable OCR
  * evidence and offsets are never rewritten. Fail closed on ambiguity.
  * Person/family mentions must not call this against the street gazetteer.
+ *
+ * Display prose (quotes/surfaces) may use repairKnownOcrInText: corpus
+ * confusions apply only with a street-type neighbor, a place-like phrase, or
+ * when the target is a primary street-name gazetteer token. Never map
+ * composer/person OCR (dohndnyi) onto street Dohány.
  */
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   normalizePlaceKey,
   placeTokens,
@@ -17,7 +25,9 @@ import { canonicalizeDomainToken, OCR_DOMAIN_CANONICAL } from './historicalOcrLe
 const LOCATION_TYPES = new Set(['place', 'building', 'business', 'organisation', 'organization', 'street', 'address', 'landmark']);
 const PERSON_TYPES = new Set(['person', 'family']);
 
-const STREET_TYPE_SURFACE = /\b(utca|út|ut|tér|ter|körút|korut|krt|rakpart|köz|koz|sor|fasor|sétány|setany|liget|street|square|avenue|road|boulevard)\b/iu;
+const STREET_TYPE_TOKEN = /^(utca|utcai|út|útja|ut|utja|tér|tere|ter|körút|korut|krt|rakpart|köz|koz|sor|fasor|sétány|setany|liget|street|square|avenue|road|boulevard)$/iu;
+/** Unicode-safe street-type detection (\b fails on út / tér). */
+const STREET_TYPE_SURFACE = /(?:^|[^A-Za-zÀ-ÿ])(?:utca|utcai|út|útja|ut|utja|tér|tere|ter|körút|korut|krt|rakpart|köz|koz|sor|fasor|sétány|setany|liget|street|square|avenue|road|boulevard)(?![A-Za-zÀ-ÿ])/iu;
 
 export const isLocationLikeMention = (mention) => {
   const type = String(mention?.type ?? '').toLowerCase();
@@ -53,21 +63,73 @@ const distanceCap = (token) => {
   return 0;
 };
 
+/** In-file defaults; config/hungarian-ocr-place-confusions.json merges on top. */
+const DEFAULT_PLACE_CONFUSIONS = {
+  dohdny: 'dohany',
+  dohdany: 'dohany',
+  doheny: 'dohany',
+  dohdeny: 'dohany',
+  kirdly: 'kiraly',
+  klauzdl: 'klauzal',
+};
+
+/** Person/composer collisions — never auto-promote or keep in CORPUS. */
+export const BLOCKED_PLACE_CONFUSIONS = new Set([
+  'dohndnyi',
+  'dohanyi',
+  'dohnanyi',
+]);
+
+/**
+ * Known false-positive promotions (historical spellings or wrong near-neighbors).
+ * Kept out of CORPUS even if edit-distance unique-hit would fire.
+ */
+export const DENYLIST_PLACE_CONFUSIONS = new Set([
+  'szerecsen', // Két Szerecsen utca (historical), not Szerencse
+  'perisi', // likely Párisi, not Pércsi
+]);
+
+const CONFUSIONS_PATH = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../config/hungarian-ocr-place-confusions.json',
+);
+
+const loadCorpusPlaceConfusion = () => {
+  const merged = new Map(Object.entries(DEFAULT_PLACE_CONFUSIONS));
+  try {
+    const doc = JSON.parse(fs.readFileSync(CONFUSIONS_PATH, 'utf8'));
+    for (const [from, to] of Object.entries(doc.confusions ?? {})) {
+      const foldedFrom = normalizePlaceKey(from);
+      const foldedTo = normalizePlaceKey(to);
+      if (!foldedFrom || !foldedTo) continue;
+      if (BLOCKED_PLACE_CONFUSIONS.has(foldedFrom) || BLOCKED_PLACE_CONFUSIONS.has(foldedTo)) continue;
+      if (DENYLIST_PLACE_CONFUSIONS.has(foldedFrom)) continue;
+      if (foldedFrom === foldedTo) continue;
+      merged.set(foldedFrom, foldedTo);
+    }
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      console.warn(`hungarian-ocr-place-confusions.json unreadable: ${error.message}`);
+    }
+  }
+  for (const blocked of BLOCKED_PLACE_CONFUSIONS) merged.delete(blocked);
+  for (const denied of DENYLIST_PLACE_CONFUSIONS) merged.delete(denied);
+  return merged;
+};
+
 /**
  * Corpus-observed Hungarian OCR siblings that are not independent words.
  * These are candidates only — a repair still requires a unique gazetteer hit.
  */
-export const CORPUS_PLACE_CONFUSION = new Map([
-  ['dohdny', 'dohany'],
-  ['dohdany', 'dohany'],
-  ['doheny', 'dohany'],
-  ['dohdeny', 'dohany'],
-  ['dohndnyi', 'dohanyi'],
-  ['dohanyi', 'dohanyi'],
-  ['kirdly', 'kiraly'],
-  ['klauzdl', 'klauzal'],
-  ['klauzal', 'klauzal'],
-]);
+export const CORPUS_PLACE_CONFUSION = loadCorpusPlaceConfusion();
+
+export const placeConfusionsPath = () => CONFUSIONS_PATH;
+
+export const reloadCorpusPlaceConfusion = () => {
+  CORPUS_PLACE_CONFUSION.clear();
+  for (const [from, to] of loadCorpusPlaceConfusion()) CORPUS_PLACE_CONFUSION.set(from, to);
+  return CORPUS_PLACE_CONFUSION;
+};
 
 const restoreCapitalization = (original, canonical) => {
   if (!original) return canonical;
@@ -78,13 +140,64 @@ const restoreCapitalization = (original, canonical) => {
   return canonical;
 };
 
-const displayTokenFromOwner = (owner, foldedToken) => {
-  if (!owner?.display) return foldedToken;
-  const part = String(owner.display).split(/\s+/u).find((piece) => normalizePlaceKey(piece) === foldedToken);
-  return part ?? foldedToken;
+const STREET_TYPE_IN_KEY = /\b(utca|ut|ter|korut|krt|rakpart|koz|sor|fasor|setany|liget|lejto|street|square|avenue|road|boulevard|bridge)\b/u;
+
+/** True when token is the primary name of a unique `{token} {street-type}` entry. */
+export const isPrimaryStreetNameToken = (folded, placesIndex) => {
+  if (!folded || !placesIndex?.entries) return false;
+  if (!placesIndex._primaryStreetTokens) {
+    const set = new Set();
+    for (const [key, entry] of Object.entries(placesIndex.entries)) {
+      if (entry?.layer !== 'street' || !entry.unique) continue;
+      const parts = key.split(/\s+/u);
+      if (parts[0] && STREET_TYPE_IN_KEY.test(parts[1] ?? '')) set.add(parts[0]);
+    }
+    placesIndex._primaryStreetTokens = set;
+  }
+  return placesIndex._primaryStreetTokens.has(folded);
 };
 
-const uniqueTokenRepair = (folded, placesIndex) => {
+const primaryStreetDisplayToken = (folded, placesIndex) => {
+  if (!folded || !placesIndex?.entries) return null;
+  if (!placesIndex._primaryStreetDisplay) {
+    const map = new Map();
+    for (const [key, entry] of Object.entries(placesIndex.entries)) {
+      if (entry?.layer !== 'street' || !entry.unique) continue;
+      const parts = key.split(/\s+/u);
+      if (!parts[0] || !STREET_TYPE_IN_KEY.test(parts[1] ?? '')) continue;
+      if (map.has(parts[0])) continue;
+      const displayPart = String(entry.display ?? '').split(/\s+/u)[0];
+      if (displayPart && normalizePlaceKey(displayPart) === parts[0]) map.set(parts[0], displayPart);
+    }
+    placesIndex._primaryStreetDisplay = map;
+  }
+  return placesIndex._primaryStreetDisplay.get(folded) ?? null;
+};
+
+const sanitizeDisplayToken = (displayToken, foldedTarget) => {
+  if (!displayToken) return null;
+  if (/^[A-Za-zÀ-ÿ]+$/u.test(displayToken) && normalizePlaceKey(displayToken) === foldedTarget) {
+    return displayToken;
+  }
+  const cleaned = String(displayToken).replace(/[^A-Za-zÀ-ÿ]/gu, '');
+  if (cleaned && normalizePlaceKey(cleaned) === foldedTarget) return cleaned;
+  return null;
+};
+
+const displayTokenFromOwner = (owner, foldedToken) => {
+  if (!owner?.display) return null;
+  const part = String(owner.display).split(/\s+/u).find((piece) => normalizePlaceKey(piece) === foldedToken);
+  return sanitizeDisplayToken(part, foldedToken);
+};
+
+const resolveDisplayToken = (folded, placesIndex, owner) => (
+  primaryStreetDisplayToken(folded, placesIndex)
+  ?? sanitizeDisplayToken(placesIndex?.tokens?.[folded]?.display_token, folded)
+  ?? displayTokenFromOwner(owner, folded)
+  ?? folded
+);
+
+const uniqueTokenRepair = (folded, placesIndex, { allowCorpus = true } = {}) => {
   if (!folded || !placesIndex?.tokens) return null;
   const direct = placesIndex.tokens[folded];
   if (direct?.in_gazetteer) {
@@ -92,12 +205,15 @@ const uniqueTokenRepair = (folded, placesIndex) => {
     return {
       from: folded,
       to_key: folded,
-      display_token: direct.display_token ?? displayTokenFromOwner(owner, folded),
+      display_token: resolveDisplayToken(folded, placesIndex, owner),
       matched_via: 'exact_token',
       layer: owner?.layer ?? 'street',
       gazetteer_id: direct.owner_key,
     };
   }
+
+  if (!allowCorpus) return null;
+  if (BLOCKED_PLACE_CONFUSIONS.has(folded)) return null;
 
   const corpusHint = CORPUS_PLACE_CONFUSION.get(folded);
   if (corpusHint && placesIndex.tokens[corpusHint]?.in_gazetteer) {
@@ -106,7 +222,7 @@ const uniqueTokenRepair = (folded, placesIndex) => {
     return {
       from: folded,
       to_key: corpusHint,
-      display_token: placesIndex.tokens[corpusHint].display_token ?? displayTokenFromOwner(owner, corpusHint),
+      display_token: resolveDisplayToken(corpusHint, placesIndex, owner),
       matched_via: 'confusion_unique_hit',
       layer: owner?.layer ?? 'street',
       gazetteer_id: ownerKey,
@@ -119,8 +235,6 @@ const uniqueTokenRepair = (folded, placesIndex) => {
   // token repairs above, plus phrase-level unique-hit below.
   return null;
 };
-
-const STREET_TYPE_IN_KEY = /\b(utca|ut|ter|korut|krt|rakpart|koz|sor|fasor|setany|liget|lejto|street|square|avenue|road|boulevard|bridge)\b/u;
 
 const uniquePhraseRepair = (foldedPhrase, placesIndex) => {
   if (!foldedPhrase || !placesIndex?.entries) return null;
@@ -168,6 +282,13 @@ const uniquePhraseRepair = (foldedPhrase, placesIndex) => {
     gazetteer_id: hit.entry.id,
     distance: hit.distance,
   };
+};
+
+const nextLetterToken = (parts, index) => {
+  for (let i = index + 1; i < parts.length; i += 1) {
+    if (/^[A-Za-zÀ-ÿ]+$/u.test(parts[i])) return parts[i];
+  }
+  return null;
 };
 
 /**
@@ -247,6 +368,90 @@ export const canonicalizeLocationText = (value, placesIndex = null, { log = null
   return { text, identity_key: repairedPhrase?.to_key ?? repairedIdentity, repairs };
 };
 
+/**
+ * Polish known place OCR damage inside presentation prose (quotes, surfaces).
+ * Does not rewrite person names via street gazetteer: corpus confusions only
+ * when street-type neighbor / place-like phrase / primary street-name target.
+ * Returns { text, repairs[] }.
+ */
+export const repairKnownOcrInText = (value, placesIndex = null, { log = null } = {}) => {
+  const original = String(value ?? '');
+  if (!original.trim() || !placesIndex) return { text: original, repairs: [] };
+
+  const parts = original.match(/[A-Za-zÀ-ÿ]+|[^\p{L}]+/gu) ?? [original];
+  const repairs = [];
+  const out = [];
+
+  for (let index = 0; index < parts.length; index += 1) {
+    const word = parts[index];
+    if (!/^[A-Za-zÀ-ÿ]+$/u.test(word)) {
+      out.push(word);
+      continue;
+    }
+    const folded = normalizePlaceKey(word);
+    if (BLOCKED_PLACE_CONFUSIONS.has(folded)) {
+      out.push(word);
+      continue;
+    }
+    const hit = uniqueTokenRepair(folded, placesIndex);
+    if (!hit) {
+      out.push(word);
+      continue;
+    }
+
+    if (hit.matched_via === 'confusion_unique_hit') {
+      const primary = isPrimaryStreetNameToken(hit.to_key, placesIndex);
+      const allowed = (() => {
+        if (BLOCKED_PLACE_CONFUSIONS.has(folded)) return false;
+      const next = nextLetterToken(parts, index);
+      if (next && STREET_TYPE_TOKEN.test(next)) return true;
+      if (STREET_TYPE_SURFACE.test(original)) return true;
+      return primary;
+    })();
+    if (!allowed) {
+      out.push(word);
+      continue;
+    }
+      const display = restoreCapitalization(word, hit.display_token);
+      if (display !== word) {
+        const repair = { ...hit, repaired: true, surface: word };
+        repairs.push(repair);
+        log?.push(repair);
+        out.push(display);
+      } else {
+        out.push(word);
+      }
+      continue;
+    }
+
+    if (hit.matched_via === 'exact_token' && hit.display_token) {
+      // Diacritic polish for known place tokens — require a street-type neighbor
+      // or a long primary street-name token. Do not use whole-phrase place-like
+      // context here: quotes mentioning any utca would otherwise polish every
+      // gazetteer stem in English prose (varos → Város).
+      const next = nextLetterToken(parts, index);
+      const placeContext = next && STREET_TYPE_TOKEN.test(next);
+      const primaryLong = isPrimaryStreetNameToken(folded, placesIndex) && folded.length >= 6;
+      if (!placeContext && !primaryLong) {
+        out.push(word);
+        continue;
+      }
+      const display = restoreCapitalization(word, hit.display_token);
+      // Diacritic polish only when fold matches and surface differs.
+      if (display !== word && normalizePlaceKey(display) === folded) {
+        out.push(display);
+      } else {
+        out.push(word);
+      }
+      continue;
+    }
+
+    out.push(word);
+  }
+
+  return { text: out.join(''), repairs };
+};
+
 /** Token-level helper mirroring canonicalizeDomainToken for place contexts. */
 export const canonicalizeLocationToken = (token, placesIndex = null) => {
   const domain = canonicalizeDomainToken(token);
@@ -255,4 +460,14 @@ export const canonicalizeLocationToken = (token, placesIndex = null) => {
   return hit?.to_key ?? normalizePlaceKey(domain) ?? domain;
 };
 
-export { normalizePlaceKey, LOCATION_TYPES, PERSON_TYPES };
+export {
+  normalizePlaceKey,
+  LOCATION_TYPES,
+  PERSON_TYPES,
+  uniqueTokenRepair,
+  editDistance,
+  distanceCap,
+  STREET_TYPE_IN_KEY,
+  STREET_TYPE_SURFACE,
+  STREET_TYPE_TOKEN,
+};
