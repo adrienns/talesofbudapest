@@ -1,6 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
+import { Play } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { PlayerScrubber } from '@/components/ui/player/PlayerScrubber'
@@ -23,6 +24,9 @@ export const TourSheetCollapsed = ({
   onSeek,
   onExpand,
   readyGlow = false,
+  distanceToStopLabel = null,
+  arrivalPlayLabel = null,
+  onArrivalPlay,
 }: TourSheetCollapsedProps) => {
   const t = useTranslations('player')
   const marqueeRef = useRef<HTMLDivElement>(null)
@@ -80,9 +84,25 @@ export const TourSheetCollapsed = ({
             </p>
           </div>
           {chapterLabel && <p className="mt-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.11em] text-[var(--map-text)]/55">{chapterLabel}</p>}
+          {distanceToStopLabel && (
+            <p className="mt-0.5 text-[0.65rem] font-medium text-[var(--map-orange)]">{distanceToStopLabel}</p>
+          )}
         </button>
 
       </div>
+
+      {arrivalPlayLabel && onArrivalPlay && (
+        <div className="flex justify-center" onClick={(event) => event.stopPropagation()}>
+          <button
+            type="button"
+            onClick={onArrivalPlay}
+            className="flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 text-sm font-bold text-on-primary shadow-sm transition active:scale-[0.98]"
+          >
+            <Play className="h-4 w-4 fill-current" aria-hidden="true" />
+            {arrivalPlayLabel}
+          </button>
+        </div>
+      )}
 
       <PlayerScrubber
         currentTime={currentTime}

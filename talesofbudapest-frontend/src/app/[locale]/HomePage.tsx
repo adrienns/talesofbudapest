@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import { useLocale, useTranslations } from 'next-intl'
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CuratedStarter } from '@/constants/questionnaire'
 import type { QuestionnaireExtras } from '@/components/narrative/NarrativeQuestionnaire'
 import { NarrativeGeneratingOverlay } from '@/components/narrative/NarrativeGeneratingOverlay'
@@ -28,6 +28,7 @@ import {
 import { usePlanNarrative } from '@/features/narrative/hooks/usePlanNarrative'
 import { useArrivalDetection } from '@/features/narrative/hooks/useArrivalDetection'
 import { useTourReadiness } from '@/features/narrative/hooks/useTourReadiness'
+import { formatWalkDistance } from '@/lib/geo/formatWalkDistance'
 import { useResolveLandmark } from '@/features/landmarks/hooks/useResolveLandmark'
 import { useRouter } from '@/i18n/navigation'
 import { queryKeys } from '@/services/queryKeys'
@@ -116,7 +117,9 @@ const HomePageContent = () => {
 
   const [sheetSnap, setSheetSnap] = useState<SheetSnap>('collapsed')
   const [arrivalMessage, setArrivalMessage] = useState<string | null>(null)
+  const [showArrivalPlayCta, setShowArrivalPlayCta] = useState(false)
   const [manualPlayRequest, setManualPlayRequest] = useState<{ chapterId: string; requestId: number } | null>(null)
+  const playAudioRef = useRef<(() => Promise<void>) | null>(null)
 
   const isPlanning = flowState === 'planning'
   const isGenerating = flowState === 'generating'
@@ -157,6 +160,7 @@ const HomePageContent = () => {
 
   const handleArrival = useCallback((chapter: { title?: string }) => {
     setArrivalMessage(tNavigation('arrived', { title: chapter.title ?? '' }))
+    setShowArrivalPlayCta(true)
     // GPS callbacks are not trusted user gestures, so browsers may block
     // autoplay. Open the player and leave the final play action to the visitor.
     setSheetSnap('expanded')
@@ -165,17 +169,37 @@ const HomePageContent = () => {
   const arrivalDetection = useArrivalDetection(activeRoute ? activeChapter : null, handleArrival)
   const tourReadiness = useTourReadiness(activeRoute)
 
+  const distanceToStopLabel = useMemo(() => {
+    if (!activeChapter || arrivalDetection.distanceMeters == null) {
+      return null
+    }
+
+    return tNavigation('distanceToStop', {
+      distance: formatWalkDistance(arrivalDetection.distanceMeters),
+      title: activeChapter.title,
+    })
+  }, [activeChapter, arrivalDetection.distanceMeters, tNavigation])
+
+  const handleArrivalPlay = useCallback(() => {
+    if (!activeChapter) return
+
+    setShowArrivalPlayCta(false)
+    void playAudioRef.current?.()
+  }, [activeChapter])
+
+  const handleRegisterPlay = useCallback((play: () => Promise<void>) => {
+    playAudioRef.current = play
+  }, [])
+
   const handleManualArrival = useCallback(() => {
     if (!activeChapter) return
     handleArrival(activeChapter)
-    setManualPlayRequest((current) => ({
-      chapterId: activeChapter.id,
-      requestId: (current?.requestId ?? 0) + 1,
-    }))
-  }, [activeChapter, handleArrival])
+    handleArrivalPlay()
+  }, [activeChapter, handleArrival, handleArrivalPlay])
 
   useEffect(() => {
     setArrivalMessage(null)
+    setShowArrivalPlayCta(false)
   }, [activeChapter?.id])
 
   const openExternalWalkingDirections = useCallback((
@@ -472,12 +496,13 @@ const HomePageContent = () => {
     if (!nextChapter) return
 
     setActiveChapterIndex(activeChapterIndex + 1)
-    handleArrival(nextChapter)
+    setArrivalMessage(null)
+    setShowArrivalPlayCta(false)
     setManualPlayRequest((current) => ({
       chapterId: nextChapter.id,
       requestId: (current?.requestId ?? 0) + 1,
     }))
-  }, [activeChapter, activeChapterIndex, activeRoute, handleArrival, setActiveChapterIndex])
+  }, [activeChapter, activeChapterIndex, activeRoute, setActiveChapterIndex])
 
   const handleOpenDirections = useCallback(() => {
     if (!activeChapter) return
@@ -512,6 +537,8 @@ const HomePageContent = () => {
         selectedChapterId={activeChapter?.id ?? null}
         onChapterSelect={handleChapterSelect}
         showLandmarks={!hasActiveRoute}
+        userPosition={hasActiveRoute ? arrivalDetection.userPosition : null}
+        showUserPosition={hasActiveRoute && sheetSnap === 'collapsed'}
       />
 
       {showChrome && hasActiveRoute && activeChapter && (
@@ -533,6 +560,9 @@ const HomePageContent = () => {
               {arrivalDetection.status === 'unavailable' && tNavigation('locationUnavailable')}
             </p>
             <p className="mt-1 text-on-surface/50">{tNavigation('foregroundOnly')}</p>
+            {distanceToStopLabel && (
+              <p className="mt-2 font-semibold text-[var(--map-orange)]">{distanceToStopLabel}</p>
+            )}
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
@@ -556,9 +586,18 @@ const HomePageContent = () => {
             </div>
           </div>
           {arrivalMessage && (
-            <p role="status" className="max-w-56 rounded-xl bg-surface px-3 py-2 text-xs font-semibold text-on-surface shadow">
-              {arrivalMessage}
-            </p>
+            <div role="status" className="max-w-56 rounded-xl bg-surface px-3 py-2 text-xs font-semibold text-on-surface shadow">
+              <p>{arrivalMessage}</p>
+              {showArrivalPlayCta && (
+                <button
+                  type="button"
+                  onClick={handleArrivalPlay}
+                  className="mt-2 w-full rounded-full bg-accent px-3 py-2 font-bold text-on-primary"
+                >
+                  {tNavigation('playNow')}
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -688,6 +727,10 @@ const HomePageContent = () => {
           manualPlayRequest={manualPlayRequest}
           initialPlaybackPosition={initialPlaybackPosition}
           onPlaybackPositionChange={hasActiveRoute ? handlePlaybackPositionChange : undefined}
+          distanceToStopLabel={hasActiveRoute ? distanceToStopLabel : null}
+          showArrivalPlayCta={hasActiveRoute && showArrivalPlayCta}
+          onArrivalPlay={hasActiveRoute ? handleArrivalPlay : undefined}
+          onPlayActionReady={hasActiveRoute ? handleRegisterPlay : undefined}
         />
       )}
 

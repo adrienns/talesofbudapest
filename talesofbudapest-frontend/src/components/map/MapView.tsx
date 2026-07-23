@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Layer, Map as MapLibreMap, Source, type MapLayerMouseEvent, type MapRef } from '@vis.gl/react-maplibre'
 import type { GeoJSONSource, LayerSpecification, Map as MapLibreMapInstance } from 'maplibre-gl'
 import { ChapterMarker } from '@/components/map/ChapterMarker'
+import { UserLocationMarker } from '@/components/map/UserLocationMarker'
 import {
   LandmarkClusterLayer,
   LANDMARK_CLUSTER_DOT_LAYER_ID,
@@ -55,6 +56,8 @@ export const MapView = ({
   onChapterSelect,
   showLandmarks = true,
   temporaryRoute = null,
+  userPosition = null,
+  showUserPosition = false,
 }: MapViewProps) => {
   const mapRef = useRef<MapRef>(null)
   const [viewport, setViewport] = useState<MapViewport>(INITIAL_VIEWPORT)
@@ -144,7 +147,7 @@ export const MapView = ({
     ?? []
 
   return (
-    <div className="absolute inset-0 overflow-hidden">
+    <div className="absolute inset-0 z-0 isolate overflow-hidden">
       <MapLibreMap
         ref={mapRef}
         initialViewState={{ latitude: MAP_CENTER[0], longitude: MAP_CENTER[1], zoom: MAP_DEFAULT_ZOOM }}
@@ -191,6 +194,10 @@ export const MapView = ({
             onSelect={(selected: NarrativeChapter) => onChapterSelect?.(selected)}
           />
         ))}
+
+        {activeRoute && userPosition && showUserPosition && (
+          <UserLocationMarker lat={userPosition.lat} lng={userPosition.lng} />
+        )}
       </MapLibreMap>
 
       {isLoading && showLandmarks && (

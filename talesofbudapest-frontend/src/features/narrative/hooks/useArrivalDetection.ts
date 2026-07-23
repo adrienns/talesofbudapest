@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { haversineKm } from '@/lib/geo/haversine'
+import { haversineKm, type GeoPoint } from '@/lib/geo/haversine'
 
 type Target = { id: string; lat: number; lng: number; title?: string } | null
 
@@ -15,11 +15,15 @@ export const useArrivalDetection = (target: Target, onArrival: (target: NonNulla
   const arrivedId = useRef<string | null>(null)
   const [status, setStatus] = useState<'idle' | 'requesting' | 'tracking' | 'weak' | 'paused' | 'denied' | 'unavailable'>('idle')
   const [accuracyMeters, setAccuracyMeters] = useState<number | null>(null)
+  const [distanceMeters, setDistanceMeters] = useState<number | null>(null)
+  const [userPosition, setUserPosition] = useState<GeoPoint | null>(null)
   const [retryKey, setRetryKey] = useState(0)
 
   useEffect(() => {
     if (!target) {
       setStatus('idle')
+      setDistanceMeters(null)
+      setUserPosition(null)
       return
     }
     if (!navigator.geolocation) {
@@ -27,6 +31,8 @@ export const useArrivalDetection = (target: Target, onArrival: (target: NonNulla
       return
     }
     arrivedId.current = null
+    setDistanceMeters(null)
+    setUserPosition(null)
     let watchId: number | null = null
     let retryTimer: number | null = null
 
@@ -40,16 +46,15 @@ export const useArrivalDetection = (target: Target, onArrival: (target: NonNulla
       if (document.visibilityState !== 'visible' || watchId !== null || retryTimer !== null) return
       setStatus('requesting')
       watchId = navigator.geolocation.watchPosition((position) => {
+        const coords = { lat: position.coords.latitude, lng: position.coords.longitude }
+        setUserPosition(coords)
         setAccuracyMeters(position.coords.accuracy)
         setStatus(position.coords.accuracy > 100 ? 'weak' : 'tracking')
-        const distanceMeters = haversineKm(
-          { lat: position.coords.latitude, lng: position.coords.longitude }, target,
-        ) * 1000
-        if (distanceMeters <= 50 && arrivedId.current !== target.id) {
+        const distance = haversineKm(coords, target) * 1000
+        setDistanceMeters(distance)
+        if (distance <= 50 && arrivedId.current !== target.id) {
           arrivedId.current = target.id
           onArrival(target)
-          setStatus('tracking')
-          stop()
         }
       }, (error) => {
         stop()
@@ -84,5 +89,5 @@ export const useArrivalDetection = (target: Target, onArrival: (target: NonNulla
   }, [target, onArrival, retryKey])
 
   const retry = useCallback(() => setRetryKey((value) => value + 1), [])
-  return { status, accuracyMeters, retry }
+  return { status, accuracyMeters, distanceMeters, userPosition, retry }
 }

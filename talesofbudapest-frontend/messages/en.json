@@ -42,6 +42,8 @@
     "atThisStop": "At this stop",
     "collapseSheet": "Collapse player",
     "distanceToNext": "{distance} km to next stop",
+    "continueToNext": "Continue to the next stop?",
+    "continueToNextButton": "Continue",
     "upNext": "Up next",
     "stop": "Stop {number}",
     "tourTimeline": "Tour timeline",
@@ -78,7 +80,9 @@
     "offlineReady": "Tour audio is ready offline.",
     "offlinePartial": "Some audio could not be saved offline.",
     "offlineUnavailable": "Audio needs an internet connection.",
-    "offlineNow": "You’re offline; saved audio remains available."
+    "offlineNow": "You’re offline; saved audio remains available.",
+    "playNow": "Play story",
+    "distanceToStop": "{distance} to {title}"
   },
   "chronicle": {
     "title": "Chronicle",

@@ -11,6 +11,8 @@ export type MapViewProps = {
   onChapterSelect?: (chapter: NarrativeChapter) => void
   showLandmarks?: boolean
   temporaryRoute?: WalkingRoute | null
+  userPosition?: { lat: number; lng: number } | null
+  showUserPosition?: boolean
 }
 
 export type MapCenter = [number, number]

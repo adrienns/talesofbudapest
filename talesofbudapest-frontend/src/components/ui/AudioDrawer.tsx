@@ -38,6 +38,10 @@ type AudioDrawerProps = {
   manualPlayRequest?: ManualPlayRequest | null
   initialPlaybackPosition?: number
   onPlaybackPositionChange?: (seconds: number) => void
+  distanceToStopLabel?: string | null
+  showArrivalPlayCta?: boolean
+  onArrivalPlay?: () => void
+  onPlayActionReady?: (play: () => Promise<void>) => void
 }
 
 export const AudioDrawer = ({
@@ -62,9 +66,15 @@ export const AudioDrawer = ({
   manualPlayRequest = null,
   initialPlaybackPosition = 0,
   onPlaybackPositionChange,
+  distanceToStopLabel = null,
+  showArrivalPlayCta = false,
+  onArrivalPlay,
+  onPlayActionReady,
 }: AudioDrawerProps) => {
   const t = useTranslations('player')
+  const tNavigation = useTranslations('navigation')
   const [internalSnap, setInternalSnap] = useState<SheetSnap>('collapsed')
+  const [showChapterEndPrompt, setShowChapterEndPrompt] = useState(false)
   const snap = controlledSnap ?? internalSnap
 
   const setSnap = useCallback(
@@ -114,6 +124,15 @@ export const AudioDrawer = ({
     }
   }, [playbackItem?.id, playbackItem?.imageUrl, playbackItem?.locationId, playbackItem?.landmarkId])
 
+  useEffect(() => {
+    setShowChapterEndPrompt(false)
+  }, [playbackItem?.id])
+
+  useEffect(() => {
+    if (!showArrivalPlayCta) return
+    setShowChapterEndPrompt(false)
+  }, [showArrivalPlayCta])
+
   const handleAudioReady = useCallback(
     (audioUrl: string) => {
       onLandmarkAudioReady?.(audioUrl)
@@ -123,7 +142,14 @@ export const AudioDrawer = ({
 
   const handlePlaybackEnded = useCallback(() => {
     onPlaybackPositionChange?.(0)
-  }, [onPlaybackPositionChange])
+    const hasNextStop = Boolean(activeRoute && chapterIndex < (activeRoute.chapters.length - 1))
+    setShowChapterEndPrompt(hasNextStop)
+  }, [activeRoute, chapterIndex, onPlaybackPositionChange])
+
+  const handleContinueToNextStop = useCallback(() => {
+    setShowChapterEndPrompt(false)
+    onPlayNextStop?.()
+  }, [onPlayNextStop])
 
   const {
     isPlaying,
@@ -185,6 +211,15 @@ export const AudioDrawer = ({
       saveLatestPosition()
     }
   }, [onPlaybackPositionChange, playbackItem?.id])
+
+  useEffect(() => {
+    onPlayActionReady?.(play)
+  }, [onPlayActionReady, play])
+
+  const handleArrivalPlayClick = useCallback(() => {
+    onArrivalPlay?.()
+    void play()
+  }, [onArrivalPlay, play])
 
   useEffect(() => {
     if (!manualPlayRequest || manualPlayRequest.requestId === handledManualRequest.current) return
@@ -299,6 +334,8 @@ export const AudioDrawer = ({
     ? buildTourChapterMeta(activeRoute, chapterIndex)
     : buildLandmarkMeta(playbackItem.title)
 
+  const arrivalPlayLabel = showArrivalPlayCta ? tNavigation('playNow') : null
+
   const transportProps = {
     isPlaying,
     currentTime,
@@ -348,6 +385,9 @@ export const AudioDrawer = ({
           {...mediaProps}
           {...transportProps}
           onExpand={() => setSnap('expanded')}
+          distanceToStopLabel={distanceToStopLabel}
+          arrivalPlayLabel={arrivalPlayLabel}
+          onArrivalPlay={handleArrivalPlayClick}
         />
       }
       expanded={
@@ -362,6 +402,11 @@ export const AudioDrawer = ({
           onManualArrival={onManualArrival}
           onPlayNextStop={onPlayNextStop}
           onSelectRouteStop={onSelectRouteStop}
+          distanceToStopLabel={distanceToStopLabel}
+          arrivalPlayLabel={arrivalPlayLabel}
+          onArrivalPlay={handleArrivalPlayClick}
+          showChapterEndPrompt={showChapterEndPrompt}
+          onContinueToNextStop={handleContinueToNextStop}
         />
       }
     />

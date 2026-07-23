@@ -43,6 +43,11 @@ export const TourSheetExpanded = ({
   onManualArrival,
   onPlayNextStop,
   onSelectRouteStop,
+  distanceToStopLabel = null,
+  arrivalPlayLabel = null,
+  onArrivalPlay,
+  showChapterEndPrompt = false,
+  onContinueToNextStop,
 }: TourSheetExpandedProps) => {
   const t = useTranslations('player')
   const tNavigation = useTranslations('navigation')
@@ -104,7 +109,40 @@ export const TourSheetExpanded = ({
             {chapterLabel}
           </p>
         )}
+        {distanceToStopLabel && (
+          <p className="mt-1 text-sm font-medium text-[var(--map-orange)]">{distanceToStopLabel}</p>
+        )}
       </div>
+
+      {showChapterEndPrompt && nextStop && (
+        <section
+          className="rounded-2xl border border-accent/30 bg-accent/10 p-4 text-center"
+          aria-live="polite"
+        >
+          <p className="font-serif text-lg font-bold text-on-surface">{t('continueToNext')}</p>
+          <p className="mt-1 text-sm text-on-surface/65">{nextStop.title}</p>
+          <button
+            type="button"
+            onClick={onContinueToNextStop}
+            disabled={!onContinueToNextStop}
+            className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-accent px-4 text-sm font-bold text-on-primary transition active:scale-[0.98] disabled:opacity-40"
+          >
+            <Play className="h-4 w-4 fill-current" aria-hidden="true" />
+            {t('continueToNextButton')}
+          </button>
+        </section>
+      )}
+
+      {arrivalPlayLabel && onArrivalPlay && (
+        <button
+          type="button"
+          onClick={onArrivalPlay}
+          className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-accent px-4 text-sm font-bold text-on-primary transition active:scale-[0.98]"
+        >
+          <Play className="h-4 w-4 fill-current" aria-hidden="true" />
+          {arrivalPlayLabel}
+        </button>
+      )}
 
       <PlayerScrubber
         currentTime={currentTime}

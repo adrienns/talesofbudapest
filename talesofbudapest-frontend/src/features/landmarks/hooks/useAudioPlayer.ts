@@ -26,10 +26,15 @@ export const useAudioPlayer = (
   { initialTime = 0, onEnded }: UseAudioPlayerOptions = {},
 ): UseAudioPlayerResult => {
   const adapterRef = useRef<AudioPlayerAdapter | null>(null)
+  const onEndedRef = useRef(onEnded)
+  const initialTimeRef = useRef(initialTime)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [playbackRate, setPlaybackRateState] = useState(1)
+
+  onEndedRef.current = onEnded
+  initialTimeRef.current = initialTime
 
   useEffect(() => {
     setIsPlaying(false)
@@ -51,7 +56,7 @@ export const useAudioPlayer = (
     const unsubscribeMeta = adapter.onLoadedMetadata((nextDuration) => {
       setDuration(nextDuration)
 
-      const safeInitialTime = Math.min(Math.max(initialTime, 0), nextDuration)
+      const safeInitialTime = Math.min(Math.max(initialTimeRef.current, 0), nextDuration)
       if (safeInitialTime > 0 && safeInitialTime < nextDuration) {
         adapter.seek(safeInitialTime)
         setCurrentTime(safeInitialTime)
@@ -59,7 +64,7 @@ export const useAudioPlayer = (
     })
     const unsubscribeEnded = adapter.onEnded(() => {
       setIsPlaying(false)
-      onEnded?.()
+      onEndedRef.current?.()
     })
 
     return () => {
@@ -69,7 +74,7 @@ export const useAudioPlayer = (
       adapter.destroy()
       adapterRef.current = null
     }
-  }, [audioUrl, initialTime, onEnded])
+  }, [audioUrl])
 
   const play = useCallback(async () => {
     const adapter = adapterRef.current

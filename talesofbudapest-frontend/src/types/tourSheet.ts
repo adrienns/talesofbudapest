@@ -39,6 +39,9 @@ export type TourSheetMediaProps = {
 export type TourSheetCollapsedProps = TourSheetMediaProps &
   PlaybackTransportProps & {
     onExpand: () => void
+    distanceToStopLabel?: string | null
+    arrivalPlayLabel?: string | null
+    onArrivalPlay?: () => void
   }
 
 export type TourSheetExpandedProps = TourSheetMediaProps &
@@ -51,6 +54,11 @@ export type TourSheetExpandedProps = TourSheetMediaProps &
     onManualArrival?: () => void
     onPlayNextStop?: () => void
     onSelectRouteStop?: (stopId: string) => void
+    distanceToStopLabel?: string | null
+    arrivalPlayLabel?: string | null
+    onArrivalPlay?: () => void
+    showChapterEndPrompt?: boolean
+    onContinueToNextStop?: () => void
   }
 
 export type SwipeableTourSheetProps = {
